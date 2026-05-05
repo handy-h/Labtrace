@@ -1,0 +1,336 @@
+// ocr-import.js — OCR上传与沉浸式比对视图（增强：行内编辑+确认核效+Sync-Scroll联动+快捷键+提示条+自动聚焦）
+const OCRImportView = Vue.defineComponent({
+  template: `
+  <div class="p-6">
+    <h1 class="text-2xl font-bold mb-4">检验单上传与 OCR</h1>
+    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+      <div class="flex gap-3 items-end flex-wrap">
+        <div><label class="text-sm text-slate-600">受检者</label>
+          <select v-model="form.subject_id" class="border rounded px-2 py-1 text-sm w-40">
+            <option value="">请选择</option><option v-for="s in subjects" :key="s.id" :value="s.id">{{s.name}}</option>
+          </select></div>
+        <div><label class="text-sm text-slate-600">医院</label>
+          <select v-model="form.hospital_id" class="border rounded px-2 py-1 text-sm w-40">
+            <option value="">请选择</option><option v-for="h in hospitals" :key="h.id" :value="h.id">{{h.name}}</option>
+          </select></div>
+        <div><label class="text-sm text-slate-600">采样日期</label>
+          <input v-model="form.sample_date" type="date" class="border rounded px-2 py-1 text-sm"></div>
+        <div><label class="text-sm text-slate-600">文件</label>
+          <input type="file" @change="onFileChange" accept="image/*,.pdf" class="text-sm"></div>
+        <button @click="upload" class="px-4 py-2 bg-blue-600 text-white rounded text-sm" :disabled="uploading">{{uploading ? '上传中...' : '上传'}}</button>
+      </div>
+    </div>
+    <div v-if="reports.length" class="bg-white rounded-lg shadow-sm p-4">
+      <h2 class="font-semibold mb-3">报告列表</h2>
+      <table class="w-full text-sm">
+        <thead><tr class="bg-slate-50 text-left text-slate-600">
+          <th class="p-2">ID</th><th class="p-2">采样日期</th><th class="p-2">状态</th><th class="p-2">操作</th>
+        </tr></thead>
+        <tbody>
+          <tr v-for="r in reports" :key="r.id" class="border-t hover:bg-slate-50">
+            <td class="p-2">{{r.id}}</td><td class="p-2">{{r.sample_date}}</td>
+            <td class="p-2"><span :class="statusClass(r.ocr_status)">{{statusText(r.ocr_status)}}</span></td>
+            <td class="p-2">
+              <button @click="viewReport(r.id)" class="text-blue-600 hover:underline text-xs mr-2">查看</button>
+              <button v-if="r.ocr_status==='review'" @click="doImport(r.id)" class="text-green-600 hover:underline text-xs mr-2">入库</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <!-- 报告详情弹窗 -->
+    <div v-if="selectedReport" class="drill-modal" @click.self="closeReport">
+      <div class="w-[90vw] max-w-5xl max-h-[80vh] overflow-auto bg-white rounded-lg p-4">
+        <h2 class="text-lg font-bold mb-3">报告详情 #{{selectedReport.id}} <span :class="statusClass(selectedReport.ocr_status)">({{statusText(selectedReport.ocr_status)}})</span></h2>
+        <div class="flex gap-4">
+          <div class="w-[45%] relative" ref="imageContainer">
+            <div :class="zoomLevel > 1 ? 'overflow-auto' : 'overflow-hidden'" :style="zoomLevel > 1 ? {} : { height: '500px' }">
+              <img :src="reportImageUrl" ref="imageEl"
+                   :style="zoomLevel > 1 ? { width: 'auto', maxWidth: 'none' } : { maxWidth: '100%' }"
+                   class="border rounded" v-if="reportImageUrl" @load="onImageLoad">
+            </div>
+            <div v-if="highlightRect" class="highlight-breathe absolute pointer-events-none border-2 border-blue-500 rounded"
+                 :style="highlightStyle"></div>
+            <canvas v-if="highlightRect && magnifierReady" ref="magnifier"
+                    class="absolute pointer-events-none border-2 border-blue-400 rounded shadow-lg"
+                    :style="magnifierStyle" width="120" height="80"></canvas>
+          </div>
+          <div class="w-[55%] overflow-auto">
+            <table class="w-full text-sm">
+              <thead><tr class="bg-slate-50 text-left text-slate-600">
+                <th class="p-2">项目</th><th class="p-2">结果</th><th class="p-2">单位</th><th class="p-2">置信度</th><th class="p-2">提示符</th><th class="p-2">参考区间</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="(it, idx) in selectedReport.items" :key="it.id"
+                    class="border-t hover:bg-slate-50"
+                    :class="{ 'bg-blue-50': selectedRowIndex === idx }"
+                    @click="selectRow(idx)"
+                    @dblclick="startEdit(it, idx)">
+                  <td class="p-2 font-medium">{{it.test_item_name || '-'}}</td>
+                  <td class="p-2" :class="confClass(it.confidence)">
+                    <input v-if="editingItemId === it.id" v-model="editForm.original_value"
+                           class="border rounded px-1 py-0.5 text-sm w-20" @keydown.enter="saveEdit(it)"
+                           @keydown.escape="cancelEdit" ref="editInput" autofocus>
+                    <span v-else>{{it.original_value}}</span>
+                  </td>
+                  <td class="p-2">
+                    <input v-if="editingItemId === it.id" v-model="editForm.original_unit"
+                           class="border rounded px-1 py-0.5 text-sm w-16">
+                    <span v-else>{{it.original_unit}}</span>
+                  </td>
+                  <td class="p-2">{{it.confidence}}%</td>
+                  <td class="p-2" v-html="flagBadge(it.flag)"></td>
+                  <td class="p-2 text-slate-500">{{it.ref_interval_text || '-'}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="flex gap-2 justify-end mt-4">
+          <button v-if="selectedReport.ocr_status === 'review'" @click="doConfirm(selectedReport.id)"
+                  class="px-4 py-2 bg-orange-600 text-white rounded text-sm hover:bg-orange-700">确认核效</button>
+          <button @click="closeReport" class="px-4 py-2 border rounded text-sm hover:bg-slate-50">关闭</button>
+        </div>
+      </div>
+    </div>
+    <!-- 快捷键提示条 -->
+    <div v-if="selectedReport" class="shortcut-hint">
+      <kbd>Tab</kbd> 切换 | <kbd>Enter</kbd> 保存跳转 | <kbd>Space</kbd> 缩放
+    </div>
+  </div>`,
+  setup() {
+    const subjects = Vue.ref([]);
+    const hospitals = Vue.ref([]);
+    const reports = Vue.ref([]);
+    const form = Vue.ref({ subject_id: '', hospital_id: '', sample_date: '' });
+    const uploading = Vue.ref(false);
+    const selectedReport = Vue.ref(null);
+    const reportImageUrl = Vue.ref('');
+    const selectedRowIndex = Vue.ref(-1);
+    const editingItemId = Vue.ref(null);
+    const editForm = Vue.ref({ original_value: '', original_unit: '' });
+    const zoomLevel = Vue.ref(1);
+    const highlightRect = Vue.ref(null);
+    const magnifierReady = Vue.ref(false);
+    const imageEl = Vue.ref(null);
+    const magnifier = Vue.ref(null);
+    const editInput = Vue.ref(null);
+    let selectedFile = null;
+
+    // 全局受检者联动
+    const currentSubjectId = Vue.inject('currentSubjectId', null);
+
+    Vue.onMounted(() => {
+      api.listSubjects().then(r => { if (r.data) subjects.value = r.data; });
+      api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; });
+      loadReports();
+      document.addEventListener('keydown', onKeyDown);
+    });
+
+    Vue.onUnmounted(() => {
+      document.removeEventListener('keydown', onKeyDown);
+    });
+
+    // 受检者联动
+    if (currentSubjectId) {
+      Vue.watch(currentSubjectId, (id) => {
+        if (id) form.value.subject_id = id;
+      });
+    }
+
+    function loadReports() {
+      api.listReports({ ocr_status: '' }).then(r => { if (r.data) reports.value = r.data; });
+    }
+    function onFileChange(e) { selectedFile = e.target.files[0]; }
+    function upload() {
+      if (!selectedFile || !form.value.subject_id) return alert('请选择文件和受检者');
+      uploading.value = true;
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      fd.append('subject_id', form.value.subject_id);
+      fd.append('hospital_id', form.value.hospital_id);
+      fd.append('sample_date', form.value.sample_date);
+      api.ocrUpload(fd).then(r => {
+        uploading.value = false;
+        if (r.code === 0) { alert('上传成功，OCR识别中'); loadReports(); }
+        else alert(r.message);
+      });
+    }
+    function viewReport(id) {
+      api.getReport(id).then(r => {
+        if (r.data) {
+          selectedReport.value = r.data;
+          reportImageUrl.value = api.getReportImage(id);
+          selectedRowIndex.value = -1;
+          editingItemId.value = null;
+          // 低置信度自动聚焦
+          const lowConfItem = r.data.items && r.data.items.find(it => it.confidence < 80);
+          if (lowConfItem) {
+            startEdit(lowConfItem, r.data.items.indexOf(lowConfItem));
+          }
+        }
+      });
+    }
+    function closeReport() {
+      selectedReport.value = null;
+      editingItemId.value = null;
+      selectedRowIndex.value = -1;
+    }
+    function doImport(id) {
+      if (!confirm('确认入库？')) return;
+      api.importReport(id).then(r => {
+        if (r.code === 0) { alert('入库成功'); loadReports(); }
+        else alert(r.message);
+      });
+    }
+    function doConfirm(id) {
+      if (!confirm('确认核效？')) return;
+      api.confirmReport(id).then(r => {
+        if (r.code === 0) { alert('核效成功'); loadReports(); closeReport(); }
+        else alert(r.message);
+      });
+    }
+
+    // 行内编辑
+    function startEdit(item, idx) {
+      editingItemId.value = item.id;
+      editForm.value = { original_value: item.original_value, original_unit: item.original_unit };
+      selectedRowIndex.value = idx;
+      Vue.nextTick(() => {
+        if (editInput.value && editInput.value[0]) editInput.value[0].focus();
+      });
+    }
+    function saveEdit(item) {
+      api.updateReportItem(selectedReport.value.id, item.id, editForm.value).then(r => {
+        if (r.code === 0) {
+          editingItemId.value = null;
+          viewReport(selectedReport.value.id);
+        } else {
+          alert(r.message || '保存失败');
+        }
+      });
+    }
+    function cancelEdit() {
+      editingItemId.value = null;
+    }
+
+    // 行选中联动
+    function selectRow(idx) {
+      selectedRowIndex.value = idx;
+      updateHighlight(idx);
+    }
+
+    // 高亮框
+    const highlightStyle = Vue.computed(() => {
+      if (!highlightRect.value) return {};
+      const r = highlightRect.value;
+      return { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' };
+    });
+    const magnifierStyle = Vue.computed(() => {
+      if (!highlightRect.value) return {};
+      const r = highlightRect.value;
+      return { left: (r.x + r.w + 8) + 'px', top: Math.max(0, r.y - 20) + 'px' };
+    });
+
+    function onImageLoad() {}
+    function updateHighlight(idx) {
+      if (!selectedReport.value || !selectedReport.value.items || idx < 0 || idx >= selectedReport.value.items.length) {
+        highlightRect.value = null;
+        magnifierReady.value = false;
+        return;
+      }
+      const item = selectedReport.value.items[idx];
+      let bbox = null;
+      if (item.ocr_bbox) {
+        try { bbox = typeof item.ocr_bbox === 'string' ? JSON.parse(item.ocr_bbox) : item.ocr_bbox; } catch (e) { bbox = null; }
+      }
+      if (bbox && bbox.x != null && bbox.y != null) {
+        highlightRect.value = { x: bbox.x, y: bbox.y, w: bbox.w || 100, h: bbox.h || 30 };
+        Vue.nextTick(() => drawMagnifier(bbox));
+      } else {
+        highlightRect.value = null;
+        magnifierReady.value = false;
+      }
+    }
+    function drawMagnifier(bbox) {
+      if (!magnifier.value || !imageEl.value) return;
+      const canvas = magnifier.value[0] || magnifier.value;
+      const ctx = canvas.getContext('2d');
+      const img = imageEl.value[0] || imageEl.value;
+      const sx = Math.max(0, bbox.x - 10);
+      const sy = Math.max(0, bbox.y - 10);
+      const sw = bbox.w + 20;
+      const sh = bbox.h + 20;
+      ctx.clearRect(0, 0, 120, 80);
+      try { ctx.drawImage(img, sx, sy, sw, sh, 0, 0, 120, 80); magnifierReady.value = true; }
+      catch (e) { magnifierReady.value = false; }
+    }
+
+    // 快捷键
+    function onKeyDown(e) {
+      if (!selectedReport.value) return;
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') {
+        if (e.key === ' ') e.preventDefault();
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        moveToNextCell();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        saveAndJumpNext();
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        zoomLevel.value = zoomLevel.value === 1 ? 2 : 1;
+      }
+    }
+    function moveToNextCell() {
+      if (!selectedReport.value || !selectedReport.value.items) return;
+      const nextIdx = selectedRowIndex.value + 1;
+      if (nextIdx < selectedReport.value.items.length) {
+        const item = selectedReport.value.items[nextIdx];
+        startEdit(item, nextIdx);
+      }
+    }
+    function saveAndJumpNext() {
+      if (editingItemId.value && selectedReport.value) {
+        const item = selectedReport.value.items.find(it => it.id === editingItemId.value);
+        if (item) {
+          api.updateReportItem(selectedReport.value.id, item.id, editForm.value).then(r => {
+            if (r.code === 0) {
+              editingItemId.value = null;
+              // 跳转下一个异常行
+              const items = selectedReport.value.items;
+              const currentIdx = items.indexOf(item);
+              for (let i = currentIdx + 1; i < items.length; i++) {
+                if (items[i].confidence < 95) {
+                  startEdit(items[i], i);
+                  return;
+                }
+              }
+              viewReport(selectedReport.value.id);
+            }
+          });
+        }
+      }
+    }
+
+    function statusClass(s) {
+      return { pending: 'text-slate-500', processing: 'text-yellow-600', review: 'text-orange-600', imported: 'text-green-600', failed: 'text-red-600' }[s] || '';
+    }
+    function statusText(s) {
+      return { pending: '待识别', processing: '识别中', review: '待核效', imported: '已入库', failed: '失败' }[s] || s;
+    }
+
+    return {
+      subjects, hospitals, reports, form, uploading, selectedReport, reportImageUrl,
+      selectedRowIndex, editingItemId, editForm, zoomLevel,
+      highlightRect, highlightStyle, magnifierReady, magnifierStyle,
+      imageEl, magnifier, editInput,
+      onFileChange, upload, viewReport, closeReport, doImport, doConfirm,
+      startEdit, saveEdit, cancelEdit, selectRow, onImageLoad,
+      statusClass, statusText, confClass, flagBadge
+    };
+  }
+});
