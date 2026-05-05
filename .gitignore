@@ -55,3 +55,9 @@ Thumbs.db
 
 # 临时文件
 /tmp/
+
+
+# mcp
+code-context-mcp
+start-mcp.sh
+.code-context-index-state.json
