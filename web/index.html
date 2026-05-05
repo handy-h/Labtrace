@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1440">
+  <title>溯源健康 LabTrace</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans">
+
+<div id="app">
+  <!-- 顶栏 -->
+  <header class="h-14 bg-slate-800 text-white flex items-center px-4 select-none">
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="text-xl font-bold tracking-wide text-blue-400">LabTrace</span>
+      <span class="text-sm text-slate-400 hidden sm:inline">溯源健康</span>
+    </div>
+    <div class="flex-1 flex justify-center px-8">
+      <input type="text" placeholder="全局搜索…" class="w-full max-w-md px-3 py-1.5 rounded bg-slate-700 text-white placeholder-slate-400 text-sm border border-slate-600 focus:outline-none focus:border-blue-500">
+    </div>
+    <div class="flex items-center gap-4 text-sm text-slate-300">
+      <span id="current-subject" class="cursor-pointer hover:text-white">受检者: 未选择</span>
+      <span class="text-slate-600">|</span>
+      <a href="#" class="hover:text-white">帮助</a>
+    </div>
+  </header>
+
+  <div class="flex" style="height: calc(100vh - 3.5rem);">
+    <!-- 侧栏导航 -->
+    <nav class="w-56 bg-slate-900 text-slate-300 flex flex-col select-none">
+      <div class="flex-1 py-4">
+        <a v-for="item in navItems" :key="item.hash"
+           :href="'#' + item.hash"
+           @click="currentView = item.hash"
+           :class="['flex items-center gap-3 px-4 py-2.5 text-sm transition-colors', 
+                    currentView === item.hash ? 'bg-slate-700 text-white border-r-2 border-blue-400' : 'hover:bg-slate-800 hover:text-white']">
+          <span class="w-5 text-center">{{ item.icon }}</span>
+          <span>{{ item.label }}</span>
+        </a>
+      </div>
+      <div class="px-4 py-3 text-xs text-slate-500 border-t border-slate-800">
+        v0.1.0
+      </div>
+    </nav>
+
+    <!-- 主内容 -->
+    <main class="flex-1 overflow-auto">
+      <component :is="currentComponent" :key="currentView"></component>
+    </main>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

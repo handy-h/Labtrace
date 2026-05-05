@@ -1,0 +1,57 @@
+# LabTrace .gitignore
+
+# 编译产物
+labtrace
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 测试
+*.test
+*.out
+/example/
+
+# Go 依赖
+/vendor/
+
+# 前端 (Vue 3)
+node_modules/
+dist/
+.cache/
+*.local
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+web/lib/
+
+# IDE
+.idea/
+.vscode/
+.codeartsdoer/
+*.swp
+*.swo
+*~
+
+# 环境配置（含密钥，禁止提交）
+.env
+.env.test
+.env.local
+.env.*.local
+
+# 数据目录（运行时生成）
+data/labtrace.db
+data/labtrace.db-wal
+data/labtrace.db-shm
+data/uploads/
+data/backups/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+
+# 临时文件
+/tmp/
