@@ -33,6 +33,7 @@ const OCRImportView = Vue.defineComponent({
             <td class="p-2">
               <button @click="viewReport(r.id)" class="text-blue-600 hover:underline text-xs mr-2">查看</button>
               <button v-if="r.ocr_status==='review'" @click="doImport(r.id)" class="text-green-600 hover:underline text-xs mr-2">入库</button>
+              <button v-if="r.ocr_status!=='processing'" @click="doReOCR(r.id)" class="text-orange-600 hover:underline text-xs mr-2">重新识别</button>
             </td>
           </tr>
         </tbody>
@@ -40,25 +41,38 @@ const OCRImportView = Vue.defineComponent({
     </div>
     <!-- 报告详情弹窗 -->
     <div v-if="selectedReport" class="drill-modal" @click.self="closeReport">
-      <div class="w-[90vw] max-w-5xl max-h-[80vh] overflow-auto bg-white rounded-lg p-4">
-        <h2 class="text-lg font-bold mb-3">报告详情 #{{selectedReport.id}} <span :class="statusClass(selectedReport.ocr_status)">({{statusText(selectedReport.ocr_status)}})</span></h2>
-        <div class="flex gap-4">
-          <div class="w-[45%] relative" ref="imageContainer">
-            <div :class="zoomLevel > 1 ? 'overflow-auto' : 'overflow-hidden'" :style="zoomLevel > 1 ? {} : { height: '500px' }">
-              <img :src="reportImageUrl" ref="imageEl"
-                   :style="zoomLevel > 1 ? { width: 'auto', maxWidth: 'none' } : { maxWidth: '100%' }"
-                   class="border rounded" v-if="reportImageUrl" @load="onImageLoad">
-            </div>
-            <div v-if="highlightRect" class="highlight-breathe absolute pointer-events-none border-2 border-blue-500 rounded"
+      <div class="w-full h-full bg-white flex flex-col">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-3 border-b shrink-0">
+          <h2 class="text-lg font-bold">报告详情 #{{selectedReport.id}} <span :class="statusClass(selectedReport.ocr_status)">({{statusText(selectedReport.ocr_status)}})</span></h2>
+          <div class="flex gap-2">
+            <button v-if="selectedReport.ocr_status === 'review'" @click="doConfirm(selectedReport.id)"
+                    class="px-4 py-1.5 bg-orange-600 text-white rounded text-sm hover:bg-orange-700">确认核效</button>
+            <button @click="closeReport" class="px-4 py-1.5 border rounded text-sm hover:bg-slate-50">关闭</button>
+          </div>
+        </div>
+
+        <!-- Main content area -->
+        <div class="flex-1 flex overflow-hidden min-h-0">
+          <!-- Left: file preview -->
+          <div class="w-[45%] relative overflow-auto" ref="imageContainer">
+            <img :src="reportImageUrl" ref="imageEl" v-if="reportImageUrl && !isPdf"
+                 :style="zoomLevel > 1 ? { width: 'auto', maxWidth: 'none' } : { maxWidth: '100%' }"
+                 class="border" @load="onImageLoad">
+            <embed :src="reportImageUrl" v-if="reportImageUrl && isPdf"
+                   type="application/pdf" class="w-full border-0" style="height: 100%; min-height: 100%;">
+            <div v-if="highlightRect && !isPdf" class="highlight-breathe absolute pointer-events-none border-2 border-blue-500 rounded"
                  :style="highlightStyle"></div>
-            <canvas v-if="highlightRect && magnifierReady" ref="magnifier"
+            <canvas v-if="highlightRect && magnifierReady && !isPdf" ref="magnifier"
                     class="absolute pointer-events-none border-2 border-blue-400 rounded shadow-lg"
                     :style="magnifierStyle" width="120" height="80"></canvas>
           </div>
-          <div class="w-[55%] overflow-auto">
+
+          <!-- Right: data table -->
+          <div class="w-[55%] overflow-auto border-l">
             <table class="w-full text-sm">
-              <thead><tr class="bg-slate-50 text-left text-slate-600">
-                <th class="p-2">项目</th><th class="p-2">结果</th><th class="p-2">单位</th><th class="p-2">置信度</th><th class="p-2">提示符</th><th class="p-2">参考区间</th>
+              <thead><tr class="bg-slate-50 text-left text-slate-600 sticky top-0">
+                <th class="p-2">项目</th><th class="p-2">结果</th><th class="p-2">参考区间</th><th class="p-2">单位</th><th class="p-2">提示符</th><th class="p-2">置信度</th>
               </tr></thead>
               <tbody>
                 <tr v-for="(it, idx) in selectedReport.items" :key="it.id"
@@ -73,29 +87,34 @@ const OCRImportView = Vue.defineComponent({
                            @keydown.escape="cancelEdit" ref="editInput" autofocus>
                     <span v-else>{{it.original_value}}</span>
                   </td>
+                  <td class="p-2 text-slate-500">{{it.ref_interval_text || it.row_notes || '-'}}</td>
                   <td class="p-2">
                     <input v-if="editingItemId === it.id" v-model="editForm.original_unit"
                            class="border rounded px-1 py-0.5 text-sm w-16">
                     <span v-else>{{it.original_unit}}</span>
                   </td>
-                  <td class="p-2">{{it.confidence}}%</td>
                   <td class="p-2" v-html="flagBadge(it.flag)"></td>
-                  <td class="p-2 text-slate-500">{{it.ref_interval_text || '-'}}</td>
+                  <td class="p-2">{{it.confidence}}%</td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
-        <div class="flex gap-2 justify-end mt-4">
-          <button v-if="selectedReport.ocr_status === 'review'" @click="doConfirm(selectedReport.id)"
-                  class="px-4 py-2 bg-orange-600 text-white rounded text-sm hover:bg-orange-700">确认核效</button>
-          <button @click="closeReport" class="px-4 py-2 border rounded text-sm hover:bg-slate-50">关闭</button>
         </div>
       </div>
     </div>
     <!-- 快捷键提示条 -->
     <div v-if="selectedReport" class="shortcut-hint">
       <kbd>Tab</kbd> 切换 | <kbd>Enter</kbd> 保存跳转 | <kbd>Space</kbd> 缩放
+    </div>
+    <!-- OCR 配额条 -->
+    <div class="fixed bottom-3 left-3 z-50 bg-white border rounded-lg shadow-md px-4 py-2 text-xs flex items-center gap-3"
+         v-if="quota">
+      <span class="font-medium text-slate-600">本月 OCR</span>
+      <span :class="quotaClass">{{quota.used_count}}/{{quota.total_quota}}</span>
+      <div class="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div class="h-full rounded-full transition-all" :class="quotaBarClass" :style="{width: quotaPct + '%'}"></div>
+      </div>
+      <span class="text-slate-400">成功{{quota.success_count}} 失败{{quota.fail_count}}</span>
     </div>
   </div>`,
   setup() {
@@ -109,7 +128,12 @@ const OCRImportView = Vue.defineComponent({
     const selectedRowIndex = Vue.ref(-1);
     const editingItemId = Vue.ref(null);
     const editForm = Vue.ref({ original_value: '', original_unit: '' });
+    const isPdf = Vue.computed(() => {
+      if (!selectedReport.value || !selectedReport.value.file_path) return false;
+      return selectedReport.value.file_path.toLowerCase().endsWith('.pdf');
+    });
     const zoomLevel = Vue.ref(1);
+    const quota = Vue.ref(null);
     const highlightRect = Vue.ref(null);
     const magnifierReady = Vue.ref(false);
     const imageEl = Vue.ref(null);
@@ -124,6 +148,7 @@ const OCRImportView = Vue.defineComponent({
       api.listSubjects().then(r => { if (r.data) subjects.value = r.data; });
       api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; });
       loadReports();
+      loadQuota();
       document.addEventListener('keydown', onKeyDown);
     });
 
@@ -190,6 +215,39 @@ const OCRImportView = Vue.defineComponent({
         else alert(r.message);
       });
     }
+    function doReOCR(id) {
+      if (!confirm('确认重新识别？现有数据将被替换。')) return;
+      api.reOCR(id).then(r => {
+        if (r.code === 0) {
+          alert('重新识别完成，请查看结果');
+          loadReports();
+          loadQuota();
+        } else {
+          alert(r.message || '重新识别失败');
+        }
+      });
+    }
+    function loadQuota() {
+      api.getOCRQuota().then(r => { if (r.data) quota.value = r.data; });
+    }
+    const quotaPct = Vue.computed(() => {
+      if (!quota.value || quota.value.total_quota === 0) return 0;
+      return Math.min(100, Math.round(quota.value.used_count / quota.value.total_quota * 100));
+    });
+    const quotaClass = Vue.computed(() => {
+      if (!quota.value || quota.value.total_quota === 0) return 'font-bold text-slate-600';
+      const remain = quota.value.total_quota - quota.value.used_count;
+      if (remain > 50) return 'font-bold text-green-600';
+      if (remain > 10) return 'font-bold text-orange-500';
+      return 'font-bold text-red-600';
+    });
+    const quotaBarClass = Vue.computed(() => {
+      if (!quota.value || quota.value.total_quota === 0) return 'bg-green-500';
+      const remain = quota.value.total_quota - quota.value.used_count;
+      if (remain > 50) return 'bg-green-500';
+      if (remain > 10) return 'bg-orange-500';
+      return 'bg-red-500';
+    });
 
     // 行内编辑
     function startEdit(item, idx) {
@@ -325,12 +383,12 @@ const OCRImportView = Vue.defineComponent({
 
     return {
       subjects, hospitals, reports, form, uploading, selectedReport, reportImageUrl,
-      selectedRowIndex, editingItemId, editForm, zoomLevel,
+      selectedRowIndex, editingItemId, editForm, zoomLevel, quota, quotaPct, quotaClass, quotaBarClass,
       highlightRect, highlightStyle, magnifierReady, magnifierStyle,
       imageEl, magnifier, editInput,
-      onFileChange, upload, viewReport, closeReport, doImport, doConfirm,
+      onFileChange, upload, viewReport, closeReport, doImport, doConfirm, doReOCR, loadQuota,
       startEdit, saveEdit, cancelEdit, selectRow, onImageLoad,
-      statusClass, statusText, confClass, flagBadge
+      statusClass, statusText, confClass, flagBadge, isPdf
     };
   }
 });

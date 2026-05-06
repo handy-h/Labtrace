@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -82,40 +83,59 @@ func Upload(c *gin.Context) {
 	// Async OCR recognition
 	go func() {
 		ocrResults, err := services.Recognize(fileBytes, cfg)
+
+		// Record OCR API call in monthly quota (success = HTTP call succeeded)
+		apiSuccess := err == nil
+		if quotaErr := services.RecordOCRCall(apiSuccess); quotaErr != nil {
+			log.Printf("[ocr] record quota: %v", quotaErr)
+		}
+
 		if err != nil {
 			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
+			services.LogAction("ocr_failed", "lab_report", reportID, gin.H{"error": err.Error()})
 			return
 		}
 
 		// Store raw OCR JSON
 		ocrJSON, _ := json.Marshal(ocrResults)
-		database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ?, ocr_status = 'review' WHERE id = ?`, string(ocrJSON), reportID)
+		database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID)
 
-		// Create report_items from OCR results
-		for _, r := range ocrResults {
-			normalizedValue := r.Text
-			// Apply data dictionary mapping
-			normalizedValue = services.NormalizeQualitative(normalizedValue)
-
-			database.DB.Exec(
-				`INSERT INTO report_items (report_id, original_value, original_unit, confidence, ocr_bbox) VALUES (?, ?, '', ?, ?)`,
-				reportID, normalizedValue, int(r.Confidence), fmt.Sprintf(`{"x":%d,"y":%d,"w":%d,"h":%d}`, r.Left, r.Top, r.Width, r.Height),
-			)
+		// Check if OCR returned any data
+		if len(ocrResults) == 0 {
+			log.Printf("[ocr] OCR returned zero results for report %d", reportID)
+			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
+			services.LogAction("ocr_failed", "lab_report", reportID, gin.H{"error": "OCR returned no results"})
+			return
 		}
 
-		// Try to apply hospital rule if hospital_id is set
-		if hospitalID > 0 {
-			items, err := services.ApplyRule(hospitalID, ocrResults)
-			if err == nil && len(items) > 0 {
-				// Update report_items with rule-mapped data
-				for _, item := range items {
-					database.DB.Exec(
-						`UPDATE report_items SET test_item_name = ?, original_value = ?, original_unit = ?, row_notes = ? WHERE report_id = ? AND original_value = ?`,
-						item.TestItemName, item.OriginalValue, item.OriginalUnit, item.RowNotes, reportID, item.OriginalValue,
-					)
-				}
+		// Parse OCR results into structured lab items (name/value/unit/range)
+		parsedItems := services.ParseLabResults(ocrResults)
+
+		if len(parsedItems) > 0 {
+			// Create report_items from parsed items
+			for _, item := range parsedItems {
+				normalizedValue := services.NormalizeQualitative(item.Value)
+				database.DB.Exec(
+					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range,
+				)
+			}
+		} else {
+			// Fallback: insert raw OCR blocks as individual items
+			for _, r := range ocrResults {
+				normalizedValue := services.NormalizeQualitative(r.Text)
+				database.DB.Exec(
+					`INSERT INTO report_items (report_id, original_value, confidence, ocr_bbox) VALUES (?, ?, ?, ?)`,
+					reportID, normalizedValue, int(r.Confidence), fmt.Sprintf(`{"x":%d,"y":%d,"w":%d,"h":%d}`, r.Left, r.Top, r.Width, r.Height),
+				)
 			}
 		}
+
+		// Update status to review (only if items were inserted)
+		database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, reportID)
+
+		// Audit log
+		services.LogAction("ocr_upload", "lab_report", reportID, nil)
 	}()
 
 	c.JSON(http.StatusCreated, models.Success(gin.H{

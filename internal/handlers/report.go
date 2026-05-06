@@ -112,8 +112,9 @@ func loadReportItems(reportID string) []models.ReportItem {
 	rows, err := database.DB.Query(
 		`SELECT ri.id, ri.report_id, ri.test_item_id, ri.original_value, ri.normalized_value, ri.original_unit, ri.normalized_unit,
 		ri.confidence, ri.ref_interval_id, ri.flag, ri.row_notes, ri.ocr_bbox, ri.created_at,
-		COALESCE(ti.standard_name, '') as test_item_name,
+		COALESCE(ri.test_item_name, ti.standard_name, '') as test_item_name,
 		COALESCE(
+			ri.ref_interval_text,
 			CASE WHEN ri.ref_interval_id IS NOT NULL THEN
 				(SELECT CAST(value_min AS TEXT) || '-' || CAST(value_max AS TEXT) FROM reference_intervals WHERE id = ri.ref_interval_id)
 			ELSE ''

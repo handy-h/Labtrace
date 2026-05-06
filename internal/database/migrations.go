@@ -126,8 +126,32 @@ func migrate(db *sql.DB) error {
 		details TEXT NOT NULL DEFAULT '{}',
 		created_at TEXT NOT NULL DEFAULT (datetime('now'))
 	);
+
+	CREATE TABLE IF NOT EXISTS ocr_quotas (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		year_month TEXT NOT NULL UNIQUE,
+		total_quota INTEGER NOT NULL DEFAULT 200,
+		used_count INTEGER NOT NULL DEFAULT 0,
+		success_count INTEGER NOT NULL DEFAULT 0,
+		fail_count INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	);
 	`
 
 	_, err := db.Exec(ddl)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Add missing columns via ALTER TABLE (SQLite safe — ignores error if column exists)
+	alterStmts := []string{
+		`ALTER TABLE report_items ADD COLUMN test_item_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE report_items ADD COLUMN ref_interval_text TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range alterStmts {
+		db.Exec(stmt) // Ignore error — column may already exist
+	}
+
+	return nil
 }
