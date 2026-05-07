@@ -32,6 +32,7 @@ const OCRImportView = Vue.defineComponent({
             <td class="p-2"><span :class="statusClass(r.ocr_status)">{{statusText(r.ocr_status)}}</span></td>
             <td class="p-2">
               <button @click="viewReport(r.id)" class="text-blue-600 hover:underline text-xs mr-2">查看</button>
+              <button v-if="r.ocr_status==='review'" @click="openMappingWizard(r)" class="text-purple-600 hover:underline text-xs mr-2">自定义映射</button>
               <button v-if="r.ocr_status==='review'" @click="doImport(r.id)" class="text-green-600 hover:underline text-xs mr-2">入库</button>
               <button v-if="r.ocr_status!=='processing'" @click="doReOCR(r.id)" class="text-orange-600 hover:underline text-xs mr-2">重新识别</button>
             </td>
@@ -116,21 +117,32 @@ const OCRImportView = Vue.defineComponent({
       </div>
       <span class="text-slate-400">成功{{quota.success_count}} 失败{{quota.fail_count}}</span>
     </div>
+    <!-- 自定义列映射向导 -->
+    <ocr-mapping-wizard
+      :visible="wizardVisible"
+      :report-id="wizardReportId"
+      :hospital-id="wizardHospitalId"
+      :report-image-url="wizardImageUrl"
+      :file-path="wizardFilePath"
+      @close="wizardVisible=false"
+      @done="onWizardDone">
+    </ocr-mapping-wizard>
   </div>`,
   setup() {
     const subjects = Vue.ref([]);
     const hospitals = Vue.ref([]);
     const reports = Vue.ref([]);
-    const form = Vue.ref({ subject_id: '', hospital_id: '', sample_date: '' });
+    const form = Vue.ref({ subject_id: "", hospital_id: "", sample_date: "" });
     const uploading = Vue.ref(false);
     const selectedReport = Vue.ref(null);
-    const reportImageUrl = Vue.ref('');
+    const reportImageUrl = Vue.ref("");
     const selectedRowIndex = Vue.ref(-1);
     const editingItemId = Vue.ref(null);
-    const editForm = Vue.ref({ original_value: '', original_unit: '' });
+    const editForm = Vue.ref({ original_value: "", original_unit: "" });
     const isPdf = Vue.computed(() => {
-      if (!selectedReport.value || !selectedReport.value.file_path) return false;
-      return selectedReport.value.file_path.toLowerCase().endsWith('.pdf');
+      if (!selectedReport.value || !selectedReport.value.file_path)
+        return false;
+      return selectedReport.value.file_path.toLowerCase().endsWith(".pdf");
     });
     const zoomLevel = Vue.ref(1);
     const quota = Vue.ref(null);
@@ -142,18 +154,22 @@ const OCRImportView = Vue.defineComponent({
     let selectedFile = null;
 
     // 全局受检者联动
-    const currentSubjectId = Vue.inject('currentSubjectId', null);
+    const currentSubjectId = Vue.inject("currentSubjectId", null);
 
     Vue.onMounted(() => {
-      api.listSubjects().then(r => { if (r.data) subjects.value = r.data; });
-      api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; });
+      api.listSubjects().then((r) => {
+        if (r.data) subjects.value = r.data;
+      });
+      api.listHospitals().then((r) => {
+        if (r.data) hospitals.value = r.data;
+      });
       loadReports();
       loadQuota();
-      document.addEventListener('keydown', onKeyDown);
+      document.addEventListener("keydown", onKeyDown);
     });
 
     Vue.onUnmounted(() => {
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener("keydown", onKeyDown);
     });
 
     // 受检者联动
@@ -164,32 +180,40 @@ const OCRImportView = Vue.defineComponent({
     }
 
     function loadReports() {
-      api.listReports({ ocr_status: '' }).then(r => { if (r.data) reports.value = r.data; });
+      api.listReports({ ocr_status: "" }).then((r) => {
+        if (r.data) reports.value = r.data;
+      });
     }
-    function onFileChange(e) { selectedFile = e.target.files[0]; }
+    function onFileChange(e) {
+      selectedFile = e.target.files[0];
+    }
     function upload() {
-      if (!selectedFile || !form.value.subject_id) return alert('请选择文件和受检者');
+      if (!selectedFile || !form.value.subject_id)
+        return alert("请选择文件和受检者");
       uploading.value = true;
       const fd = new FormData();
-      fd.append('file', selectedFile);
-      fd.append('subject_id', form.value.subject_id);
-      fd.append('hospital_id', form.value.hospital_id);
-      fd.append('sample_date', form.value.sample_date);
-      api.ocrUpload(fd).then(r => {
+      fd.append("file", selectedFile);
+      fd.append("subject_id", form.value.subject_id);
+      fd.append("hospital_id", form.value.hospital_id);
+      fd.append("sample_date", form.value.sample_date);
+      api.ocrUpload(fd).then((r) => {
         uploading.value = false;
-        if (r.code === 0) { alert('上传成功，OCR识别中'); loadReports(); }
-        else alert(r.message);
+        if (r.code === 0) {
+          alert("上传成功，OCR识别中");
+          loadReports();
+        } else alert(r.message);
       });
     }
     function viewReport(id) {
-      api.getReport(id).then(r => {
+      api.getReport(id).then((r) => {
         if (r.data) {
           selectedReport.value = r.data;
           reportImageUrl.value = api.getReportImage(id);
           selectedRowIndex.value = -1;
           editingItemId.value = null;
           // 低置信度自动聚焦
-          const lowConfItem = r.data.items && r.data.items.find(it => it.confidence < 80);
+          const lowConfItem =
+            r.data.items && r.data.items.find((it) => it.confidence < 80);
           if (lowConfItem) {
             startEdit(lowConfItem, r.data.items.indexOf(lowConfItem));
           }
@@ -202,71 +226,87 @@ const OCRImportView = Vue.defineComponent({
       selectedRowIndex.value = -1;
     }
     function doImport(id) {
-      if (!confirm('确认入库？')) return;
-      api.importReport(id).then(r => {
-        if (r.code === 0) { alert('入库成功'); loadReports(); }
-        else alert(r.message);
+      if (!confirm("确认入库？")) return;
+      api.importReport(id).then((r) => {
+        if (r.code === 0) {
+          alert("入库成功");
+          loadReports();
+        } else alert(r.message);
       });
     }
     function doConfirm(id) {
-      if (!confirm('确认核效？')) return;
-      api.confirmReport(id).then(r => {
-        if (r.code === 0) { alert('核效成功'); loadReports(); closeReport(); }
-        else alert(r.message);
+      if (!confirm("确认核效？")) return;
+      api.confirmReport(id).then((r) => {
+        if (r.code === 0) {
+          alert("核效成功");
+          loadReports();
+          closeReport();
+        } else alert(r.message);
       });
     }
     function doReOCR(id) {
-      if (!confirm('确认重新识别？现有数据将被替换。')) return;
-      api.reOCR(id).then(r => {
+      if (!confirm("确认重新识别？现有数据将被替换。")) return;
+      api.reOCR(id).then((r) => {
         if (r.code === 0) {
-          alert('重新识别完成，请查看结果');
+          alert("重新识别完成，请查看结果");
           loadReports();
           loadQuota();
         } else {
-          alert(r.message || '重新识别失败');
+          alert(r.message || "重新识别失败");
         }
       });
     }
     function loadQuota() {
-      api.getOCRQuota().then(r => { if (r.data) quota.value = r.data; });
+      api.getOCRQuota().then((r) => {
+        if (r.data) quota.value = r.data;
+      });
     }
     const quotaPct = Vue.computed(() => {
       if (!quota.value || quota.value.total_quota === 0) return 0;
-      return Math.min(100, Math.round(quota.value.used_count / quota.value.total_quota * 100));
+      return Math.min(
+        100,
+        Math.round((quota.value.used_count / quota.value.total_quota) * 100),
+      );
     });
     const quotaClass = Vue.computed(() => {
-      if (!quota.value || quota.value.total_quota === 0) return 'font-bold text-slate-600';
+      if (!quota.value || quota.value.total_quota === 0)
+        return "font-bold text-slate-600";
       const remain = quota.value.total_quota - quota.value.used_count;
-      if (remain > 50) return 'font-bold text-green-600';
-      if (remain > 10) return 'font-bold text-orange-500';
-      return 'font-bold text-red-600';
+      if (remain > 50) return "font-bold text-green-600";
+      if (remain > 10) return "font-bold text-orange-500";
+      return "font-bold text-red-600";
     });
     const quotaBarClass = Vue.computed(() => {
-      if (!quota.value || quota.value.total_quota === 0) return 'bg-green-500';
+      if (!quota.value || quota.value.total_quota === 0) return "bg-green-500";
       const remain = quota.value.total_quota - quota.value.used_count;
-      if (remain > 50) return 'bg-green-500';
-      if (remain > 10) return 'bg-orange-500';
-      return 'bg-red-500';
+      if (remain > 50) return "bg-green-500";
+      if (remain > 10) return "bg-orange-500";
+      return "bg-red-500";
     });
 
     // 行内编辑
     function startEdit(item, idx) {
       editingItemId.value = item.id;
-      editForm.value = { original_value: item.original_value, original_unit: item.original_unit };
+      editForm.value = {
+        original_value: item.original_value,
+        original_unit: item.original_unit,
+      };
       selectedRowIndex.value = idx;
       Vue.nextTick(() => {
         if (editInput.value && editInput.value[0]) editInput.value[0].focus();
       });
     }
     function saveEdit(item) {
-      api.updateReportItem(selectedReport.value.id, item.id, editForm.value).then(r => {
-        if (r.code === 0) {
-          editingItemId.value = null;
-          viewReport(selectedReport.value.id);
-        } else {
-          alert(r.message || '保存失败');
-        }
-      });
+      api
+        .updateReportItem(selectedReport.value.id, item.id, editForm.value)
+        .then((r) => {
+          if (r.code === 0) {
+            editingItemId.value = null;
+            viewReport(selectedReport.value.id);
+          } else {
+            alert(r.message || "保存失败");
+          }
+        });
     }
     function cancelEdit() {
       editingItemId.value = null;
@@ -282,17 +322,27 @@ const OCRImportView = Vue.defineComponent({
     const highlightStyle = Vue.computed(() => {
       if (!highlightRect.value) return {};
       const r = highlightRect.value;
-      return { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' };
+      return {
+        left: r.x + "px",
+        top: r.y + "px",
+        width: r.w + "px",
+        height: r.h + "px",
+      };
     });
     const magnifierStyle = Vue.computed(() => {
       if (!highlightRect.value) return {};
       const r = highlightRect.value;
-      return { left: (r.x + r.w + 8) + 'px', top: Math.max(0, r.y - 20) + 'px' };
+      return { left: r.x + r.w + 8 + "px", top: Math.max(0, r.y - 20) + "px" };
     });
 
     function onImageLoad() {}
     function updateHighlight(idx) {
-      if (!selectedReport.value || !selectedReport.value.items || idx < 0 || idx >= selectedReport.value.items.length) {
+      if (
+        !selectedReport.value ||
+        !selectedReport.value.items ||
+        idx < 0 ||
+        idx >= selectedReport.value.items.length
+      ) {
         highlightRect.value = null;
         magnifierReady.value = false;
         return;
@@ -300,10 +350,22 @@ const OCRImportView = Vue.defineComponent({
       const item = selectedReport.value.items[idx];
       let bbox = null;
       if (item.ocr_bbox) {
-        try { bbox = typeof item.ocr_bbox === 'string' ? JSON.parse(item.ocr_bbox) : item.ocr_bbox; } catch (e) { bbox = null; }
+        try {
+          bbox =
+            typeof item.ocr_bbox === "string"
+              ? JSON.parse(item.ocr_bbox)
+              : item.ocr_bbox;
+        } catch (e) {
+          bbox = null;
+        }
       }
       if (bbox && bbox.x != null && bbox.y != null) {
-        highlightRect.value = { x: bbox.x, y: bbox.y, w: bbox.w || 100, h: bbox.h || 30 };
+        highlightRect.value = {
+          x: bbox.x,
+          y: bbox.y,
+          w: bbox.w || 100,
+          h: bbox.h || 30,
+        };
         Vue.nextTick(() => drawMagnifier(bbox));
       } else {
         highlightRect.value = null;
@@ -313,32 +375,36 @@ const OCRImportView = Vue.defineComponent({
     function drawMagnifier(bbox) {
       if (!magnifier.value || !imageEl.value) return;
       const canvas = magnifier.value[0] || magnifier.value;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       const img = imageEl.value[0] || imageEl.value;
       const sx = Math.max(0, bbox.x - 10);
       const sy = Math.max(0, bbox.y - 10);
       const sw = bbox.w + 20;
       const sh = bbox.h + 20;
       ctx.clearRect(0, 0, 120, 80);
-      try { ctx.drawImage(img, sx, sy, sw, sh, 0, 0, 120, 80); magnifierReady.value = true; }
-      catch (e) { magnifierReady.value = false; }
+      try {
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, 120, 80);
+        magnifierReady.value = true;
+      } catch (e) {
+        magnifierReady.value = false;
+      }
     }
 
     // 快捷键
     function onKeyDown(e) {
       if (!selectedReport.value) return;
       const tag = e.target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') {
-        if (e.key === ' ') e.preventDefault();
+      if (tag === "INPUT" || tag === "TEXTAREA") {
+        if (e.key === " ") e.preventDefault();
         return;
       }
-      if (e.key === 'Tab') {
+      if (e.key === "Tab") {
         e.preventDefault();
         moveToNextCell();
-      } else if (e.key === 'Enter') {
+      } else if (e.key === "Enter") {
         e.preventDefault();
         saveAndJumpNext();
-      } else if (e.key === ' ') {
+      } else if (e.key === " ") {
         e.preventDefault();
         zoomLevel.value = zoomLevel.value === 1 ? 2 : 1;
       }
@@ -353,42 +419,124 @@ const OCRImportView = Vue.defineComponent({
     }
     function saveAndJumpNext() {
       if (editingItemId.value && selectedReport.value) {
-        const item = selectedReport.value.items.find(it => it.id === editingItemId.value);
+        const item = selectedReport.value.items.find(
+          (it) => it.id === editingItemId.value,
+        );
         if (item) {
-          api.updateReportItem(selectedReport.value.id, item.id, editForm.value).then(r => {
-            if (r.code === 0) {
-              editingItemId.value = null;
-              // 跳转下一个异常行
-              const items = selectedReport.value.items;
-              const currentIdx = items.indexOf(item);
-              for (let i = currentIdx + 1; i < items.length; i++) {
-                if (items[i].confidence < 95) {
-                  startEdit(items[i], i);
-                  return;
+          api
+            .updateReportItem(selectedReport.value.id, item.id, editForm.value)
+            .then((r) => {
+              if (r.code === 0) {
+                editingItemId.value = null;
+                // 跳转下一个异常行
+                const items = selectedReport.value.items;
+                const currentIdx = items.indexOf(item);
+                for (let i = currentIdx + 1; i < items.length; i++) {
+                  if (items[i].confidence < 95) {
+                    startEdit(items[i], i);
+                    return;
+                  }
                 }
+                viewReport(selectedReport.value.id);
               }
-              viewReport(selectedReport.value.id);
-            }
-          });
+            });
         }
       }
     }
 
+    // ── 自定义映射向导 ──────────────────────────────────
+    const wizardVisible = Vue.ref(false);
+    const wizardReportId = Vue.ref(null);
+    const wizardHospitalId = Vue.ref(null);
+    const wizardImageUrl = Vue.ref("");
+    const wizardFilePath = Vue.ref("");
+
+    function openMappingWizard(report) {
+      wizardReportId.value = report.id;
+      wizardHospitalId.value = report.hospital_id || null;
+      wizardImageUrl.value = api.getReportImage(report.id);
+      wizardFilePath.value = report.file_path || "";
+      wizardVisible.value = true;
+    }
+
+    function onWizardDone({ reportId }) {
+      wizardVisible.value = false;
+      loadReports();
+      loadQuota();
+      viewReport(reportId);
+    }
+
     function statusClass(s) {
-      return { pending: 'text-slate-500', processing: 'text-yellow-600', review: 'text-orange-600', imported: 'text-green-600', failed: 'text-red-600' }[s] || '';
+      return (
+        {
+          pending: "text-slate-500",
+          processing: "text-yellow-600",
+          review: "text-orange-600",
+          imported: "text-green-600",
+          failed: "text-red-600",
+        }[s] || ""
+      );
     }
     function statusText(s) {
-      return { pending: '待识别', processing: '识别中', review: '待核效', imported: '已入库', failed: '失败' }[s] || s;
+      return (
+        {
+          pending: "待识别",
+          processing: "识别中",
+          review: "待核效",
+          imported: "已入库",
+          failed: "失败",
+        }[s] || s
+      );
     }
 
     return {
-      subjects, hospitals, reports, form, uploading, selectedReport, reportImageUrl,
-      selectedRowIndex, editingItemId, editForm, zoomLevel, quota, quotaPct, quotaClass, quotaBarClass,
-      highlightRect, highlightStyle, magnifierReady, magnifierStyle,
-      imageEl, magnifier, editInput,
-      onFileChange, upload, viewReport, closeReport, doImport, doConfirm, doReOCR, loadQuota,
-      startEdit, saveEdit, cancelEdit, selectRow, onImageLoad,
-      statusClass, statusText, confClass, flagBadge, isPdf
+      subjects,
+      hospitals,
+      reports,
+      form,
+      uploading,
+      selectedReport,
+      reportImageUrl,
+      selectedRowIndex,
+      editingItemId,
+      editForm,
+      zoomLevel,
+      quota,
+      quotaPct,
+      quotaClass,
+      quotaBarClass,
+      highlightRect,
+      highlightStyle,
+      magnifierReady,
+      magnifierStyle,
+      imageEl,
+      magnifier,
+      editInput,
+      onFileChange,
+      upload,
+      viewReport,
+      closeReport,
+      doImport,
+      doConfirm,
+      doReOCR,
+      loadQuota,
+      startEdit,
+      saveEdit,
+      cancelEdit,
+      selectRow,
+      onImageLoad,
+      statusClass,
+      statusText,
+      confClass,
+      flagBadge,
+      isPdf,
+      wizardVisible,
+      wizardReportId,
+      wizardHospitalId,
+      wizardImageUrl,
+      wizardFilePath,
+      openMappingWizard,
+      onWizardDone,
     };
-  }
+  },
 });

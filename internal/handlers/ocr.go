@@ -163,3 +163,191 @@ func GetReportImage(c *gin.Context) {
 
 	c.File(filePath)
 }
+
+// GetOCRBlocks returns the raw OCR block data for a report (used by the mapping wizard).
+func GetOCRBlocks(c *gin.Context) {
+	id := c.Param("id")
+
+	var rawJSON string
+	err := database.DB.QueryRow(`SELECT ocr_raw_json FROM lab_reports WHERE id = ?`, id).Scan(&rawJSON)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
+		return
+	}
+	if rawJSON == "" {
+		c.JSON(http.StatusOK, models.Success(gin.H{
+			"blocks":      []interface{}{},
+			"auto_region": services.TableRegion{Page: -1},
+		}))
+		return
+	}
+
+	var blocks []services.OCRResult
+	if err := json.Unmarshal([]byte(rawJSON), &blocks); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("解析OCR数据失败"))
+		return
+	}
+
+	autoRegion := services.AutoDetectTableRegion(blocks)
+	c.JSON(http.StatusOK, models.Success(gin.H{
+		"blocks":      blocks,
+		"auto_region": autoRegion,
+	}))
+}
+
+// ApplyColumnMapping re-parses a report using a user-defined column mapping.
+func ApplyColumnMapping(c *gin.Context) {
+	id := c.Param("id")
+
+	var cfg services.ColumnMappingConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, models.Error("请求参数错误: "+err.Error()))
+		return
+	}
+
+	var rawJSON, sampleDate string
+	err := database.DB.QueryRow(
+		`SELECT ocr_raw_json, sample_date FROM lab_reports WHERE id = ?`, id,
+	).Scan(&rawJSON, &sampleDate)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
+		return
+	}
+	if rawJSON == "" {
+		c.JSON(http.StatusBadRequest, models.Error("该报告尚无OCR数据，请先完成OCR识别"))
+		return
+	}
+
+	var blocks []services.OCRResult
+	if err := json.Unmarshal([]byte(rawJSON), &blocks); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("解析OCR数据失败"))
+		return
+	}
+
+	parsedItems := services.ParseLabResultsWithMapping(blocks, cfg)
+
+	if cfg.SampleDate != "" && cfg.SampleDate != sampleDate {
+		database.DB.Exec(`UPDATE lab_reports SET sample_date = ? WHERE id = ?`, cfg.SampleDate, id)
+	}
+
+	mappingJSON, _ := services.MarshalColumnMappingConfig(cfg)
+	database.DB.Exec(`UPDATE lab_reports SET column_mapping_json = ? WHERE id = ?`, mappingJSON, id)
+
+	database.DB.Exec(`DELETE FROM report_items WHERE report_id = ?`, id)
+	for _, item := range parsedItems {
+		rowNotes := item.RowText
+		database.DB.Exec(
+			`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, item.Name, item.Value, item.Unit, item.Confidence, item.BBox, item.Range, rowNotes,
+		)
+	}
+
+	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id)
+
+	reportIDInt, _ := strconv.ParseInt(id, 10, 64)
+	services.LogAction("apply_column_mapping", "lab_report", reportIDInt, gin.H{"item_count": len(parsedItems)})
+
+	rows, err := database.DB.Query(
+		`SELECT id, report_id, COALESCE(test_item_id, 0), COALESCE(test_item_name,''), original_value, COALESCE(original_unit,''), confidence, COALESCE(flag,''), COALESCE(row_notes,''), COALESCE(ocr_bbox,''), COALESCE(ref_interval_text,'') FROM report_items WHERE report_id = ? ORDER BY id`,
+		id,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("查询结果失败"))
+		return
+	}
+	defer rows.Close()
+
+	var items []models.ReportItem
+	for rows.Next() {
+		var it models.ReportItem
+		var testItemID int64
+		rows.Scan(&it.ID, &it.ReportID, &testItemID, &it.TestItemName, &it.OriginalValue,
+			&it.OriginalUnit, &it.Confidence, &it.Flag, &it.RowNotes, &it.OCRBBox, &it.RefIntervalText)
+		if testItemID > 0 {
+			it.TestItemID = &testItemID
+		}
+		items = append(items, it)
+	}
+	if items == nil {
+		items = []models.ReportItem{}
+	}
+
+	c.JSON(http.StatusOK, models.Success(gin.H{
+		"items":      items,
+		"item_count": len(items),
+	}))
+}
+
+// GetHospitalMappingTemplate retrieves the saved column mapping template for a hospital.
+func GetHospitalMappingTemplate(c *gin.Context) {
+	hospitalID := c.Param("id")
+
+	var colMappings string
+	err := database.DB.QueryRow(
+		`SELECT column_mappings FROM hospital_rules WHERE hospital_id = ? ORDER BY updated_at DESC LIMIT 1`,
+		hospitalID,
+	).Scan(&colMappings)
+	if err != nil || colMappings == "" || colMappings == "{}" {
+		c.JSON(http.StatusOK, models.Success(nil))
+		return
+	}
+
+	cfg, err := services.UnmarshalColumnMappingConfig(colMappings)
+	if err != nil {
+		c.JSON(http.StatusOK, models.Success(nil))
+		return
+	}
+	c.JSON(http.StatusOK, models.Success(cfg))
+}
+
+// SaveHospitalMappingTemplate saves a column mapping as a reusable hospital-level template.
+func SaveHospitalMappingTemplate(c *gin.Context) {
+	hospitalID := c.Param("id")
+
+	var body struct {
+		Name   string                       `json:"name"`
+		Config services.ColumnMappingConfig `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, models.Error("请求参数错误"))
+		return
+	}
+
+	cfgJSON, err := services.MarshalColumnMappingConfig(body.Config)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("序列化配置失败"))
+		return
+	}
+	ruleName := body.Name
+	if ruleName == "" {
+		ruleName = "default"
+	}
+
+	var existingID int64
+	queryErr := database.DB.QueryRow(
+		`SELECT id FROM hospital_rules WHERE hospital_id = ? LIMIT 1`, hospitalID,
+	).Scan(&existingID)
+
+	if queryErr != nil {
+		res, err := database.DB.Exec(
+			`INSERT INTO hospital_rules (hospital_id, rule_name, column_mappings) VALUES (?, ?, ?)`,
+			hospitalID, ruleName, cfgJSON,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			return
+		}
+		newID, _ := res.LastInsertId()
+		c.JSON(http.StatusOK, models.Success(gin.H{"id": newID}))
+	} else {
+		_, err := database.DB.Exec(
+			`UPDATE hospital_rules SET rule_name = ?, column_mappings = ?, updated_at = datetime('now') WHERE id = ?`,
+			ruleName, cfgJSON, existingID,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			return
+		}
+		c.JSON(http.StatusOK, models.Success(gin.H{"id": existingID}))
+	}
+}

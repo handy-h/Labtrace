@@ -1,118 +1,249 @@
 // api.js — HTTP 请求封装
-const API_BASE = '/api/v1';
+const API_BASE = "/api/v1";
 
 const api = {
   async request(method, path, body) {
     const opts = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { "Content-Type": "application/json" },
     };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API_BASE + path, opts);
     const json = await res.json();
     if (json.code !== 0) {
-      console.error('API error:', json.message);
+      console.error("API error:", json.message);
     }
     return json;
   },
 
   async upload(path, formData) {
-    const res = await fetch(API_BASE + path, { method: 'POST', body: formData });
+    const res = await fetch(API_BASE + path, {
+      method: "POST",
+      body: formData,
+    });
     return res.json();
   },
 
-  get(path)     { return this.request('GET', path); },
-  post(path, b) { return this.request('POST', path, b); },
-  put(path, b)  { return this.request('PUT', path, b); },
-  del(path)     { return this.request('DELETE', path); },
+  get(path) {
+    return this.request("GET", path);
+  },
+  post(path, b) {
+    return this.request("POST", path, b);
+  },
+  put(path, b) {
+    return this.request("PUT", path, b);
+  },
+  del(path) {
+    return this.request("DELETE", path);
+  },
 
   // Health
-  ping() { return this.get('/ping'); },
+  ping() {
+    return this.get("/ping");
+  },
 
   // Subjects
-  listSubjects(search) { return this.get('/subjects' + (search ? '?search=' + encodeURIComponent(search) : '')); },
-  createSubject(data)  { return this.post('/subjects', data); },
-  getSubject(id)       { return this.get('/subjects/' + id); },
-  updateSubject(id, d) { return this.put('/subjects/' + id, d); },
-  deleteSubject(id)    { return this.del('/subjects/' + id); },
+  listSubjects(search) {
+    return this.get(
+      "/subjects" + (search ? "?search=" + encodeURIComponent(search) : ""),
+    );
+  },
+  createSubject(data) {
+    return this.post("/subjects", data);
+  },
+  getSubject(id) {
+    return this.get("/subjects/" + id);
+  },
+  updateSubject(id, d) {
+    return this.put("/subjects/" + id, d);
+  },
+  deleteSubject(id) {
+    return this.del("/subjects/" + id);
+  },
 
   // Hospitals
-  listHospitals()       { return this.get('/hospitals'); },
-  createHospital(data)  { return this.post('/hospitals', data); },
-  updateHospital(id, d) { return this.put('/hospitals/' + id, d); },
-  deleteHospital(id)    { return this.del('/hospitals/' + id); },
+  listHospitals() {
+    return this.get("/hospitals");
+  },
+  createHospital(data) {
+    return this.post("/hospitals", data);
+  },
+  updateHospital(id, d) {
+    return this.put("/hospitals/" + id, d);
+  },
+  deleteHospital(id) {
+    return this.del("/hospitals/" + id);
+  },
 
   // Test Items
-  listTestItems(category) { return this.get('/test-items' + (category ? '?category=' + encodeURIComponent(category) : '')); },
-  createTestItem(data)    { return this.post('/test-items', data); },
-  updateTestItem(id, d)   { return this.put('/test-items/' + id, d); },
-  deleteTestItem(id)      { return this.del('/test-items/' + id); },
+  listTestItems(category) {
+    return this.get(
+      "/test-items" +
+        (category ? "?category=" + encodeURIComponent(category) : ""),
+    );
+  },
+  createTestItem(data) {
+    return this.post("/test-items", data);
+  },
+  updateTestItem(id, d) {
+    return this.put("/test-items/" + id, d);
+  },
+  deleteTestItem(id) {
+    return this.del("/test-items/" + id);
+  },
 
   // Aliases
-  listAliases(itemId)     { return this.get('/test-items/' + itemId + '/aliases'); },
-  createAlias(itemId, d)  { return this.post('/test-items/' + itemId + '/aliases', d); },
-  deleteAlias(id)         { return this.del('/test-item-aliases/' + id); },
+  listAliases(itemId) {
+    return this.get("/test-items/" + itemId + "/aliases");
+  },
+  createAlias(itemId, d) {
+    return this.post("/test-items/" + itemId + "/aliases", d);
+  },
+  deleteAlias(id) {
+    return this.del("/test-item-aliases/" + id);
+  },
 
   // Reference Intervals
-  listRefIntervals(itemId)    { return this.get('/test-items/' + itemId + '/reference-intervals'); },
-  createRefInterval(itemId, d) { return this.post('/test-items/' + itemId + '/reference-intervals', d); },
-  updateRefInterval(id, d)     { return this.put('/reference-intervals/' + id, d); },
-  deleteRefInterval(id)        { return this.del('/reference-intervals/' + id); },
+  listRefIntervals(itemId) {
+    return this.get("/test-items/" + itemId + "/reference-intervals");
+  },
+  createRefInterval(itemId, d) {
+    return this.post("/test-items/" + itemId + "/reference-intervals", d);
+  },
+  updateRefInterval(id, d) {
+    return this.put("/reference-intervals/" + id, d);
+  },
+  deleteRefInterval(id) {
+    return this.del("/reference-intervals/" + id);
+  },
 
   // Unit Conversions
-  listUnitConversions(itemId) { return this.get('/unit-conversions' + (itemId ? '?test_item_id=' + itemId : '')); },
-  createUnitConversion(d)     { return this.post('/unit-conversions', d); },
-  updateUnitConversion(id, d) { return this.put('/unit-conversions/' + id, d); },
-  deleteUnitConversion(id)    { return this.del('/unit-conversions/' + id); },
+  listUnitConversions(itemId) {
+    return this.get(
+      "/unit-conversions" + (itemId ? "?test_item_id=" + itemId : ""),
+    );
+  },
+  createUnitConversion(d) {
+    return this.post("/unit-conversions", d);
+  },
+  updateUnitConversion(id, d) {
+    return this.put("/unit-conversions/" + id, d);
+  },
+  deleteUnitConversion(id) {
+    return this.del("/unit-conversions/" + id);
+  },
 
   // Calculation Rules
-  listCalcRules()          { return this.get('/calculation-rules'); },
-  createCalcRule(d)        { return this.post('/calculation-rules', d); },
-  updateCalcRule(id, d)    { return this.put('/calculation-rules/' + id, d); },
-  deleteCalcRule(id)       { return this.del('/calculation-rules/' + id); },
+  listCalcRules() {
+    return this.get("/calculation-rules");
+  },
+  createCalcRule(d) {
+    return this.post("/calculation-rules", d);
+  },
+  updateCalcRule(id, d) {
+    return this.put("/calculation-rules/" + id, d);
+  },
+  deleteCalcRule(id) {
+    return this.del("/calculation-rules/" + id);
+  },
 
   // Reports
   listReports(params) {
     const q = new URLSearchParams(params).toString();
-    return this.get('/reports' + (q ? '?' + q : ''));
+    return this.get("/reports" + (q ? "?" + q : ""));
   },
-  getReport(id)            { return this.get('/reports/' + id); },
-  updateReportItem(reportId, itemId, d) { return this.put('/reports/' + reportId + '/items/' + itemId, d); },
-  confirmReport(id)        { return this.post('/reports/' + id + '/confirm'); },
-  importReport(id)         { return this.post('/reports/' + id + '/import'); },
-  getReportImage(id)       { return API_BASE + '/reports/' + id + '/image'; },
+  getReport(id) {
+    return this.get("/reports/" + id);
+  },
+  updateReportItem(reportId, itemId, d) {
+    return this.put("/reports/" + reportId + "/items/" + itemId, d);
+  },
+  confirmReport(id) {
+    return this.post("/reports/" + id + "/confirm");
+  },
+  importReport(id) {
+    return this.post("/reports/" + id + "/import");
+  },
+  getReportImage(id) {
+    return API_BASE + "/reports/" + id + "/image";
+  },
 
   // OCR
-  ocrUpload(formData) { return this.upload('/ocr/upload', formData); },
+  ocrUpload(formData) {
+    return this.upload("/ocr/upload", formData);
+  },
+  reOCR(id) {
+    return this.post("/reports/" + id + "/re-ocr");
+  },
+  getOCRQuota() {
+    return this.get("/ocr/quota");
+  },
+  updateOCRQuota(d) {
+    return this.put("/ocr/quota", d);
+  },
+
+  // Column Mapping
+  getOCRBlocks(id) {
+    return this.get("/reports/" + id + "/ocr-blocks");
+  },
+  applyColumnMapping(id, config) {
+    return this.post("/reports/" + id + "/apply-mapping", config);
+  },
+  getHospitalMappingTemplate(hospId) {
+    return this.get("/hospitals/" + hospId + "/mapping-template");
+  },
+  saveHospitalMappingTemplate(hospId, d) {
+    return this.post("/hospitals/" + hospId + "/mapping-template", d);
+  },
 
   // Hospital Rules
-  listHospitalRules(hospitalId) { return this.get('/hospital-rules' + (hospitalId ? '?hospital_id=' + hospitalId : '')); },
-  createHospitalRule(d)         { return this.post('/hospital-rules', d); },
-  updateHospitalRule(id, d)     { return this.put('/hospital-rules/' + id, d); },
-  deleteHospitalRule(id)        { return this.del('/hospital-rules/' + id); },
+  listHospitalRules(hospitalId) {
+    return this.get(
+      "/hospital-rules" + (hospitalId ? "?hospital_id=" + hospitalId : ""),
+    );
+  },
+  createHospitalRule(d) {
+    return this.post("/hospital-rules", d);
+  },
+  updateHospitalRule(id, d) {
+    return this.put("/hospital-rules/" + id, d);
+  },
+  deleteHospitalRule(id) {
+    return this.del("/hospital-rules/" + id);
+  },
 
   // Trend
   getTrendData(params) {
     const q = new URLSearchParams(params).toString();
-    return this.get('/trend/data' + (q ? '?' + q : ''));
+    return this.get("/trend/data" + (q ? "?" + q : ""));
   },
 
   // Dashboard
-  dashboardSummary()   { return this.get('/dashboard/summary'); },
+  dashboardSummary() {
+    return this.get("/dashboard/summary");
+  },
   dashboardAnomalies(params) {
     const q = new URLSearchParams(params).toString();
-    return this.get('/dashboard/anomalies' + (q ? '?' + q : ''));
+    return this.get("/dashboard/anomalies" + (q ? "?" + q : ""));
   },
 
   // Backups
-  exportBackup(desc)    { return this.post('/backups/export', { description: desc }); },
-  importBackup(formData) { return this.upload('/backups/import', formData); },
-  listBackups()         { return this.get('/backups'); },
-  deleteBackup(id)      { return this.del('/backups/' + id); },
+  exportBackup(desc) {
+    return this.post("/backups/export", { description: desc });
+  },
+  importBackup(formData) {
+    return this.upload("/backups/import", formData);
+  },
+  listBackups() {
+    return this.get("/backups");
+  },
+  deleteBackup(id) {
+    return this.del("/backups/" + id);
+  },
 
   // Audit Logs
   listAuditLogs(params) {
     const q = new URLSearchParams(params).toString();
-    return this.get('/audit-logs' + (q ? '?' + q : ''));
+    return this.get("/audit-logs" + (q ? "?" + q : ""));
   },
 };

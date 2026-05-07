@@ -92,13 +92,22 @@ func main() {
 		v1.PUT("/reports/:id/items/:itemId", handlers.UpdateReportItem)
 		v1.POST("/reports/:id/confirm", handlers.ConfirmReport)
 		v1.POST("/reports/:id/import", handlers.ImportReport)
+		v1.POST("/reports/:id/re-ocr", handlers.ReOCR)
 		v1.GET("/reports/:id/image", handlers.GetReportImage)
+		v1.GET("/reports/:id/ocr-blocks", handlers.GetOCRBlocks)
+		v1.POST("/reports/:id/apply-mapping", handlers.ApplyColumnMapping)
+
+		// OCR Quota
+		v1.GET("/ocr/quota", handlers.GetOCRQuota)
+		v1.PUT("/ocr/quota", handlers.UpdateOCRQuota)
 
 		// Hospital Rules
 		v1.GET("/hospital-rules", handlers.ListHospitalRules)
 		v1.POST("/hospital-rules", handlers.CreateHospitalRule)
 		v1.PUT("/hospital-rules/:id", handlers.UpdateHospitalRule)
 		v1.DELETE("/hospital-rules/:id", handlers.DeleteHospitalRule)
+		v1.GET("/hospitals/:id/mapping-template", handlers.GetHospitalMappingTemplate)
+		v1.POST("/hospitals/:id/mapping-template", handlers.SaveHospitalMappingTemplate)
 
 		// Trend
 		v1.GET("/trend/data", handlers.GetTrendData)

@@ -7,6 +7,24 @@ const SettingsView = Vue.defineComponent({
       <h2 class="font-semibold mb-2">数据库加密</h2>
       <p class="text-sm text-slate-500">加密状态: <span class="text-green-600">已启用</span> (密钥来自 .env)</p>
     </div>
+    <!-- OCR 配额管理 -->
+    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+      <h2 class="font-semibold mb-2">OCR 月度配额</h2>
+      <div class="flex items-center gap-4 text-sm" v-if="quota">
+        <span class="text-slate-600">当前用量</span>
+        <span :class="quotaTextClass">{{quota.used_count}} / {{quota.total_quota}}</span>
+        <div class="w-32 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all" :class="quotaBarClass" :style="{width: quotaPct + '%'}"></div>
+        </div>
+        <span class="text-slate-400">成功{{quota.success_count}} 失败{{quota.fail_count}}</span>
+      </div>
+      <div class="flex items-center gap-2 mt-2">
+        <span class="text-xs text-slate-500">月配额</span>
+        <input v-model="editTotal" type="number" class="border rounded px-2 py-1 text-sm w-20" min="0">
+        <button @click="saveQuota" class="px-3 py-1 bg-blue-600 text-white rounded text-xs">校准</button>
+        <span class="text-xs text-slate-400" v-if="quota">当前月份 {{quota.year_month}}</span>
+      </div>
+    </div>
     <!-- 医院管理 -->
     <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
       <div class="flex gap-3 items-center mb-2">
@@ -78,6 +96,45 @@ const SettingsView = Vue.defineComponent({
     const showHospModal = Vue.ref(false);
     const hospForm = Vue.ref({ name: '', address: '' });
     const editingHospId = Vue.ref(null);
+    const quota = Vue.ref(null);
+    const editTotal = Vue.ref('');
+
+    const quotaPct = Vue.computed(() => {
+      if (!quota.value || quota.value.total_quota === 0) return 0;
+      return Math.min(100, Math.round(quota.value.used_count / quota.value.total_quota * 100));
+    });
+    const quotaTextClass = Vue.computed(() => {
+      if (!quota.value) return 'text-slate-500';
+      const remain = quota.value.total_quota - quota.value.used_count;
+      if (remain > 50) return 'text-green-600 font-bold';
+      if (remain > 10) return 'text-orange-500 font-bold';
+      return 'text-red-600 font-bold';
+    });
+    const quotaBarClass = Vue.computed(() => {
+      if (!quota.value) return 'bg-green-500';
+      const remain = quota.value.total_quota - quota.value.used_count;
+      if (remain > 50) return 'bg-green-500';
+      if (remain > 10) return 'bg-orange-500';
+      return 'bg-red-500';
+    });
+
+    function loadQuota() {
+      api.getOCRQuota().then(r => {
+        if (r.data) {
+          quota.value = r.data;
+          editTotal.value = String(r.data.total_quota);
+        }
+      });
+    }
+    function saveQuota() {
+      if (!quota.value) return;
+      const total = parseInt(editTotal.value);
+      if (isNaN(total) || total < 0) return alert('请输入有效数字');
+      api.updateOCRQuota({ year_month: quota.value.year_month, total_quota: total }).then(r => {
+        if (r.code === 0) { alert('配额已更新'); loadQuota(); }
+        else alert(r.message || '更新失败');
+      });
+    }
 
     function loadBackups() { api.listBackups().then(r => { if (r.data) backups.value = r.data; }); }
     function loadAudit() { api.listAuditLogs().then(r => { if (r.data) auditLogs.value = r.data; }); }
@@ -124,7 +181,9 @@ const SettingsView = Vue.defineComponent({
       });
     }
 
-    Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); });
-    return { backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId, doExport, doImport, deleteBackup, openHospModal, saveHospital, deleteHospital };
+    Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); });
+    return { backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId,
+             quota, editTotal, quotaPct, quotaTextClass, quotaBarClass,
+             doExport, doImport, deleteBackup, openHospModal, saveHospital, deleteHospital, saveQuota };
   }
 });

@@ -1,38 +1,48 @@
 // app.js — Vue 3 应用入口（重构：仅保留路由+全局状态+组件注册）
-const { createApp, ref, computed, reactive, onMounted, watch, nextTick, provide, inject } = Vue;
+const {
+  createApp,
+  ref,
+  computed,
+  reactive,
+  onMounted,
+  watch,
+  nextTick,
+  provide,
+  inject,
+} = Vue;
 
 // ===== 应用实例 =====
 const app = createApp({
   data() {
     return {
-      currentView: 'dashboard',
+      currentView: "dashboard",
       navItems: [
-        { hash: 'dashboard',  label: '仪表盘',     icon: '📊' },
-        { hash: 'ocr',        label: '上传 OCR',    icon: '📷' },
-        { hash: 'subjects',   label: '受检者',      icon: '👤' },
-        { hash: 'test-items', label: '项目库',      icon: '🧪' },
-        { hash: 'trend',      label: '趋势分析',    icon: '📈' },
-        { hash: 'settings',   label: '设置',        icon: '⚙️' },
+        { hash: "dashboard", label: "仪表盘", icon: "📊" },
+        { hash: "ocr", label: "上传 OCR", icon: "📷" },
+        { hash: "subjects", label: "受检者", icon: "👤" },
+        { hash: "test-items", label: "项目库", icon: "🧪" },
+        { hash: "trend", label: "趋势分析", icon: "📈" },
+        { hash: "settings", label: "设置", icon: "⚙️" },
       ],
       // 全局状态
       currentSubjectId: null,
-      currentSubjectName: '未选择',
-      globalSearchQuery: '',
+      currentSubjectName: "未选择",
+      globalSearchQuery: "",
       allSubjects: [],
     };
   },
   computed: {
     currentComponent() {
       const map = {
-        dashboard:  'DashboardView',
-        ocr:        'OCRImportView',
-        subjects:   'SubjectsView',
-        'test-items':'TestItemsView',
-        trend:      'TrendView',
-        settings:   'SettingsView',
+        dashboard: "DashboardView",
+        ocr: "OCRImportView",
+        subjects: "SubjectsView",
+        "test-items": "TestItemsView",
+        trend: "TrendView",
+        settings: "SettingsView",
       };
-      return map[this.currentView] || 'DashboardView';
-    }
+      return map[this.currentView] || "DashboardView";
+    },
   },
   provide() {
     return {
@@ -40,13 +50,15 @@ const app = createApp({
     };
   },
   mounted() {
-    const hash = window.location.hash.replace('#', '') || 'dashboard';
+    const hash = window.location.hash.replace("#", "") || "dashboard";
     this.currentView = hash;
-    window.addEventListener('hashchange', () => {
-      this.currentView = window.location.hash.replace('#', '') || 'dashboard';
+    window.addEventListener("hashchange", () => {
+      this.currentView = window.location.hash.replace("#", "") || "dashboard";
     });
     // 加载受检者列表缓存
-    api.listSubjects().then(r => { if (r.data) this.allSubjects = r.data; });
+    api.listSubjects().then((r) => {
+      if (r.data) this.allSubjects = r.data;
+    });
   },
   methods: {
     onSubjectChange(id, name) {
@@ -57,23 +69,24 @@ const app = createApp({
       this.currentView = view;
       window.location.hash = view;
     },
-  }
+  },
 });
 
 // 注册视图组件
-app.component('DashboardView', DashboardView);
-app.component('OCRImportView', OCRImportView);
-app.component('SubjectsView', SubjectsView);
-app.component('TestItemsView', TestItemsView);
-app.component('TrendView', TrendView);
-app.component('SettingsView', SettingsView);
+app.component("DashboardView", DashboardView);
+app.component("OCRImportView", OCRImportView);
+app.component("SubjectsView", SubjectsView);
+app.component("TestItemsView", TestItemsView);
+app.component("TrendView", TrendView);
+app.component("SettingsView", SettingsView);
 
 // 注册可复用组件
-app.component('CrudModal', CrudModal);
-app.component('SearchDropdown', SearchDropdown);
-app.component('SubjectSelector', SubjectSelector);
-app.component('SparklineChart', SparklineChart);
-app.component('SyncScrollPanel', SyncScrollPanel);
-app.component('DrilldownPopup', DrilldownPopup);
+app.component("OcrMappingWizard", OCRMappingWizard);
+app.component("CrudModal", CrudModal);
+app.component("SearchDropdown", SearchDropdown);
+app.component("SubjectSelector", SubjectSelector);
+app.component("SparklineChart", SparklineChart);
+app.component("SyncScrollPanel", SyncScrollPanel);
+app.component("DrilldownPopup", DrilldownPopup);
 
-app.mount('#app');
+app.mount("#app");
