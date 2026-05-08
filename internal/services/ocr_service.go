@@ -14,15 +14,28 @@ import (
 
 // OCRResult represents a single recognized text block from OCR.
 // Fields match the legacy interface for backward compatibility with handlers/ocr.go and rule_service.go.
+//
+// Coordinate semantics (since PDF coordinate support):
+//   - Left, Top are top-left corner of the block (previously stored CenterX/CenterY).
+//   - HasPosition distinguishes new-format data (has_position=true) from legacy data.
+//   - Old data (pre-2026-05) stored CenterX/CenterY in Left/Top; downstream code detects
+//     this via HasPosition=false and applies center→edge compensation.
 type OCRResult struct {
 	Text        string  `json:"text"`
 	Confidence  float64 `json:"confidence"`
-	Left        int     `json:"left"`
-	Top         int     `json:"top"`
+	Left        int     `json:"left"`        // top-left X (new format) or CenterX (legacy)
+	Top         int     `json:"top"`         // top-left Y (new format) or CenterY (legacy)
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
 	Row         int     `json:"row"`
 	PageIndex   int     `json:"page_index"` // 0-based page index in multi-page PDF
+	// --- New fields for PDF coordinate support ---
+	HasPosition bool `json:"has_position"` // true when valid OCR block coordinates are available
+	ColIndex    int  `json:"col_index"`    // table column index (-1 = non-table block)
+	RowStart    int  `json:"row_start"`    // CellDetails.RowStart (-1 = non-table block)
+	RowEnd      int  `json:"row_end"`      // CellDetails.RowEnd
+	ColStart    int  `json:"col_start"`    // CellDetails.ColumnStart
+	ColEnd      int  `json:"col_end"`      // CellDetails.ColumnEnd
 }
 
 // Recognize calls Aliyun OCR RecognizeAllText API via SDK v3.
@@ -44,9 +57,19 @@ func Recognize(fileBytes []byte, cfg *config.Config) ([]OCRResult, error) {
 	}
 
 	// Build request — RecognizeAllText with Type=Advanced (high precision general text recognition)
+	// OutputCoordinate=rectangle enables PDF coordinate return (previously PDF had no BlockRect)
+	// OutputOricoord=true returns coordinates in original image space (critical for PDF page mapping)
+	// OutputTable=true returns structured TableInfo with CellDetails (column/row indices)
+	// OutputRow=true returns RowInfo for row-level grouping validation
 	request := &ocr_api.RecognizeAllTextRequest{
-		Body: strings.NewReader(string(fileBytes)),
-		Type: tea.String("Advanced"),
+		Body:             strings.NewReader(string(fileBytes)),
+		Type:             tea.String("Advanced"),
+		OutputCoordinate: tea.String("rectangle"),
+		OutputOricoord:   tea.Bool(true),
+		AdvancedConfig: &ocr_api.RecognizeAllTextRequestAdvancedConfig{
+			OutputTable: tea.Bool(true),
+			OutputRow:   tea.Bool(true),
+		},
 	}
 
 	response, err := client.RecognizeAllText(request)
@@ -96,7 +119,29 @@ func parseOCRResponse(response *ocr_api.RecognizeAllTextResponse) ([]OCRResult, 
 					r.Confidence = 80 // default
 				}
 
-				if bd.BlockRect != nil {
+				if bd.BlockRect != nil && bd.BlockRect.Width != nil && *bd.BlockRect.Width > 0 {
+					// Valid coordinate block: convert from center-based to top-left semantics.
+					// This fixes PDF coordinate support — previously PDF returned empty BlockRect.
+					w := int(*bd.BlockRect.Width)
+					h := int(*bd.BlockRect.Height)
+					r.Width = w
+					r.Height = h
+					r.HasPosition = true
+
+					cx := int32(0)
+					cy := int32(0)
+					if bd.BlockRect.CenterX != nil {
+						cx = *bd.BlockRect.CenterX
+					}
+					if bd.BlockRect.CenterY != nil {
+						cy = *bd.BlockRect.CenterY
+					}
+					// Convert center to top-left: Left = CenterX - Width/2, Top = CenterY - Height/2
+					r.Left = int(cx) - w/2
+					r.Top = int(cy) - h/2
+				} else if bd.BlockRect != nil {
+					// Legacy fallback: BlockRect present but zero-sized (old data without OutputCoordinate)
+					// Keep old center-based semantics for backward compat (HasPosition=false)
 					if bd.BlockRect.CenterX != nil {
 						r.Left = int(*bd.BlockRect.CenterX)
 					}

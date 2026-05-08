@@ -75,10 +75,9 @@ const OCRMappingWizard = Vue.defineComponent({
         </button>
       </div>
 
-      <!-- 正常模式：左为 Canvas -->
+      <!-- 正常模式：左为 Canvas（图片绘制图像，PDF 由 pdf.js 渲染到 canvas） -->
       <div v-else class="flex-1 relative bg-slate-800" ref="canvasWrapRef"
            style="overflow:hidden;">
-        <!-- position:absolute;inset:0 是最可靠的占满容器方式 -->
         <canvas ref="canvasRef"
                 style="position:absolute;inset:0;cursor:crosshair;touch-action:none;"
                 @mousedown="onMouseDown"
@@ -86,16 +85,10 @@ const OCRMappingWizard = Vue.defineComponent({
                 @mouseup="onMouseUp"
                 @mouseleave="onMouseUp"></canvas>
         <!-- 加载中覆盖层 -->
-        <div v-if="blocksLoading"
-             style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"
-             class="text-white/70 text-sm bg-slate-800">
-          正在加载图像和OCR数据…
-        </div>
-        <!-- PDF 块分布标注 -->
-        <div v-if="isPdf && !blocksLoading && !imageError"
-             style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:2;"
-             class="bg-blue-900/80 text-blue-200 text-xs px-3 py-1 rounded-full pointer-events-none whitespace-nowrap">
-          PDF模式：显示 OCR 块分布，可拖拽框选表格区域
+        <div v-if="blocksLoading || pdfLoading"
+             style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5;"
+             class="text-white/70 text-sm bg-slate-800/90">
+          {{ pdfLoading ? '正在渲染 PDF…' : '正在加载图像和OCR数据…' }}
         </div>
       </div>
 
@@ -376,10 +369,22 @@ const OCRMappingWizard = Vue.defineComponent({
     const selectionRect = Vue.ref(null);
     const blocksLoading = Vue.ref(false);
     const imageError = Vue.ref(false);
+    const pdfLoading = Vue.ref(false); // pdf.js 加载/渲染中
+
+    // pdf.js 状态（PDF 模式专用）
+    let pdfDoc = null;        // pdf.js document
+    let pdfPage = null;       // current page object
+    let pdfBgCanvas = null;   // offscreen canvas with rendered PDF page
+    let pdfRenderTask = null; // current render task (for cancellation)
 
     let imgNaturalW = 0,
       imgNaturalH = 0;
     let canvasScale = 1;
+    // Canvas 渲染偏移量（图像/PDF 块在 canvas 上的左上角像素偏移）。
+    // 由 redrawCanvas() 设置，canvasToImg() 用其做逆变换。
+    // 必须为模块变量而非局部变量，因为 canvasToImg 需要读取最新值。
+    let canvasOffX = 0;
+    let canvasOffY = 0;
     let isDragging = false;
     let dragStart = { x: 0, y: 0 };
     let loadedImage = null; // 指向 sourceImgRef.value 的引用
@@ -529,9 +534,8 @@ const OCRMappingWizard = Vue.defineComponent({
       apiBlocksReady = true;
 
       // 检测是否有有效坐标信息
-      const hasPos = ocrBlocks.value.some(
-        (b) => b.left !== 0 || b.top !== 0 || b.width !== 0 || b.height !== 0,
-      );
+      // 使用后端返回的 has_position 字段，替代遍历检查零坐标的 heuristic
+      const hasPos = ocrBlocks.value.some((b) => b.has_position);
       if (!hasPos) {
         // 无坐标（PDF 文本降级路径）：显示跳过提示界面
         noPositionMode.value = true;
@@ -539,11 +543,21 @@ const OCRMappingWizard = Vue.defineComponent({
         return;
       }
 
-      // 有坐标：正常绘制流程
+      // PDF 模式：用 pdf.js 加载 PDF 页面，渲染到离屏 canvas 作为背景
+      if (isPdf.value) {
+        pdfLoading.value = true;
+        loadPdfBackground().finally(() => {
+          pdfLoading.value = false;
+          imgLoaded = true;
+          drawCanvasWhenReady();
+        });
+        return;
+      }
+
+      // 图片模式：等待图片加载
       if (imgLoaded) {
         drawCanvasWhenReady();
       }
-      // 否则等 onSourceImageLoad() 触发
     }
 
     // 无坐标模式下跳过 Step1，直接进入 Step2 进行文本内容表头配置
@@ -582,6 +596,64 @@ const OCRMappingWizard = Vue.defineComponent({
       step.value = 2;
     }
 
+    // ── PDF 背景渲染（pdf.js）────────────────────────────────
+    // computeOcrBbox returns the axis-aligned bounding box of all OCR blocks
+    // in OCR coordinate space, handling both legacy and new coordinate formats.
+    function computeOcrBbox() {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const b of ocrBlocks.value) {
+        const x1 = b.has_position ? b.left : b.left - b.width / 2;
+        const y1 = b.has_position ? b.top : b.top - b.height / 2;
+        const x2 = b.has_position ? b.left + b.width : b.left + b.width / 2;
+        const y2 = b.has_position ? b.top + b.height : b.top + b.height / 2;
+        if (x1 < minX) minX = x1;
+        if (y1 < minY) minY = y1;
+        if (x2 > maxX) maxX = x2;
+        if (y2 > maxY) maxY = y2;
+      }
+      return { minX, minY, maxX, maxY,
+        w: (maxX - minX) || 1, h: (maxY - minY) || 1 };
+    }
+
+    // Load PDF via pdf.js and render the first page to an offscreen canvas.
+    // The offscreen canvas is rendered at a scale such that its width matches
+    // the OCR coordinate width, so OCR coordinates map 1:1 to the PDF image.
+    async function loadPdfBackground() {
+      try {
+        pdfDoc = await pdfjsLib.getDocument(props.reportImageUrl).promise;
+        pdfPage = await pdfDoc.getPage(1);
+        await renderPdfToBackground();
+      } catch (e) {
+        console.error("[wizard] pdf.js load error", e);
+        // Fall back to block-only (dark background) on error
+        pdfPage = null;
+        pdfBgCanvas = null;
+      }
+    }
+
+    async function renderPdfToBackground() {
+      if (!pdfPage || ocrBlocks.value.length === 0) return;
+      // Cancel any previous render
+      if (pdfRenderTask) { pdfRenderTask.cancel(); pdfRenderTask = null; }
+
+      const bbox = computeOcrBbox();
+      const viewport = pdfPage.getViewport({ scale: 1 });
+      // Render PDF at a scale matching OCR coordinate width
+      const renderScale = bbox.w / viewport.width;
+      const scaledViewport = pdfPage.getViewport({ scale: renderScale });
+
+      pdfBgCanvas = document.createElement("canvas");
+      pdfBgCanvas.width = scaledViewport.width;
+      pdfBgCanvas.height = scaledViewport.height;
+
+      pdfRenderTask = pdfPage.render({
+        canvasContext: pdfBgCanvas.getContext("2d"),
+        viewport: scaledViewport,
+      });
+      await pdfRenderTask.promise;
+      pdfRenderTask = null;
+    }
+
     function redrawCanvas() {
       const canvas = canvasRef.value;
       if (!canvas) return;
@@ -591,48 +663,57 @@ const OCRMappingWizard = Vue.defineComponent({
 
       ctx.clearRect(0, 0, cw, ch);
 
-      let offX = 0,
-        offY = 0;
+      // Reset to zero then set via the branch below
+      canvasOffX = 0;
+      canvasOffY = 0;
 
       if (loadedImage) {
         // 图片模式：绘制图片背景
         const drawW = imgNaturalW * canvasScale;
         const drawH = imgNaturalH * canvasScale;
-        offX = (cw - drawW) / 2;
-        offY = (ch - drawH) / 2;
-        ctx.drawImage(loadedImage, offX, offY, drawW, drawH);
-      } else {
-        // PDF 模式：纯深色背景，如果有块则以块的包围盒居中
+        canvasOffX = (cw - drawW) / 2;
+        canvasOffY = (ch - drawH) / 2;
+        ctx.drawImage(loadedImage, canvasOffX, canvasOffY, drawW, drawH);
+      } else if (pdfBgCanvas && isPdf) {
+        // PDF 模式：绘制 pdf.js 渲染的离屏 canvas 作为背景。
+        // OCR 坐标与 PDF 背景对齐——pdfBgCanvas 按 OCR 坐标空间的宽度渲染。
+        const bbox = computeOcrBbox();
+        canvasScale = Math.min((cw * 0.92) / bbox.w, (ch * 0.92) / bbox.h);
+        canvasOffX = (cw - bbox.w * canvasScale) / 2 - bbox.minX * canvasScale;
+        canvasOffY = (ch - bbox.h * canvasScale) / 2 - bbox.minY * canvasScale;
+
+        // Draw PDF background: map PDF image (indexed by OCR coords) to display
+        const pdfDrawX = canvasOffX + bbox.minX * canvasScale;
+        const pdfDrawY = canvasOffY + bbox.minY * canvasScale;
+        const pdfDrawW = bbox.w * canvasScale;
+        const pdfDrawH = bbox.h * canvasScale;
+        ctx.drawImage(pdfBgCanvas, 0, 0, pdfBgCanvas.width, pdfBgCanvas.height,
+          pdfDrawX, pdfDrawY, pdfDrawW, pdfDrawH);
+      } else if (ocrBlocks.value.length > 0) {
+        // 无背景回退模式：纯深色背景 + OCR 块（如 pdf.js 加载失败、或旧无坐标数据）
+        const bbox = computeOcrBbox();
+        canvasScale = Math.min((cw * 0.92) / bbox.w, (ch * 0.92) / bbox.h);
+        canvasOffX = (cw - bbox.w * canvasScale) / 2 - bbox.minX * canvasScale;
+        canvasOffY = (ch - bbox.h * canvasScale) / 2 - bbox.minY * canvasScale;
         ctx.fillStyle = "#0f172a";
         ctx.fillRect(0, 0, cw, ch);
-        if (ocrBlocks.value.length > 0) {
-          // 计算块的全局包围盒、等比居中显示
-          let minX = Infinity,
-            minY = Infinity,
-            maxX = -Infinity,
-            maxY = -Infinity;
-          for (const b of ocrBlocks.value) {
-            minX = Math.min(minX, b.left - b.width / 2);
-            minY = Math.min(minY, b.top - b.height / 2);
-            maxX = Math.max(maxX, b.left + b.width / 2);
-            maxY = Math.max(maxY, b.top + b.height / 2);
-          }
-          const bboxW = maxX - minX || 1;
-          const bboxH = maxY - minY || 1;
-          canvasScale = Math.min((cw * 0.92) / bboxW, (ch * 0.92) / bboxH);
-          offX = (cw - bboxW * canvasScale) / 2 - minX * canvasScale;
-          offY = (ch - bboxH * canvasScale) / 2 - minY * canvasScale;
-        }
       }
 
       // 绘制 OCR 块（图片模式半透明，PDF 模式实心更明显）
+      // Supports both coordinate formats:
+      // - New format (has_position=true): Left/Top = top-left corner
+      // - Legacy format (has_position=false): Left/Top = center, apply center→edge compensation
       ctx.globalAlpha = loadedImage ? 0.2 : 0.55;
       ctx.fillStyle = "#60a5fa";
       ctx.strokeStyle = "#3b82f6";
       ctx.lineWidth = 1;
       for (const b of ocrBlocks.value) {
-        const bx = offX + (b.left - b.width / 2) * canvasScale;
-        const by = offY + (b.top - b.height / 2) * canvasScale;
+        const bx = b.has_position
+          ? canvasOffX + b.left * canvasScale
+          : canvasOffX + (b.left - b.width / 2) * canvasScale;
+        const by = b.has_position
+          ? canvasOffY + b.top * canvasScale
+          : canvasOffY + (b.top - b.height / 2) * canvasScale;
         const bw = b.width * canvasScale;
         const bh = b.height * canvasScale;
         ctx.fillRect(bx, by, bw, bh);
@@ -646,8 +727,8 @@ const OCRMappingWizard = Vue.defineComponent({
         ctx.strokeStyle = "#2563eb";
         ctx.lineWidth = 2;
         ctx.strokeRect(
-          offX + ar.x * canvasScale,
-          offY + ar.y * canvasScale,
+          canvasOffX + ar.x * canvasScale,
+          canvasOffY + ar.y * canvasScale,
           ar.w * canvasScale,
           ar.h * canvasScale,
         );
@@ -660,8 +741,8 @@ const OCRMappingWizard = Vue.defineComponent({
         ctx.strokeStyle = "#ef4444";
         ctx.lineWidth = 2.5;
         ctx.strokeRect(
-          offX + sr.x * canvasScale,
-          offY + sr.y * canvasScale,
+          canvasOffX + sr.x * canvasScale,
+          canvasOffY + sr.y * canvasScale,
           sr.w * canvasScale,
           sr.h * canvasScale,
         );
@@ -669,8 +750,8 @@ const OCRMappingWizard = Vue.defineComponent({
         ctx.globalAlpha = 0.08;
         ctx.fillStyle = "#ef4444";
         ctx.fillRect(
-          offX + sr.x * canvasScale,
-          offY + sr.y * canvasScale,
+          canvasOffX + sr.x * canvasScale,
+          canvasOffY + sr.y * canvasScale,
           sr.w * canvasScale,
           sr.h * canvasScale,
         );
@@ -678,20 +759,13 @@ const OCRMappingWizard = Vue.defineComponent({
       }
     }
 
-    // Canvas 坐标 → 图像坐标
+    // Canvas 坐标 → 图像/OCR 坐标
+    // 使用 redrawCanvas() 设定的模块变量而非重新计算 offset，
+    // 确保 PDF 模式（无图像、块包围盒居中）也能正确逆变换。
     function canvasToImg(cx, cy) {
-      const canvas = canvasRef.value;
-      if (!canvas) return { x: 0, y: 0 };
-      // canvas.width 是像素缓冲区尺寸，与 CSS clientWidth 匹配
-      const cw = canvas.width || canvas.clientWidth || 800;
-      const ch = canvas.height || canvas.clientHeight || 600;
-      const drawW = imgNaturalW * canvasScale;
-      const drawH = imgNaturalH * canvasScale;
-      const offX = (cw - drawW) / 2;
-      const offY = (ch - drawH) / 2;
       return {
-        x: Math.round((cx - offX) / canvasScale),
-        y: Math.round((cy - offY) / canvasScale),
+        x: Math.round((cx - canvasOffX) / canvasScale),
+        y: Math.round((cy - canvasOffY) / canvasScale),
       };
     }
 
@@ -748,13 +822,17 @@ const OCRMappingWizard = Vue.defineComponent({
 
     // 从OCR块中提取表头候选列
     function extractHeaderCandidates(blocks, region) {
+      const newFormat = blocks.length > 0 && blocks[0].has_position;
       const filtered = blocks.filter((b) => {
         if (region.page >= 0 && b.page_index !== region.page) return false;
+        // Use center coordinates for region hit test (consistent with Go filterByRegion)
+        const cx = newFormat ? b.left + b.width / 2 : b.left;
+        const cy = newFormat ? b.top + b.height / 2 : b.top;
         return (
-          b.left >= region.x &&
-          b.left <= region.x + region.w &&
-          b.top >= region.y &&
-          b.top <= region.y + region.h
+          cx >= region.x &&
+          cx <= region.x + region.w &&
+          cy >= region.y &&
+          cy <= region.y + region.h
         );
       });
       if (filtered.length === 0) return [];
@@ -777,14 +855,17 @@ const OCRMappingWizard = Vue.defineComponent({
         x_max: 0,
       }));
       for (let i = 0; i < result.length; i++) {
+        // Get left/right edges based on coordinate format
+        const newFmt = headerBlocks[i].has_position;
         if (i === 0) {
           result[i].x_min = region.x;
         } else {
-          const prevRight =
-            headerBlocks[i - 1].left +
-            Math.round(headerBlocks[i - 1].width / 2);
-          const curLeft =
-            headerBlocks[i].left - Math.round(headerBlocks[i].width / 2);
+          const prevRight = newFmt
+            ? headerBlocks[i - 1].left + headerBlocks[i - 1].width
+            : headerBlocks[i - 1].left + Math.round(headerBlocks[i - 1].width / 2);
+          const curLeft = newFmt
+            ? headerBlocks[i].left
+            : headerBlocks[i].left - Math.round(headerBlocks[i].width / 2);
           result[i].x_min = Math.round((prevRight + curLeft) / 2);
           result[i - 1].x_max = result[i].x_min;
         }
@@ -1114,6 +1195,19 @@ const OCRMappingWizard = Vue.defineComponent({
       },
     );
 
+    // 当从 Step 2 返回 Step 1 时，v-if 销毁并重建 canvas DOM。
+    // 必须重新设置 canvas 缓冲区尺寸并重绘，否则 canvas 不响应鼠标事件。
+    Vue.watch(step, (newVal, oldVal) => {
+      if (newVal === 1 && oldVal !== 1 && !noPositionMode.value) {
+        // DOM 重建需要 nextTick + requestAnimationFrame 确保 canvas 已挂载
+        Vue.nextTick(() => {
+          requestAnimationFrame(() => {
+            drawCanvasWhenReady();
+          });
+        });
+      }
+    });
+
     Vue.onMounted(() => {
       document.addEventListener("keydown", onKeyDown);
     });
@@ -1136,6 +1230,7 @@ const OCRMappingWizard = Vue.defineComponent({
       selectionRect,
       blocksLoading,
       imageError,
+      pdfLoading,
       headerCandidates,
       columnMappings,
       externalDate,

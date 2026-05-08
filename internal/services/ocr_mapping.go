@@ -36,19 +36,53 @@ type ColumnDef struct {
 
 // AutoDetectTableRegion infers the likely table bounding box from OCR block positions.
 // Returns the convex hull of all blocks with a small margin.
+//
+// Handles both coordinate formats:
+//   - New format (HasPosition=true): Left/Top = top-left corner, use directly
+//   - Legacy format (HasPosition=false): Left/Top = center, apply center→edge compensation
 func AutoDetectTableRegion(blocks []OCRResult) TableRegion {
 	if len(blocks) == 0 {
 		return TableRegion{Page: -1}
 	}
-	minX := blocks[0].Left - blocks[0].Width/2
-	minY := blocks[0].Top - blocks[0].Height/2
-	maxX := blocks[0].Left + blocks[0].Width/2
-	maxY := blocks[0].Top + blocks[0].Height/2
+
+	// Detect coordinate format from first block
+	newFormat := blocks[0].HasPosition
+
+	// Helper: compute block edges based on coordinate format
+	getX1 := func(b OCRResult) int {
+		if newFormat {
+			return b.Left
+		}
+		return b.Left - b.Width/2
+	}
+	getY1 := func(b OCRResult) int {
+		if newFormat {
+			return b.Top
+		}
+		return b.Top - b.Height/2
+	}
+	getX2 := func(b OCRResult) int {
+		if newFormat {
+			return b.Left + b.Width
+		}
+		return b.Left + b.Width/2
+	}
+	getY2 := func(b OCRResult) int {
+		if newFormat {
+			return b.Top + b.Height
+		}
+		return b.Top + b.Height/2
+	}
+
+	minX := getX1(blocks[0])
+	minY := getY1(blocks[0])
+	maxX := getX2(blocks[0])
+	maxY := getY2(blocks[0])
 	for _, b := range blocks[1:] {
-		lx := b.Left - b.Width/2
-		ly := b.Top - b.Height/2
-		rx := b.Left + b.Width/2
-		ry := b.Top + b.Height/2
+		lx := getX1(b)
+		ly := getY1(b)
+		rx := getX2(b)
+		ry := getY2(b)
 		if lx < minX {
 			minX = lx
 		}
@@ -158,7 +192,9 @@ func ParseLabResultsWithMapping(blocks []OCRResult, cfg ColumnMappingConfig) []P
 
 		name := colTexts["name"]
 		value := colTexts["value"]
-		if name == "" || value == "" {
+		// Require at least a name; value may be empty (OCR may miss value blocks
+		// for some items — user can fill in the value during Step 3 cell editing).
+		if name == "" {
 			continue
 		}
 
@@ -176,14 +212,24 @@ func ParseLabResultsWithMapping(blocks []OCRResult, cfg ColumnMappingConfig) []P
 	return items
 }
 
-// filterByRegion returns blocks whose center (Left, Top) lies within the region rectangle.
+// filterByRegion returns blocks whose center lies within the region rectangle.
+//
+// Handles both coordinate formats:
+//   - New format (HasPosition=true): Left/Top = top-left, center = Left + Width/2, Top + Height/2
+//   - Legacy format (HasPosition=false): Left/Top = center, used directly
 func filterByRegion(blocks []OCRResult, r TableRegion) []OCRResult {
+	newFormat := len(blocks) > 0 && blocks[0].HasPosition
 	var out []OCRResult
 	for _, b := range blocks {
 		if r.Page >= 0 && b.PageIndex != r.Page {
 			continue
 		}
-		if b.Left >= r.X && b.Left <= r.X+r.W && b.Top >= r.Y && b.Top <= r.Y+r.H {
+		cx, cy := b.Left, b.Top
+		if newFormat {
+			cx = b.Left + b.Width/2
+			cy = b.Top + b.Height/2
+		}
+		if cx >= r.X && cx <= r.X+r.W && cy >= r.Y && cy <= r.Y+r.H {
 			out = append(out, b)
 		}
 	}
