@@ -11,6 +11,7 @@ import (
 	"labtrace/internal/database"
 	"labtrace/internal/handlers"
 	"labtrace/internal/middleware"
+	"labtrace/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,6 +28,11 @@ func main() {
 		log.Fatalf("Database error: %v", err)
 	}
 	defer database.Close()
+
+	// Backfill test_item_id on existing report_items
+	if n := services.BackfillTestItemIDs(); n > 0 {
+		fmt.Printf("Backfilled test_item_id for %d report items\n", n)
+	}
 
 	fmt.Printf("LabTrace starting on :%s (db: %s)\n", cfg.Port, cfg.DBPath)
 

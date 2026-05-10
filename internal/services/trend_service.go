@@ -11,6 +11,8 @@ import (
 // TrendDataPoint represents a single data point in a trend chart.
 type TrendDataPoint struct {
 	ReportItemID   int64    `json:"report_item_id"`
+	TestItemID     int64    `json:"test_item_id"`
+	TestItemName   string   `json:"test_item_name"`
 	SampleDate     string   `json:"sample_date"`
 	HospitalName   string   `json:"hospital_name"`
 	OriginalValue  string   `json:"original_value"`
@@ -24,9 +26,11 @@ type TrendDataPoint struct {
 }
 
 // GetTrendData retrieves trend data for a subject and test item across all reports.
+// If testItemID is 0, returns all test items for the subject.
 func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]TrendDataPoint, error) {
 	query := `
-		SELECT ri.id, lr.sample_date, COALESCE(h.name, ''),
+		SELECT ri.id, COALESCE(ri.test_item_id, 0), COALESCE(ri.test_item_name, ti.standard_name, ''),
+			lr.sample_date, COALESCE(h.name, ''),
 			ri.original_value, ri.normalized_value, COALESCE(ri.normalized_unit, ri.original_unit),
 			ri.confidence, ri.flag,
 			ri.ref_interval_id,
@@ -35,9 +39,15 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 		JOIN lab_reports lr ON lr.id = ri.report_id
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
 		JOIN subjects s ON s.id = lr.subject_id
-		WHERE lr.subject_id = ? AND ri.test_item_id = ? AND lr.ocr_status = 'imported'
+		LEFT JOIN test_items ti ON ti.id = ri.test_item_id
+		WHERE lr.subject_id = ? AND lr.ocr_status = 'imported'
 	`
-	args := []interface{}{subjectID, testItemID}
+	args := []interface{}{subjectID}
+
+	if testItemID > 0 {
+		query += ` AND ri.test_item_id = ?`
+		args = append(args, testItemID)
+	}
 
 	if dateFrom != "" {
 		query += ` AND lr.sample_date >= ?`
@@ -48,7 +58,7 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 		args = append(args, dateTo)
 	}
 
-	query += ` ORDER BY lr.sample_date ASC`
+	query += ` ORDER BY lr.sample_date ASC, ri.test_item_id ASC`
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
@@ -63,7 +73,8 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 		var refID sql.NullInt64
 		var birthDate string
 
-		if err := rows.Scan(&p.ReportItemID, &p.SampleDate, &p.HospitalName,
+		if err := rows.Scan(&p.ReportItemID, &p.TestItemID, &p.TestItemName,
+			&p.SampleDate, &p.HospitalName,
 			&p.OriginalValue, &normValue, &p.Unit,
 			&p.Confidence, &p.Flag, &refID, &birthDate); err != nil {
 			continue

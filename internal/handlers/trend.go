@@ -17,8 +17,8 @@ func GetTrendData(c *gin.Context) {
 	dateFrom := c.Query("date_from")
 	dateTo := c.Query("date_to")
 
-	if subjectID == 0 || testItemID == 0 {
-		c.JSON(http.StatusBadRequest, models.Error("subject_id and test_item_id are required"))
+	if subjectID == 0 {
+		c.JSON(http.StatusBadRequest, models.Error("subject_id is required"))
 		return
 	}
 

@@ -217,7 +217,7 @@ func ImportReport(c *gin.Context) {
 
 	// Get all report items for processing
 	rows, err := database.DB.Query(
-		`SELECT ri.id, ri.test_item_id, ri.original_value, ri.original_unit
+		`SELECT ri.id, ri.test_item_id, ri.test_item_name, ri.original_value, ri.original_unit
 		FROM report_items ri WHERE ri.report_id = ?`, id,
 	)
 	if err != nil {
@@ -226,20 +226,32 @@ func ImportReport(c *gin.Context) {
 	}
 
 	type itemInfo struct {
-		ID         int64
-		TestItemID *int64
-		OrigValue  string
-		OrigUnit   string
+		ID           int64
+		TestItemID   *int64
+		TestItemName string
+		OrigValue    string
+		OrigUnit     string
 	}
 	var items []itemInfo
 	for rows.Next() {
 		var it itemInfo
-		if err := rows.Scan(&it.ID, &it.TestItemID, &it.OrigValue, &it.OrigUnit); err != nil {
+		if err := rows.Scan(&it.ID, &it.TestItemID, &it.TestItemName, &it.OrigValue, &it.OrigUnit); err != nil {
 			continue
 		}
 		items = append(items, it)
 	}
 	rows.Close() // 释放连接，避免后续 DB 调用死锁（SetMaxOpenConns=1）
+
+	// Auto-match test_item_name → test_item_id for items without one
+	for i := range items {
+		if items[i].TestItemID == nil && items[i].TestItemName != "" {
+			matchID := services.MatchTestItemByName(items[i].TestItemName)
+			if matchID > 0 {
+				items[i].TestItemID = &matchID
+				database.DB.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, matchID, items[i].ID)
+			}
+		}
+	}
 
 	// Process each item: match reference interval, calculate flag
 	for _, it := range items {

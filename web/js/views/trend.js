@@ -22,9 +22,13 @@ const TrendView = Vue.defineComponent({
     </div>
     <div v-if="trendData.length" class="bg-white rounded-lg shadow-sm p-4">
       <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">采样日期</th><th class="p-2">医院</th><th class="p-2">数值</th><th class="p-2">单位</th><th class="p-2">置信度</th><th class="p-2">提示符</th><th class="p-2">参考区间</th><th class="p-2">趋势</th></tr></thead>
+        <thead><tr class="bg-slate-50">
+          <th class="p-2" v-if="!filter.test_item_id">检验项目</th>
+          <th class="p-2">采样日期</th><th class="p-2">医院</th><th class="p-2">数值</th><th class="p-2">单位</th><th class="p-2">置信度</th><th class="p-2">提示符</th><th class="p-2">参考区间</th><th class="p-2">趋势</th>
+        </tr></thead>
         <tbody>
           <tr v-for="d in trendData" :key="d.report_item_id" class="border-t hover:bg-slate-50">
+            <td class="p-2" v-if="!filter.test_item_id">{{d.test_item_name}}</td>
             <td class="p-2">{{d.sample_date}}</td><td class="p-2">{{d.hospital_name}}</td>
             <td class="p-2 font-medium">{{d.converted_value}}</td><td class="p-2">{{d.unit}}</td>
             <td class="p-2">{{d.confidence}}%</td><td class="p-2" v-html="flagBadge(d.flag)"></td>
@@ -75,17 +79,25 @@ const TrendView = Vue.defineComponent({
     }
 
     function loadTrend() {
-      if (!filter.value.subject_id || !filter.value.test_item_id) return;
-      api.getTrendData({ subject_id: filter.value.subject_id, test_item_id: filter.value.test_item_id }).then(r => {
-        if (r.data) { trendData.value = r.data; renderChart(); loadSparklineData(); }
+      if (!filter.value.subject_id) { alert('请选择受检者'); return; }
+      const params = { subject_id: filter.value.subject_id };
+      if (filter.value.test_item_id) params.test_item_id = filter.value.test_item_id;
+      api.getTrendData(params).then(r => {
+        if (r.code !== 0) { alert(r.message || '查询失败'); return; }
+        if (!r.data || r.data.length === 0) { trendData.value = []; alert('未找到趋势数据，请确认该受检者有已导入的检验报告'); return; }
+        trendData.value = r.data; renderChart(); loadSparklineData();
       });
     }
 
     function loadSparklineData() {
-      // 为迷你趋势图准备数据（使用当前趋势数据）
-      const itemId = filter.value.test_item_id;
-      const data = trendData.value.map(d => d.converted_value);
-      sparklineData.value = { [itemId]: data };
+      // Group sparkline data by test_item_id
+      const groups = {};
+      trendData.value.forEach(d => {
+        const key = d.test_item_id || 0;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(d.converted_value);
+      });
+      sparklineData.value = groups;
     }
 
     function buildRefBands(data) {
@@ -118,58 +130,85 @@ const TrendView = Vue.defineComponent({
       if (!el || typeof echarts === 'undefined') return;
       if (chartInstance) { chartInstance.dispose(); chartInstance = null; }
       chartInstance = echarts.init(el);
-      const dates = trendData.value.map(d => d.sample_date);
-      const values = trendData.value.map(d => d.converted_value);
-      const refBands = buildRefBands(trendData.value);
 
-      const series = [
-        { name: '数值', type: 'line', data: values, symbolSize: 8 }
-      ];
+      const allDates = [...new Set(trendData.value.map(d => d.sample_date))].sort();
+      const isAllItems = !filter.value.test_item_id;
 
-      // 动态参考带
-      if (refBands.length) {
-        series.push({
-          name: '参考区间',
-          type: 'line',
-          data: [],
-          markArea: {
-            silent: true,
-            data: refBands,
-            itemStyle: { borderWidth: 1, borderColor: 'rgba(76,175,80,0.3)', borderType: 'dashed' }
-          }
+      let series = [];
+      let legendData = [];
+
+      if (isAllItems) {
+        // Group by test_item_name for multi-series
+        const groups = {};
+        trendData.value.forEach(d => {
+          const key = d.test_item_name || ('项目' + d.test_item_id);
+          if (!groups[key]) groups[key] = {};
+          groups[key][d.sample_date] = d.converted_value;
         });
+        const colors = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#5ab1ef'];
+        let ci = 0;
+        Object.keys(groups).forEach(name => {
+          const data = allDates.map(dt => groups[name][dt] ?? null);
+          series.push({ name, type: 'line', data, symbolSize: 6, connectNulls: true, color: colors[ci % colors.length] });
+          legendData.push(name);
+          ci++;
+        });
+      } else {
+        const values = allDates.map(dt => {
+          const pt = trendData.value.find(d => d.sample_date === dt);
+          return pt ? pt.converted_value : null;
+        });
+        series.push({ name: '数值', type: 'line', data: values, symbolSize: 8, connectNulls: true });
+        legendData.push('数值');
+
+        // Reference bands
+        const refBands = buildRefBands(trendData.value);
+        if (refBands.length) {
+          series.push({
+            name: '参考区间', type: 'line', data: [],
+            markArea: { silent: true, data: refBands, itemStyle: { borderWidth: 1, borderColor: 'rgba(76,175,80,0.3)', borderType: 'dashed' } }
+          });
+          legendData.push('参考区间');
+        }
       }
 
       chartInstance.setOption({
         tooltip: { trigger: 'axis' },
-        legend: { data: refBands.length ? ['数值', '参考区间'] : ['数值'] },
-        xAxis: { type: 'category', data: dates },
+        legend: { data: legendData },
+        xAxis: { type: 'category', data: allDates },
         yAxis: { type: 'value' },
         series
       });
 
       // 下钻点击
       chartInstance.on('click', (params) => {
-        if (params.seriesIndex === 0 && params.dataIndex >= 0 && params.dataIndex < trendData.value.length) {
-          const d = trendData.value[params.dataIndex];
-          drilldownDataPoint.value = d;
-          showDrilldown.value = true;
+        if (params.seriesIndex === 0 && params.dataIndex >= 0) {
+          const dt = allDates[params.dataIndex];
+          const d = trendData.value.find(p => p.sample_date === dt && (isAllItems || true));
+          if (d) { drilldownDataPoint.value = d; showDrilldown.value = true; }
         }
       });
     }
 
     function exportTrendCsv() {
-      const headerLabels = ['采样日期', '医院', '原始值', '转换值', '单位', '置信度', '提示符', '参考区间'];
-      const rows = trendData.value.map(d => ({
-        sample_date: d.sample_date,
-        hospital_name: d.hospital_name,
-        original_value: d.original_value || '',
-        converted_value: d.converted_value,
-        unit: d.unit,
-        confidence: d.confidence + '%',
-        flag: d.flag || '',
-        ref_range: d.ref_min != null && d.ref_max != null ? d.ref_min + '-' + d.ref_max : ''
-      }));
+      const isAllItems = !filter.value.test_item_id;
+      const headerLabels = isAllItems
+        ? ['检验项目', '采样日期', '医院', '原始值', '转换值', '单位', '置信度', '提示符', '参考区间']
+        : ['采样日期', '医院', '原始值', '转换值', '单位', '置信度', '提示符', '参考区间'];
+      const rows = trendData.value.map(d => {
+        const row = {
+          sample_date: d.sample_date,
+          hospital_name: d.hospital_name,
+          original_value: d.original_value || '',
+          converted_value: d.converted_value,
+          unit: d.unit,
+          confidence: d.confidence + '%',
+          flag: d.flag || '',
+          ref_range: d.ref_min != null && d.ref_max != null ? d.ref_min + '-' + d.ref_max : ''
+        };
+        if (isAllItems) row['检验项目'] = d.test_item_name;
+        return row;
+      });
       exportCsv('趋势数据', headerLabels, rows);
     }
 
