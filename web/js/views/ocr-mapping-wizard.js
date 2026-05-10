@@ -106,10 +106,15 @@ const OCRMappingWizard = Vue.defineComponent({
             <div><span class="inline-block w-3 h-3 border-2 border-dashed border-blue-500 mr-1"></span>蓝色虚线：自动识别区域</div>
             <div><span class="inline-block w-3 h-3 border-2 border-red-500 mr-1"></span>红色实线：您拖拽的区域</div>
             <div><span class="inline-block w-3 h-3 bg-blue-300/40 mr-1"></span>浅色矩形：OCR识别块</div>
+            <div><span class="inline-block w-3 h-3 bg-orange-400/40 mr-1"></span>橙色矩形：框选区域外的OCR块（可拖拽扩大范围包含）</div>
           </div>
           <div v-if="selectionRect"
-               class="bg-green-50 border border-green-200 rounded-lg p-2 text-xs text-green-700">
-            ✓ 已选区域 {{selectionRect.w}} × {{selectionRect.h}} px
+               class="bg-green-50 border border-green-200 rounded-lg p-2 text-xs text-green-700 space-y-1">
+            <div>✓ 已选区域 {{selectionRect.w}} × {{selectionRect.h}} px</div>
+            <div>区域内 OCR 块：{{insideBlockCount}} / {{ocrBlocks.length}}</div>
+            <div v-if="outsideBlockCount > 0" class="text-amber-600 font-medium">
+              ⚠ 区域外还有 {{outsideBlockCount}} 个 OCR 块未包含
+            </div>
           </div>
           <div v-else class="text-xs text-slate-400 italic">请在图片上拖拽选择区域</div>
         </div>
@@ -138,8 +143,12 @@ const OCRMappingWizard = Vue.defineComponent({
         <div class="px-5 py-4 border-b shrink-0">
           <h3 class="font-semibold">表头列角色映射</h3>
           <p class="text-xs text-slate-500 mt-1">
-            为每一列指定其语义字段。<span class="text-red-500 font-medium">★ 必填</span>字段必须指定且唯一。
+            为每一列指定其语义字段。<span class="text-red-500 font-medium">★ 必填</span>字段每栏至少指定一个。
           </p>
+          <div v-if="headerGroups.size > 1"
+               class="mt-2 px-2 py-1 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+            检测到 {{ headerGroups.size }} 栏表头（如左右两栏的化验单），请分别为每栏配置列映射。
+          </div>
         </div>
 
         <div class="flex-1 overflow-y-auto p-4">
@@ -149,32 +158,70 @@ const OCRMappingWizard = Vue.defineComponent({
             未在选中区域检测到表头行，<br>请返回重新框选包含标题行的区域。
           </div>
 
-          <!-- 卡片网格 -->
-          <div class="grid grid-cols-2 gap-3">
-            <div v-for="(col, idx) in columnMappings" :key="idx"
-                 :class="['border-2 rounded-xl p-3 transition-all',
-                   col.mapped_field==='name'   ? 'border-blue-400 bg-blue-50' :
-                   col.mapped_field==='value'  ? 'border-green-400 bg-green-50' :
-                   col.mapped_field==='unit'   ? 'border-purple-300 bg-purple-50' :
-                   col.mapped_field==='range'  ? 'border-orange-300 bg-orange-50' :
-                   col.mapped_field==='notes'  ? 'border-teal-300 bg-teal-50' :
-                   'border-slate-200 bg-slate-50 opacity-60']">
-              <div class="text-sm font-semibold truncate mb-2 text-slate-700"
-                   :title="col.header_text">
-                {{ col.header_text || '(空列)' }}
+          <!-- 多栏分组显示 -->
+          <template v-if="headerGroups.size > 1">
+            <div v-for="[gId, gCols] of headerGroups" :key="gId" class="mb-4">
+              <div class="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1">
+                <span class="inline-block w-2 h-2 rounded-full"
+                      :class="gId === 0 ? 'bg-blue-500' : 'bg-emerald-500'"></span>
+                第 {{ gId + 1 }} 栏
               </div>
-              <select v-model="col.mapped_field"
-                      class="w-full border rounded-lg px-2 py-1.5 text-xs bg-white"
-                      @change="onMappingChange">
-                <option value="name">✦ 检测项目 ★</option>
-                <option value="value">✦ 结果数值 ★</option>
-                <option value="unit">单位</option>
-                <option value="range">参考范围</option>
-                <option value="notes">备注</option>
-                <option value="ignore">忽略此列</option>
-              </select>
+              <div class="grid grid-cols-2 gap-3">
+                <div v-for="col in gCols" :key="col.col_index"
+                     :class="['border-2 rounded-xl p-3 transition-all',
+                       col.mapped_field==='name'   ? 'border-blue-400 bg-blue-50' :
+                       col.mapped_field==='value'  ? 'border-green-400 bg-green-50' :
+                       col.mapped_field==='unit'   ? 'border-purple-300 bg-purple-50' :
+                       col.mapped_field==='range'  ? 'border-orange-300 bg-orange-50' :
+                       col.mapped_field==='notes'  ? 'border-teal-300 bg-teal-50' :
+                       'border-slate-200 bg-slate-50 opacity-60']">
+                  <div class="text-sm font-semibold truncate mb-2 text-slate-700"
+                       :title="col.header_text">
+                    {{ col.header_text || '(空列)' }}
+                  </div>
+                  <select v-model="col.mapped_field"
+                          class="w-full border rounded-lg px-2 py-1.5 text-xs bg-white"
+                          @change="onMappingChange">
+                    <option value="name">✦ 检测项目 ★</option>
+                    <option value="value">✦ 结果数值 ★</option>
+                    <option value="unit">单位</option>
+                    <option value="range">参考范围</option>
+                    <option value="notes">备注</option>
+                    <option value="ignore">忽略此列</option>
+                  </select>
+                </div>
+              </div>
             </div>
-          </div>
+          </template>
+
+          <!-- 单栏：卡片网格（保持原有布局） -->
+          <template v-else>
+            <div class="grid grid-cols-2 gap-3">
+              <div v-for="(col, idx) in columnMappings" :key="idx"
+                   :class="['border-2 rounded-xl p-3 transition-all',
+                     col.mapped_field==='name'   ? 'border-blue-400 bg-blue-50' :
+                     col.mapped_field==='value'  ? 'border-green-400 bg-green-50' :
+                     col.mapped_field==='unit'   ? 'border-purple-300 bg-purple-50' :
+                     col.mapped_field==='range'  ? 'border-orange-300 bg-orange-50' :
+                     col.mapped_field==='notes'  ? 'border-teal-300 bg-teal-50' :
+                     'border-slate-200 bg-slate-50 opacity-60']">
+                <div class="text-sm font-semibold truncate mb-2 text-slate-700"
+                     :title="col.header_text">
+                  {{ col.header_text || '(空列)' }}
+                </div>
+                <select v-model="col.mapped_field"
+                        class="w-full border rounded-lg px-2 py-1.5 text-xs bg-white"
+                        @change="onMappingChange">
+                  <option value="name">✦ 检测项目 ★</option>
+                  <option value="value">✦ 结果数值 ★</option>
+                  <option value="unit">单位</option>
+                  <option value="range">参考范围</option>
+                  <option value="notes">备注</option>
+                  <option value="ignore">忽略此列</option>
+                </select>
+              </div>
+            </div>
+          </template>
 
           <!-- 校验错误 -->
           <div v-if="step2Error"
@@ -213,6 +260,7 @@ const OCRMappingWizard = Vue.defineComponent({
       <div class="flex items-center justify-between px-4 py-2 border-b bg-slate-50 shrink-0">
         <div class="flex items-center gap-2">
           <span class="font-medium text-sm text-slate-700">单元格修复</span>
+          <span class="text-xs text-slate-400">（点击单元格即可编辑）</span>
           <div class="flex gap-1">
             <button @click="undoEdit" :disabled="undoStack.length===0"
                     class="px-2 py-1 border rounded text-xs text-slate-600 disabled:opacity-30 hover:bg-white"
@@ -231,7 +279,7 @@ const OCRMappingWizard = Vue.defineComponent({
           <button @click="doApplyAndFinish" :disabled="isLoading"
                   class="px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm disabled:opacity-40 hover:bg-green-700 flex items-center gap-2">
             <span v-if="isLoading" class="animate-spin">⏳</span>
-            {{ isLoading ? '处理中…' : '✅ 完成，进入核效' }}
+            {{ isLoading ? '处理中…' : '✅ 完成并入库' }}
           </button>
         </div>
       </div>
@@ -245,13 +293,20 @@ const OCRMappingWizard = Vue.defineComponent({
         </span>
         <span class="text-slate-500">按</span>
         <select v-model="splitBar.delimiter" class="border rounded px-2 py-0.5 text-sm bg-white"
-                @change="updateSplitPreview">
+                @change="onSplitDelimiterChange">
           <option value=" ">空格</option>
           <option value=":">英文冒号 (:)</option>
           <option value="：">中文冒号 (：)</option>
           <option value="/">斜杠 (/)</option>
           <option value="|">竖线 (|)</option>
+          <option value="__custom__">自定义…</option>
         </select>
+        <input v-if="splitBar.delimiter === '__custom__'"
+               v-model="splitBar.customDelimiter"
+               class="border rounded px-2 py-0.5 text-sm bg-white w-16 text-center"
+               placeholder="符号"
+               @input="updateSplitPreview"
+               maxlength="4">
         <span class="text-slate-400">→</span>
         <span v-for="(p, i) in splitBar.preview" :key="i"
               class="px-2 py-0.5 bg-white border rounded text-xs font-mono">{{ p }}</span>
@@ -305,8 +360,8 @@ const OCRMappingWizard = Vue.defineComponent({
                 @click="onRowClick(rowIdx, $event)">
               <td class="p-2 text-slate-300 text-xs select-none">{{ rowIdx+1 }}</td>
               <td v-for="col in activeGridCols" :key="col.field"
-                  class="p-1 relative group"
-                  @dblclick="startCellEdit(rowIdx, col.field, item[col.field])">
+                  class="p-1 relative group cursor-text"
+                  @click="startCellEdit(rowIdx, col.field, item[col.field])">
                 <!-- 编辑态 -->
                 <input v-if="editingCell && editingCell.rowIdx===rowIdx && editingCell.field===col.field"
                        v-model="editingCell.value"
@@ -314,12 +369,17 @@ const OCRMappingWizard = Vue.defineComponent({
                        @blur="commitCellEdit"
                        @keydown.enter.prevent="commitCellEdit"
                        @keydown.escape="cancelCellEdit"
+                       @click.stop
                        :ref="el => { if (el) activeEditInput = el }"
                        autofocus>
                 <!-- 显示态 -->
-                <div v-else class="flex items-center gap-1 min-h-[1.75rem]">
-                  <span class="truncate max-w-[180px] cursor-text" :title="item[col.field]">
+                <div v-else class="flex items-center gap-1 min-h-[1.75rem] px-1 rounded border border-transparent hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+                  <span class="truncate max-w-[180px]" :title="item[col.field]">
                     {{ item[col.field] || '' }}
+                  </span>
+                  <!-- 编辑提示图标 -->
+                  <span class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-blue-400">
+                    ✎
                   </span>
                   <!-- OCR原始文字 tooltip badge -->
                   <span v-if="getCellTooltip(item, col.field)"
@@ -398,12 +458,42 @@ const OCRMappingWizard = Vue.defineComponent({
     // OCR 块是否完全没有位置信息（PDF 文本降级路径）
     const noPositionMode = Vue.ref(false);
 
+    // 框选区域内/外 OCR 块数量统计
+    const insideBlockCount = Vue.computed(() => {
+      const sr = selectionRect.value;
+      if (!sr || sr.w === 0) return 0;
+      const srX2 = sr.x + sr.w;
+      const srY2 = sr.y + sr.h;
+      return ocrBlocks.value.filter(b => {
+        const bx1 = b.has_position ? b.left : b.left - b.width / 2;
+        const by1 = b.has_position ? b.top : b.top - b.height / 2;
+        const bx2 = b.has_position ? b.left + b.width : b.left + b.width / 2;
+        const by2 = b.has_position ? b.top + b.height : b.top + b.height / 2;
+        return bx1 < srX2 && bx2 > sr.x && by1 < srY2 && by2 > sr.y;
+      }).length;
+    });
+    const outsideBlockCount = Vue.computed(() => {
+      return ocrBlocks.value.length - insideBlockCount.value;
+    });
+
     // ── Step 2 ────────────────────────────────────────────
     const previewCanvasRef = Vue.ref(null);
     const headerCandidates = Vue.ref([]);
     const columnMappings = Vue.ref([]);
     const externalDate = Vue.ref("");
     const hasDateCol = Vue.ref(false);
+
+    // 多栏支持：每个栏（group）必须至少有一个 name 和一个 value
+    const headerGroups = Vue.computed(() => {
+      // 按 group 分组，group 从 extractHeaderCandidates 中设置
+      const groups = new Map();
+      for (const c of columnMappings.value) {
+        const g = c.group ?? 0;
+        if (!groups.has(g)) groups.set(g, []);
+        groups.get(g).push(c);
+      }
+      return groups;
+    });
 
     const step2Error = Vue.computed(() => {
       const active = columnMappings.value.filter(
@@ -412,9 +502,18 @@ const OCRMappingWizard = Vue.defineComponent({
       const nameN = active.filter((c) => c.mapped_field === "name").length;
       const valN = active.filter((c) => c.mapped_field === "value").length;
       if (nameN === 0) return '请为"检测项目"指定至少一列（★必填）';
-      if (nameN > 1) return '只能指定一列为"检测项目"';
       if (valN === 0) return '请为"结果数值"指定至少一列（★必填）';
-      if (valN > 1) return '只能指定一列为"结果数值"';
+      // 多栏校验：每个栏至少有一个 name 和一个 value
+      for (const [g, cols] of headerGroups.value) {
+        const gActive = cols.filter((c) => c.mapped_field !== "ignore");
+        const gName = gActive.filter((c) => c.mapped_field === "name").length;
+        const gVal = gActive.filter((c) => c.mapped_field === "value").length;
+        if (gActive.length > 0 && (gName === 0 || gVal === 0)) {
+          const label = headerGroups.value.size > 1 ? `第${g + 1}栏` : "";
+          if (gName === 0) return `${label}缺少"检测项目"列（★必填）`;
+          if (gVal === 0) return `${label}缺少"结果数值"列（★必填）`;
+        }
+      }
       return "";
     });
 
@@ -432,6 +531,7 @@ const OCRMappingWizard = Vue.defineComponent({
       field: "",
       cellText: "",
       delimiter: " ",
+      customDelimiter: "",
       preview: [],
     });
     const mergeWarning = Vue.ref({ show: false, message: "" });
@@ -582,6 +682,7 @@ const OCRMappingWizard = Vue.defineComponent({
         width: 0,
         x_min: i * 200,
         x_max: (i + 1) * 200,
+        group: 0,
       }));
       columnMappings.value = defaultCols.map((text, i) => ({
         col_index: i,
@@ -589,6 +690,7 @@ const OCRMappingWizard = Vue.defineComponent({
         mapped_field: guessField(text, i, defaultCols.length),
         x_min: i * 200,
         x_max: (i + 1) * 200,
+        group: 0,
       }));
       hasDateCol.value = false;
       // 构造一个全局展开选择框
@@ -703,7 +805,7 @@ const OCRMappingWizard = Vue.defineComponent({
       // Supports both coordinate formats:
       // - New format (has_position=true): Left/Top = top-left corner
       // - Legacy format (has_position=false): Left/Top = center, apply center→edge compensation
-      ctx.globalAlpha = loadedImage ? 0.2 : 0.55;
+      ctx.globalAlpha = loadedImage ? 0.25 : 0.55;
       ctx.fillStyle = "#60a5fa";
       ctx.strokeStyle = "#3b82f6";
       ctx.lineWidth = 1;
@@ -717,8 +819,39 @@ const OCRMappingWizard = Vue.defineComponent({
         const bw = b.width * canvasScale;
         const bh = b.height * canvasScale;
         ctx.fillRect(bx, by, bw, bh);
+        // 图片模式下也绘制块边框，增强可见性
+        if (loadedImage) {
+          ctx.globalAlpha = 0.5;
+          ctx.strokeRect(bx, by, bw, bh);
+          ctx.globalAlpha = 0.25;
+        }
       }
       ctx.globalAlpha = 1;
+
+      // 在 OCR 块上绘制文字标签（帮助用户识别块内容，特别是边缘区域的块）
+      // 仅在无背景图模式或缩放足够大时显示，避免图片模式下文字重叠
+      if (!loadedImage || canvasScale > 0.5) {
+        ctx.globalAlpha = loadedImage ? 0.7 : 0.9;
+        ctx.fillStyle = "#e2e8f0";
+        const fontSize = Math.max(8, Math.min(11, 10 * canvasScale));
+        ctx.font = `${fontSize}px sans-serif`;
+        ctx.textBaseline = "top";
+        for (const b of ocrBlocks.value) {
+          const bx = b.has_position
+            ? canvasOffX + b.left * canvasScale
+            : canvasOffX + (b.left - b.width / 2) * canvasScale;
+          const by = b.has_position
+            ? canvasOffY + b.top * canvasScale
+            : canvasOffY + (b.top - b.height / 2) * canvasScale;
+          const bw = b.width * canvasScale;
+          // 只在块宽度足够时显示文字（避免极小块文字重叠）
+          if (bw > 20 && b.text) {
+            const label = b.text.length > 12 ? b.text.slice(0, 12) + "…" : b.text;
+            ctx.fillText(label, bx + 2, by + 1);
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
 
       // 自动识别区域（蓝色虚线框）
       if (autoRegion.value && autoRegion.value.w > 0) {
@@ -756,6 +889,56 @@ const OCRMappingWizard = Vue.defineComponent({
           sr.h * canvasScale,
         );
         ctx.globalAlpha = 1;
+
+        // 标记框选区域外的 OCR 块（淡橙色提示，告知用户还有未包含的数据）
+        const srX2 = sr.x + sr.w;
+        const srY2 = sr.y + sr.h;
+        const outsideBlocks = ocrBlocks.value.filter(b => {
+          const bx1 = b.has_position ? b.left : b.left - b.width / 2;
+          const by1 = b.has_position ? b.top : b.top - b.height / 2;
+          const bx2 = b.has_position ? b.left + b.width : b.left + b.width / 2;
+          const by2 = b.has_position ? b.top + b.height : b.top + b.height / 2;
+          // 块与框选区域无重叠 = 在框选区域外
+          return !(bx1 < srX2 && bx2 > sr.x && by1 < srY2 && by2 > sr.y);
+        });
+        if (outsideBlocks.length > 0) {
+          ctx.globalAlpha = 0.4;
+          ctx.fillStyle = "#f97316"; // 橙色填充
+          ctx.strokeStyle = "#ea580c"; // 橙色边框
+          ctx.lineWidth = 1.5;
+          for (const b of outsideBlocks) {
+            const bx = b.has_position
+              ? canvasOffX + b.left * canvasScale
+              : canvasOffX + (b.left - b.width / 2) * canvasScale;
+            const by = b.has_position
+              ? canvasOffY + b.top * canvasScale
+              : canvasOffY + (b.top - b.height / 2) * canvasScale;
+            const bw = b.width * canvasScale;
+            const bh = b.height * canvasScale;
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.strokeRect(bx, by, bw, bh);
+          }
+          // 框选区域外OCR块也显示文字标签
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = "#fff7ed";
+          const fontSize = Math.max(8, Math.min(11, 10 * canvasScale));
+          ctx.font = `${fontSize}px sans-serif`;
+          ctx.textBaseline = "top";
+          for (const b of outsideBlocks) {
+            const bx = b.has_position
+              ? canvasOffX + b.left * canvasScale
+              : canvasOffX + (b.left - b.width / 2) * canvasScale;
+            const by = b.has_position
+              ? canvasOffY + b.top * canvasScale
+              : canvasOffY + (b.top - b.height / 2) * canvasScale;
+            const bw = b.width * canvasScale;
+            if (bw > 20 && b.text) {
+              const label = b.text.length > 12 ? b.text.slice(0, 12) + "…" : b.text;
+              ctx.fillText(label, bx + 2, by + 1);
+            }
+          }
+          ctx.globalAlpha = 1;
+        }
       }
     }
 
@@ -812,6 +995,7 @@ const OCRMappingWizard = Vue.defineComponent({
         mapped_field: guessField(hc.text, i, cands.length),
         x_min: hc.x_min,
         x_max: hc.x_max,
+        group: hc.group ?? 0,
       }));
       hasDateCol.value = cands.some((hc) =>
         /日期|时间|date|time/i.test(hc.text),
@@ -820,42 +1004,234 @@ const OCRMappingWizard = Vue.defineComponent({
       Vue.nextTick(drawPreviewCanvas);
     }
 
-    // 从OCR块中提取表头候选列
+    // 从OCR块中提取表头候选列（支持多栏：同一行表头按X位置分栏）
     function extractHeaderCandidates(blocks, region) {
       const newFormat = blocks.length > 0 && blocks[0].has_position;
+      const rx2 = region.x + region.w;
+      const ry2 = region.y + region.h;
       const filtered = blocks.filter((b) => {
         if (region.page >= 0 && b.page_index !== region.page) return false;
-        // Use center coordinates for region hit test (consistent with Go filterByRegion)
-        const cx = newFormat ? b.left + b.width / 2 : b.left;
-        const cy = newFormat ? b.top + b.height / 2 : b.top;
-        return (
-          cx >= region.x &&
-          cx <= region.x + region.w &&
-          cy >= region.y &&
-          cy <= region.y + region.h
-        );
+        let bx1, by1, bx2, by2;
+        if (newFormat) {
+          bx1 = b.left;
+          by1 = b.top;
+          bx2 = b.left + b.width;
+          by2 = b.top + b.height;
+        } else {
+          bx1 = b.left - b.width / 2;
+          by1 = b.top - b.height / 2;
+          bx2 = b.left + b.width / 2;
+          by2 = b.top + b.height / 2;
+        }
+        return bx1 < rx2 && bx2 > region.x && by1 < ry2 && by2 > region.y;
       });
       if (filtered.length === 0) return [];
 
       filtered.sort((a, b) =>
         a.top !== b.top ? a.top - b.top : a.left - b.left,
       );
-      const topY = filtered[0].top;
-      const headerBlocks = filtered.filter((b) => Math.abs(b.top - topY) <= 15);
-      headerBlocks.sort((a, b) => a.left - b.left);
-      if (headerBlocks.length === 0) return [];
 
-      // 构建列边界
-      const result = headerBlocks.map((b, i) => ({
+      // ── 多栏检测 ──
+      // 化验单两栏布局的特征：同一 Y 行上有两组重复的表头语义角色
+      // 例如：左栏"项目 结果 单位 参考范围" + 右栏"项目 结果 单位 参考范围"
+      // 策略：先识别表头行，再在表头行内按语义角色重复 + X 间隙分栏
+      const HEADER_KW = /项目|检验|检测|结果|数值|单位|参考|区间|范围|test|item|value|result|unit|ref|range/i;
+      const ROW_TOLERANCE = 15;
+
+      // 按行分组（Y坐标相近的块归为同一行）
+      const rows = [];
+      for (const b of filtered) {
+        let found = false;
+        for (const row of rows) {
+          if (Math.abs(b.top - row.avgY) <= ROW_TOLERANCE) {
+            row.blocks.push(b);
+            row.avgY = row.blocks.reduce((s, x) => s + x.top, 0) / row.blocks.length;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          rows.push({ avgY: b.top, blocks: [b] });
+        }
+      }
+      rows.sort((a, b) => a.avgY - b.avgY);
+
+      // 检测表头行
+      const headerRows = rows.filter((row) => {
+        const kwCount = row.blocks.filter((b) => HEADER_KW.test(b.text || "")).length;
+        return kwCount >= 2 || (row.blocks.length > 0 && kwCount / row.blocks.length > 0.3);
+      });
+      if (headerRows.length === 0) {
+        headerRows.push(rows[0]);
+      }
+
+      // ── 在表头行内按语义角色重复 + X 间隙分栏 ──
+      const allResults = [];
+      let globalGroup = 0;
+
+      for (const headerRow of headerRows) {
+        const headerBlocks = [...headerRow.blocks];
+        headerBlocks.sort((a, b) => a.left - b.left);
+        if (headerBlocks.length === 0) continue;
+
+        // 为每个表头块猜测语义角色
+        const roles = headerBlocks.map((b) => guessField(b.text, 0, 0));
+
+        // 检测多栏：统计"核心角色"(name/value)出现次数
+        // 如果 name 或 value 角色出现超过1次，说明是多栏
+        const nameCount = roles.filter((r) => r === "name").length;
+        const valueCount = roles.filter((r) => r === "value").length;
+        const isMultiGroup = (nameCount > 1 || valueCount > 1) && headerBlocks.length >= 4;
+
+        if (isMultiGroup) {
+          // 多栏布局：在表头行内按 X 间隙分栏
+          // 策略：找到 name 角色出现的所有位置，每个 name 开始一个新的栏
+          const namePositions = [];
+          for (let i = 0; i < roles.length; i++) {
+            if (roles[i] === "name") namePositions.push(i);
+          }
+
+          if (namePositions.length > 1) {
+            // 按 name 角色位置分栏：每个 name 到下一个 name 之前为一个栏
+            for (let g = 0; g < namePositions.length; g++) {
+              const gs = namePositions[g];
+              const ge = g + 1 < namePositions.length ? namePositions[g + 1] : headerBlocks.length;
+              const groupBlocks = headerBlocks.slice(gs, ge);
+
+              const result = groupBlocks.map((b) => ({
+                text: b.text,
+                left: b.left,
+                top: b.top,
+                width: b.width,
+                x_min: 0,
+                x_max: 0,
+                group: globalGroup,
+              }));
+
+              // 计算列边界（仅在栏内计算）
+              for (let i = 0; i < result.length; i++) {
+                const newFmt = groupBlocks[i].has_position;
+                if (i === 0) {
+                  result[i].x_min = newFmt
+                    ? groupBlocks[0].left
+                    : groupBlocks[0].left - Math.round(groupBlocks[0].width / 2);
+                } else {
+                  const prevRight = newFmt
+                    ? groupBlocks[i - 1].left + groupBlocks[i - 1].width
+                    : groupBlocks[i - 1].left + Math.round(groupBlocks[i - 1].width / 2);
+                  const curLeft = newFmt
+                    ? groupBlocks[i].left
+                    : groupBlocks[i].left - Math.round(groupBlocks[i].width / 2);
+                  result[i].x_min = Math.round((prevRight + curLeft) / 2);
+                  result[i - 1].x_max = result[i].x_min;
+                }
+                if (i === result.length - 1) {
+                  const lastBlock = groupBlocks[groupBlocks.length - 1];
+                  result[i].x_max = newFmt
+                    ? lastBlock.left + lastBlock.width
+                    : lastBlock.left + Math.round(lastBlock.width / 2);
+                }
+              }
+              allResults.push(...result);
+              globalGroup++;
+            }
+          } else {
+            // name 角色只出现1次但 value 出现多次，或检测不够准确
+            // 回退到 X 间隙分栏
+            const gaps = [];
+            for (let i = 1; i < headerBlocks.length; i++) {
+              const prevRight = newFormat
+                ? headerBlocks[i - 1].left + headerBlocks[i - 1].width
+                : headerBlocks[i - 1].left + Math.round(headerBlocks[i - 1].width / 2);
+              const curLeft = newFormat
+                ? headerBlocks[i].left
+                : headerBlocks[i].left - Math.round(headerBlocks[i].width / 2);
+              gaps.push({ idx: i, gap: curLeft - prevRight });
+            }
+
+            const gapValues = gaps.map((g) => g.gap).filter((g) => g > 0);
+            if (gapValues.length > 0) {
+              gapValues.sort((a, b) => a - b);
+              const medianGap = gapValues[Math.floor(gapValues.length / 2)];
+              const avgGap = gapValues.reduce((s, v) => s + v, 0) / gapValues.length;
+              const splitThreshold = Math.max(medianGap * 3, avgGap * 2, 30);
+
+              const splitPoints = gaps
+                .filter((g) => g.gap > splitThreshold)
+                .map((g) => g.idx);
+
+              const groupRanges = [];
+              let start = 0;
+              for (const sp of splitPoints) {
+                groupRanges.push([start, sp]);
+                start = sp;
+              }
+              groupRanges.push([start, headerBlocks.length]);
+
+              for (const [gs, ge] of groupRanges) {
+                const groupBlocks = headerBlocks.slice(gs, ge);
+                const result = groupBlocks.map((b) => ({
+                  text: b.text,
+                  left: b.left,
+                  top: b.top,
+                  width: b.width,
+                  x_min: 0,
+                  x_max: 0,
+                  group: globalGroup,
+                }));
+                for (let i = 0; i < result.length; i++) {
+                  const newFmt = groupBlocks[i].has_position;
+                  if (i === 0) {
+                    result[i].x_min = newFmt
+                      ? groupBlocks[0].left
+                      : groupBlocks[0].left - Math.round(groupBlocks[0].width / 2);
+                  } else {
+                    const prevRight = newFmt
+                      ? groupBlocks[i - 1].left + groupBlocks[i - 1].width
+                      : groupBlocks[i - 1].left + Math.round(groupBlocks[i - 1].width / 2);
+                    const curLeft = newFmt
+                      ? groupBlocks[i].left
+                      : groupBlocks[i].left - Math.round(groupBlocks[i].width / 2);
+                    result[i].x_min = Math.round((prevRight + curLeft) / 2);
+                    result[i - 1].x_max = result[i].x_min;
+                  }
+                  if (i === result.length - 1) {
+                    const lastBlock = groupBlocks[groupBlocks.length - 1];
+                    result[i].x_max = newFmt
+                      ? lastBlock.left + lastBlock.width
+                      : lastBlock.left + Math.round(lastBlock.width / 2);
+                  }
+                }
+                allResults.push(...result);
+                globalGroup++;
+              }
+            } else {
+              // 无法分栏，作为单栏处理
+              allResults.push(...buildSingleGroupColumns(headerBlocks, region, newFormat, globalGroup));
+              globalGroup++;
+            }
+          }
+        } else {
+          // 单栏布局
+          allResults.push(...buildSingleGroupColumns(headerBlocks, region, newFormat, globalGroup));
+          globalGroup++;
+        }
+      }
+      return allResults;
+    }
+
+    // 构建单栏的列候选（提取为辅助函数，避免重复代码）
+    function buildSingleGroupColumns(headerBlocks, region, newFormat, group) {
+      const result = headerBlocks.map((b) => ({
         text: b.text,
         left: b.left,
         top: b.top,
         width: b.width,
         x_min: 0,
         x_max: 0,
+        group: group,
       }));
       for (let i = 0; i < result.length; i++) {
-        // Get left/right edges based on coordinate format
         const newFmt = headerBlocks[i].has_position;
         if (i === 0) {
           result[i].x_min = region.x;
@@ -879,8 +1255,8 @@ const OCRMappingWizard = Vue.defineComponent({
     // 根据列标题文字和位置猜测字段角色
     function guessField(text, colIdx, totalCols) {
       const t = (text || "").toLowerCase();
-      if (/项目|检验|检测|test|item|name/.test(t)) return "name";
-      if (/结果|数值|value|result/.test(t)) return "value";
+      if (/项目|检验|检测|实验|test|item|name/.test(t)) return "name";
+      if (/结果|数值|测定|value|result/.test(t)) return "value";
       if (/单位|unit/.test(t)) return "unit";
       if (/参考|区间|范围|ref|range|normal/.test(t)) return "range";
       if (/备注|note|镜检|标本|comment|说明/.test(t)) return "notes";
@@ -895,7 +1271,9 @@ const OCRMappingWizard = Vue.defineComponent({
 
     function drawPreviewCanvas() {
       const canvas = previewCanvasRef.value;
-      if (!canvas || !loadedImage) return;
+      // 支持图片模式和PDF模式：图片模式用 loadedImage，PDF模式用 pdfBgCanvas
+      const hasBg = loadedImage || (pdfBgCanvas && isPdf.value);
+      if (!canvas || !hasBg) return;
       const wrap = canvas.parentElement;
       if (!wrap) return;
       const w = wrap.offsetWidth || 700;
@@ -905,18 +1283,30 @@ const OCRMappingWizard = Vue.defineComponent({
       canvas.style.width = w + "px";
       canvas.style.height = h + "px";
 
-      const sc = Math.min(w / imgNaturalW, h / imgNaturalH);
-      const offX = (w - imgNaturalW * sc) / 2;
-      const offY = (h - imgNaturalH * sc) / 2;
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, w, h);
-      ctx.drawImage(
-        loadedImage,
-        offX,
-        offY,
-        imgNaturalW * sc,
-        imgNaturalH * sc,
-      );
+
+      let sc, offX, offY;
+
+      if (loadedImage) {
+        // 图片模式
+        sc = Math.min(w / imgNaturalW, h / imgNaturalH);
+        offX = (w - imgNaturalW * sc) / 2;
+        offY = (h - imgNaturalH * sc) / 2;
+        ctx.drawImage(loadedImage, offX, offY, imgNaturalW * sc, imgNaturalH * sc);
+      } else {
+        // PDF模式：使用 pdfBgCanvas 作为背景
+        const bbox = computeOcrBbox();
+        sc = Math.min((w * 0.92) / bbox.w, (h * 0.92) / bbox.h);
+        offX = (w - bbox.w * sc) / 2 - bbox.minX * sc;
+        offY = (h - bbox.h * sc) / 2 - bbox.minY * sc;
+        const pdfDrawX = offX + bbox.minX * sc;
+        const pdfDrawY = offY + bbox.minY * sc;
+        const pdfDrawW = bbox.w * sc;
+        const pdfDrawH = bbox.h * sc;
+        ctx.drawImage(pdfBgCanvas, 0, 0, pdfBgCanvas.width, pdfBgCanvas.height,
+          pdfDrawX, pdfDrawY, pdfDrawW, pdfDrawH);
+      }
 
       // 选中区域红框
       if (selectionRect.value) {
@@ -931,13 +1321,29 @@ const OCRMappingWizard = Vue.defineComponent({
         );
       }
 
-      // 列分割线（紫色虚线）
+      // 列分割线（紫色虚线）+ 栏间分割线（红色粗虚线）
       if (selectionRect.value && columnMappings.value.length > 1) {
+        const sr = selectionRect.value;
+        // 先绘制栏内列分割线（紫色细虚线）
         ctx.setLineDash([4, 3]);
         ctx.strokeStyle = "#7c3aed";
         ctx.lineWidth = 1.5;
-        const sr = selectionRect.value;
         for (let i = 1; i < columnMappings.value.length; i++) {
+          // 跳过栏间分割线（不同 group 的边界）
+          if (columnMappings.value[i].group !== columnMappings.value[i - 1].group) continue;
+          const xDiv = columnMappings.value[i].x_min;
+          const cx = offX + xDiv * sc;
+          ctx.beginPath();
+          ctx.moveTo(cx, offY + sr.y * sc);
+          ctx.lineTo(cx, offY + (sr.y + sr.h) * sc);
+          ctx.stroke();
+        }
+        // 再绘制栏间分割线（红色粗虚线）
+        ctx.setLineDash([8, 4]);
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 2.5;
+        for (let i = 1; i < columnMappings.value.length; i++) {
+          if (columnMappings.value[i].group === columnMappings.value[i - 1].group) continue;
           const xDiv = columnMappings.value[i].x_min;
           const cx = offX + xDiv * sc;
           ctx.beginPath();
@@ -976,12 +1382,15 @@ const OCRMappingWizard = Vue.defineComponent({
       return {
         table_region: { ...selectionRect.value },
         header_row_y: headerCandidates.value[0]?.top ?? 0,
+        // 多栏：收集所有表头行的 Y 坐标
+        header_row_ys: [...new Set(headerCandidates.value.map((h) => h.top))].sort((a, b) => a - b),
         columns: columnMappings.value.map((c) => ({
           col_index: c.col_index,
           header_text: c.header_text,
           mapped_field: c.mapped_field,
           x_min: c.x_min,
           x_max: c.x_max,
+          group: c.group ?? 0,
         })),
         sample_date: externalDate.value || "",
       };
@@ -1021,6 +1430,10 @@ const OCRMappingWizard = Vue.defineComponent({
     // ── 单元格编辑 ───────────────────────────────────────
 
     function startCellEdit(rowIdx, field, value) {
+      // 如果正在编辑同一个单元格，不重复触发
+      if (editingCell.value && editingCell.value.rowIdx === rowIdx && editingCell.value.field === field) return;
+      // 先提交当前正在编辑的单元格
+      if (editingCell.value) commitCellEdit();
       editingCell.value = { rowIdx, field, value: value || "" };
       Vue.nextTick(() => {
         if (activeEditInput) activeEditInput.focus();
@@ -1051,14 +1464,29 @@ const OCRMappingWizard = Vue.defineComponent({
         field,
         cellText: text || "",
         delimiter: " ",
+        customDelimiter: "",
         preview: [],
       };
       updateSplitPreview();
     }
+    function onSplitDelimiterChange() {
+      // 当切换到自定义时，清空自定义输入并等待用户输入
+      if (splitBar.value.delimiter === "__custom__") {
+        splitBar.value.customDelimiter = "";
+        splitBar.value.preview = [];
+      } else {
+        updateSplitPreview();
+      }
+    }
     function updateSplitPreview() {
-      const { cellText, delimiter } = splitBar.value;
+      const { cellText, delimiter, customDelimiter } = splitBar.value;
+      const actualDelimiter = delimiter === "__custom__" ? customDelimiter : delimiter;
+      if (!actualDelimiter) {
+        splitBar.value.preview = [];
+        return;
+      }
       splitBar.value.preview = cellText
-        .split(delimiter)
+        .split(actualDelimiter)
         .map((s) => s.trim())
         .filter(Boolean);
     }
@@ -1137,10 +1565,19 @@ const OCRMappingWizard = Vue.defineComponent({
         for (const item of parsedItems.value) {
           if (item.id) {
             await api.updateReportItem(props.reportId, item.id, {
-              original_value: item.original_value,
+              test_item_name: item.test_item_name || "",
+              original_value: item.original_value || "",
               original_unit: item.original_unit || "",
+              ref_interval_text: item.ref_interval_text || "",
+              flag: item.flag || "",
             });
           }
+        }
+        // 自动入库：匹配参考区间、计算提示符、更新状态为 imported
+        const importResult = await api.importReport(props.reportId);
+        if (importResult.code !== 0) {
+          alert("入库失败：" + (importResult.message || "未知错误"));
+          return;
         }
         emit("done", { reportId: props.reportId });
       } catch (e) {
@@ -1221,6 +1658,8 @@ const OCRMappingWizard = Vue.defineComponent({
       isLoading,
       isPdf,
       noPositionMode,
+      insideBlockCount,
+      outsideBlockCount,
       canvasRef,
       canvasWrapRef,
       sourceImgRef,
@@ -1236,6 +1675,7 @@ const OCRMappingWizard = Vue.defineComponent({
       externalDate,
       hasDateCol,
       step2Error,
+      headerGroups,
       parsedItems,
       undoStack,
       redoStack,
@@ -1263,6 +1703,7 @@ const OCRMappingWizard = Vue.defineComponent({
       commitCellEdit,
       cancelCellEdit,
       openSplitBar,
+      onSplitDelimiterChange,
       updateSplitPreview,
       confirmSplit,
       deleteRow,

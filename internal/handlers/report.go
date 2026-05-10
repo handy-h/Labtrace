@@ -166,8 +166,8 @@ func UpdateReportItem(c *gin.Context) {
 	}
 
 	_, err := database.DB.Exec(
-		`UPDATE report_items SET original_value=?, original_unit=?, confidence=?, row_notes=? WHERE id=? AND report_id=?`,
-		item.OriginalValue, item.OriginalUnit, item.Confidence, item.RowNotes, itemID, reportID,
+		`UPDATE report_items SET test_item_name=?, original_value=?, original_unit=?, ref_interval_text=?, flag=?, confidence=?, row_notes=? WHERE id=? AND report_id=?`,
+		item.TestItemName, item.OriginalValue, item.OriginalUnit, item.RefIntervalText, item.Flag, item.Confidence, item.RowNotes, itemID, reportID,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
@@ -224,7 +224,6 @@ func ImportReport(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
 	}
-	defer rows.Close()
 
 	type itemInfo struct {
 		ID         int64
@@ -240,6 +239,7 @@ func ImportReport(c *gin.Context) {
 		}
 		items = append(items, it)
 	}
+	rows.Close() // 释放连接，避免后续 DB 调用死锁（SetMaxOpenConns=1）
 
 	// Process each item: match reference interval, calculate flag
 	for _, it := range items {

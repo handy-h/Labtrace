@@ -46,6 +46,7 @@ const OCRImportView = Vue.defineComponent({
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-3 border-b shrink-0">
           <h2 class="text-lg font-bold">报告详情 #{{selectedReport.id}} <span :class="statusClass(selectedReport.ocr_status)">({{statusText(selectedReport.ocr_status)}})</span></h2>
+          <span class="text-xs text-slate-400">点击单元格即可编辑</span>
           <div class="flex gap-2">
             <button v-if="selectedReport.ocr_status === 'review'" @click="doConfirm(selectedReport.id)"
                     class="px-4 py-1.5 bg-orange-600 text-white rounded text-sm hover:bg-orange-700">确认核效</button>
@@ -79,22 +80,57 @@ const OCRImportView = Vue.defineComponent({
                 <tr v-for="(it, idx) in selectedReport.items" :key="it.id"
                     class="border-t hover:bg-slate-50"
                     :class="{ 'bg-blue-50': selectedRowIndex === idx }"
-                    @click="selectRow(idx)"
-                    @dblclick="startEdit(it, idx)">
-                  <td class="p-2 font-medium">{{it.test_item_name || '-'}}</td>
-                  <td class="p-2" :class="confClass(it.confidence)">
+                    @click="selectRow(idx)">
+                  <td class="p-2 font-medium cursor-text group relative"
+                      @click.stop="startEdit(it, idx)">
+                    <input v-if="editingItemId === it.id" v-model="editForm.test_item_name"
+                           class="border rounded px-1 py-0.5 text-sm w-full" @keydown.enter="saveEdit(it)"
+                           @keydown.escape="cancelEdit" @blur="onEditBlur" ref="editInput" autofocus>
+                    <div v-else class="flex items-center gap-1 rounded border border-transparent hover:border-blue-300 hover:bg-blue-50/50 px-1 transition-all">
+                      <span>{{it.test_item_name || '-'}}</span>
+                      <span class="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400">✎</span>
+                    </div>
+                  </td>
+                  <td class="p-2 cursor-text group relative" :class="confClass(it.confidence)"
+                      @click.stop="startEdit(it, idx)">
                     <input v-if="editingItemId === it.id" v-model="editForm.original_value"
                            class="border rounded px-1 py-0.5 text-sm w-20" @keydown.enter="saveEdit(it)"
-                           @keydown.escape="cancelEdit" ref="editInput" autofocus>
-                    <span v-else>{{it.original_value}}</span>
+                           @keydown.escape="cancelEdit" @blur="onEditBlur" autofocus>
+                    <div v-else class="flex items-center gap-1 rounded border border-transparent hover:border-blue-300 hover:bg-blue-50/50 px-1 transition-all">
+                      <span>{{it.original_value}}</span>
+                      <span class="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400">✎</span>
+                    </div>
                   </td>
-                  <td class="p-2 text-slate-500">{{it.ref_interval_text || it.row_notes || '-'}}</td>
-                  <td class="p-2">
+                  <td class="p-2 text-slate-500 cursor-text group relative"
+                      @click.stop="startEdit(it, idx)">
+                    <input v-if="editingItemId === it.id" v-model="editForm.ref_interval_text"
+                           class="border rounded px-1 py-0.5 text-sm w-20" @keydown.enter="saveEdit(it)"
+                           @keydown.escape="cancelEdit" @blur="onEditBlur" autofocus>
+                    <div v-else class="flex items-center gap-1 rounded border border-transparent hover:border-blue-300 hover:bg-blue-50/50 px-1 transition-all">
+                      <span>{{it.ref_interval_text || it.row_notes || '-'}}</span>
+                      <span class="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400">✎</span>
+                    </div>
+                  </td>
+                  <td class="p-2 cursor-text group relative"
+                      @click.stop="startEdit(it, idx)">
                     <input v-if="editingItemId === it.id" v-model="editForm.original_unit"
-                           class="border rounded px-1 py-0.5 text-sm w-16">
-                    <span v-else>{{it.original_unit}}</span>
+                           class="border rounded px-1 py-0.5 text-sm w-16" @keydown.enter="saveEdit(it)"
+                           @keydown.escape="cancelEdit" @blur="onEditBlur" autofocus>
+                    <div v-else class="flex items-center gap-1 rounded border border-transparent hover:border-blue-300 hover:bg-blue-50/50 px-1 transition-all">
+                      <span>{{it.original_unit}}</span>
+                      <span class="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400">✎</span>
+                    </div>
                   </td>
-                  <td class="p-2" v-html="flagBadge(it.flag)"></td>
+                  <td class="p-2 cursor-text group relative"
+                      @click.stop="startEdit(it, idx)">
+                    <input v-if="editingItemId === it.id" v-model="editForm.flag"
+                           class="border rounded px-1 py-0.5 text-sm w-12" @keydown.enter="saveEdit(it)"
+                           @keydown.escape="cancelEdit" @blur="onEditBlur" autofocus>
+                    <div v-else class="flex items-center gap-1 rounded border border-transparent hover:border-blue-300 hover:bg-blue-50/50 px-1 transition-all">
+                      <span v-html="flagBadge(it.flag)"></span>
+                      <span class="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400">✎</span>
+                    </div>
+                  </td>
                   <td class="p-2">{{it.confidence}}%</td>
                 </tr>
               </tbody>
@@ -138,7 +174,7 @@ const OCRImportView = Vue.defineComponent({
     const reportImageUrl = Vue.ref("");
     const selectedRowIndex = Vue.ref(-1);
     const editingItemId = Vue.ref(null);
-    const editForm = Vue.ref({ original_value: "", original_unit: "" });
+    const editForm = Vue.ref({ test_item_name: "", original_value: "", original_unit: "", ref_interval_text: "", flag: "" });
     const isPdf = Vue.computed(() => {
       if (!selectedReport.value || !selectedReport.value.file_path)
         return false;
@@ -286,28 +322,66 @@ const OCRImportView = Vue.defineComponent({
 
     // 行内编辑
     function startEdit(item, idx) {
+      // 如果正在编辑同一行，不重复触发
+      if (editingItemId.value === item.id) return;
+      // 先将当前编辑的数据本地写回（不调API），避免blur时editForm已被覆盖
+      flushEditFormToLocal();
       editingItemId.value = item.id;
       editForm.value = {
-        original_value: item.original_value,
-        original_unit: item.original_unit,
+        test_item_name: item.test_item_name || "",
+        original_value: item.original_value || "",
+        original_unit: item.original_unit || "",
+        ref_interval_text: item.ref_interval_text || item.row_notes || "",
+        flag: item.flag || "",
       };
       selectedRowIndex.value = idx;
       Vue.nextTick(() => {
         if (editInput.value && editInput.value[0]) editInput.value[0].focus();
       });
     }
+    // 将 editForm 中的数据写回到 selectedReport.items 的当前编辑行（本地更新，不调API）
+    function flushEditFormToLocal() {
+      if (!editingItemId.value || !selectedReport.value || !selectedReport.value.items) return;
+      const item = selectedReport.value.items.find(it => it.id === editingItemId.value);
+      if (!item) return;
+      item.test_item_name = editForm.value.test_item_name;
+      item.original_value = editForm.value.original_value;
+      item.original_unit = editForm.value.original_unit;
+      item.ref_interval_text = editForm.value.ref_interval_text;
+      item.flag = editForm.value.flag;
+    }
     function saveEdit(item) {
+      // 先本地写回
+      flushEditFormToLocal();
       api
         .updateReportItem(selectedReport.value.id, item.id, editForm.value)
         .then((r) => {
           if (r.code === 0) {
             editingItemId.value = null;
-            viewReport(selectedReport.value.id);
           } else {
             alert(r.message || "保存失败");
           }
         });
     }
+    function saveEditQuiet(item) {
+      flushEditFormToLocal();
+      api
+        .updateReportItem(selectedReport.value.id, item.id, editForm.value)
+        .then(() => { editingItemId.value = null; });
+    }
+    // blur时的处理：本地写回 + 异步保存到API（不重新加载整个报告）
+    function onEditBlur() {
+      if (!editingItemId.value || !selectedReport.value) return;
+      flushEditFormToLocal();
+      const itemId = editingItemId.value;
+      const reportId = selectedReport.value.id;
+      // 延迟保存，避免快速切换时重复提交
+      clearTimeout(onEditBlur._timer);
+      onEditBlur._timer = setTimeout(() => {
+        api.updateReportItem(reportId, itemId, editForm.value).catch(() => {});
+      }, 300);
+    }
+    onEditBlur._timer = 0;
     function cancelEdit() {
       editingItemId.value = null;
     }
@@ -423,6 +497,7 @@ const OCRImportView = Vue.defineComponent({
           (it) => it.id === editingItemId.value,
         );
         if (item) {
+          flushEditFormToLocal();
           api
             .updateReportItem(selectedReport.value.id, item.id, editForm.value)
             .then((r) => {
@@ -437,7 +512,6 @@ const OCRImportView = Vue.defineComponent({
                     return;
                   }
                 }
-                viewReport(selectedReport.value.id);
               }
             });
         }
@@ -522,6 +596,9 @@ const OCRImportView = Vue.defineComponent({
       loadQuota,
       startEdit,
       saveEdit,
+      saveEditQuiet,
+      onEditBlur,
+      flushEditFormToLocal,
       cancelEdit,
       selectRow,
       onImageLoad,

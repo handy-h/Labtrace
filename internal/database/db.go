@@ -20,13 +20,13 @@ func Open(dbPath string) error {
 	}
 
 	var err error
-	DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=on")
+	DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
 
-	DB.SetMaxOpenConns(1) // SQLite single-writer
-	DB.SetMaxIdleConns(1)
+	DB.SetMaxOpenConns(2) // SQLite WAL: 允许并发读+写
+	DB.SetMaxIdleConns(2)
 
 	if err := DB.Ping(); err != nil {
 		return fmt.Errorf("ping db: %w", err)

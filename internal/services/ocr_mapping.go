@@ -8,10 +8,11 @@ import (
 // ColumnMappingConfig is the user-defined column mapping for a lab report.
 // Saved as JSON in lab_reports.column_mapping_json.
 type ColumnMappingConfig struct {
-	TableRegion TableRegion `json:"table_region"`
-	HeaderRowY  int         `json:"header_row_y"` // center-Y of header row in OCR coords
-	Columns     []ColumnDef `json:"columns"`
-	SampleDate  string      `json:"sample_date,omitempty"`
+	TableRegion  TableRegion `json:"table_region"`
+	HeaderRowY   int         `json:"header_row_y"`    // center-Y of first header row in OCR coords
+	HeaderRowYs  []int       `json:"header_row_ys"`   // Y coords of all header rows (multi-group support)
+	Columns      []ColumnDef `json:"columns"`
+	SampleDate   string      `json:"sample_date,omitempty"`
 }
 
 // TableRegion is a rectangular selection in OCR coordinate space.
@@ -32,6 +33,7 @@ type ColumnDef struct {
 	MappedField string `json:"mapped_field"` // "name"|"value"|"unit"|"range"|"notes"|"ignore"
 	XMin        int    `json:"x_min"`        // left boundary in OCR coords
 	XMax        int    `json:"x_max"`        // right boundary in OCR coords
+	Group       int    `json:"group"`        // group index (0-based), for multi-group (multi-column) layouts
 }
 
 // AutoDetectTableRegion infers the likely table bounding box from OCR block positions.
@@ -96,7 +98,7 @@ func AutoDetectTableRegion(blocks []OCRResult) TableRegion {
 			maxY = ry
 		}
 	}
-	const margin = 20
+	const margin = 40
 	x := minX - margin
 	if x < 0 {
 		x = 0
@@ -116,6 +118,8 @@ func AutoDetectTableRegion(blocks []OCRResult) TableRegion {
 
 // ParseLabResultsWithMapping is Path 4 of the OCR parsing pipeline.
 // It uses a user-defined column mapping configuration instead of auto-classification.
+// Supports multi-group (multi-column) layouts: each group has its own set of
+// header columns (e.g., left and right columns of a hospital lab report).
 func ParseLabResultsWithMapping(blocks []OCRResult, cfg ColumnMappingConfig) []ParsedLabItem {
 	if len(blocks) == 0 || len(cfg.Columns) == 0 {
 		return nil
@@ -140,10 +144,23 @@ func ParseLabResultsWithMapping(blocks []OCRResult, cfg ColumnMappingConfig) []P
 	}
 
 	// Step 2: Remove header row blocks
+	// Support multiple header rows (multi-group): use HeaderRowYs if available,
+	// otherwise fall back to single HeaderRowY
+	headerYs := cfg.HeaderRowYs
+	if len(headerYs) == 0 && cfg.HeaderRowY != 0 {
+		headerYs = []int{cfg.HeaderRowY}
+	}
 	const headerTolerance = 15
 	var dataBlocks []OCRResult
 	for _, b := range filtered {
-		if absInt(b.Top-cfg.HeaderRowY) > headerTolerance {
+		isHeader := false
+		for _, hy := range headerYs {
+			if absInt(b.Top-hy) <= headerTolerance {
+				isHeader = true
+				break
+			}
+		}
+		if !isHeader {
 			dataBlocks = append(dataBlocks, b)
 		}
 	}
@@ -160,7 +177,20 @@ func ParseLabResultsWithMapping(blocks []OCRResult, cfg ColumnMappingConfig) []P
 	sort.Ints(rowOrder)
 
 	// Step 4: For each row, assign blocks to columns and assemble items
-	var items []ParsedLabItem
+	// In multi-group mode, we first collect items per group per row,
+	// then output all items for group 0 (left column), then group 1, etc.
+	// This ensures the left column's items appear first, followed by the right column's.
+
+	// Collect items grouped by group index, preserving row order within each group
+	type groupItem struct {
+		group int
+		item  ParsedLabItem
+	}
+	var groupedItems []groupItem
+
+	// Track all group indices we encounter
+	groupSet := make(map[int]bool)
+
 	for _, rowIdx := range rowOrder {
 		rowBlocks := rowMap[rowIdx]
 		if len(rowBlocks) == 0 {
@@ -168,68 +198,123 @@ func ParseLabResultsWithMapping(blocks []OCRResult, cfg ColumnMappingConfig) []P
 		}
 		sortByX(rowBlocks)
 
-		colTexts := make(map[string]string)
-		var bboxStr string
-		var topConf float64
+		// Group blocks by their column group assignment
+		type groupTexts struct {
+			colTexts map[string]string
+			bboxStr  string
+			topConf  float64
+		}
+		groupMap := make(map[int]*groupTexts)
 
 		for _, b := range rowBlocks {
-			col := findColumnByX(b.Left, activeCols)
+			blockCenterX := b.Left + b.Width/2
+			col := findColumnByX(blockCenterX, activeCols)
 			if col == nil {
 				continue
 			}
-			if existing, ok := colTexts[col.MappedField]; ok {
-				colTexts[col.MappedField] = existing + " " + b.Text
+			g := col.Group
+			groupSet[g] = true
+			gt, ok := groupMap[g]
+			if !ok {
+				gt = &groupTexts{colTexts: make(map[string]string)}
+				groupMap[g] = gt
+			}
+			if existing, ok := gt.colTexts[col.MappedField]; ok {
+				gt.colTexts[col.MappedField] = existing + " " + b.Text
 			} else {
-				colTexts[col.MappedField] = b.Text
+				gt.colTexts[col.MappedField] = b.Text
 			}
-			if bboxStr == "" {
-				bboxStr = bboxJSON(b.Left, b.Top, b.Width, b.Height, b.PageIndex)
+			if gt.bboxStr == "" {
+				gt.bboxStr = bboxJSON(b.Left, b.Top, b.Width, b.Height, b.PageIndex)
 			}
-			if b.Confidence > topConf {
-				topConf = b.Confidence
+			if b.Confidence > gt.topConf {
+				gt.topConf = b.Confidence
 			}
 		}
 
-		name := colTexts["name"]
-		value := colTexts["value"]
-		// Require at least a name; value may be empty (OCR may miss value blocks
-		// for some items — user can fill in the value during Step 3 cell editing).
-		if name == "" {
-			continue
+		// For each group in this row, produce a ParsedLabItem
+		var rowGroupKeys []int
+		for g := range groupMap {
+			rowGroupKeys = append(rowGroupKeys, g)
 		}
+		sort.Ints(rowGroupKeys)
+		for _, g := range rowGroupKeys {
+			gt := groupMap[g]
+			name := gt.colTexts["name"]
+			value := gt.colTexts["value"]
+			if name == "" {
+				continue
+			}
+			groupedItems = append(groupedItems, groupItem{
+				group: g,
+				item: ParsedLabItem{
+					Name:       name,
+					Value:      NormalizeQualitative(value),
+					Unit:       gt.colTexts["unit"],
+					Range:      gt.colTexts["range"],
+					Confidence: int(gt.topConf),
+					BBox:       gt.bboxStr,
+					RowText:    gt.colTexts["notes"],
+				},
+			})
+		}
+	}
 
-		items = append(items, ParsedLabItem{
-			Name:       name,
-			Value:      NormalizeQualitative(value),
-			Unit:       colTexts["unit"],
-			Range:      colTexts["range"],
-			Confidence: int(topConf),
-			BBox:       bboxStr,
-			RowText:    colTexts["notes"], // notes stored temporarily in RowText
-		})
+	// Output items by group order: all of group 0 first, then group 1, etc.
+	// This ensures left column items come before right column items.
+	var sortedGroupKeys []int
+	for g := range groupSet {
+		sortedGroupKeys = append(sortedGroupKeys, g)
+	}
+	sort.Ints(sortedGroupKeys)
+
+	var items []ParsedLabItem
+	for _, g := range sortedGroupKeys {
+		for _, gi := range groupedItems {
+			if gi.group == g {
+				items = append(items, gi.item)
+			}
+		}
 	}
 
 	return items
 }
 
-// filterByRegion returns blocks whose center lies within the region rectangle.
+// filterByRegion returns blocks that overlap with the region rectangle.
+//
+// Uses bounding-box overlap test instead of center-point hit test, so blocks
+// whose center is slightly outside the region but whose body overlaps are still
+// included. This prevents edge-row items (e.g. result columns of the last few
+// rows) from being filtered out.
 //
 // Handles both coordinate formats:
-//   - New format (HasPosition=true): Left/Top = top-left, center = Left + Width/2, Top + Height/2
-//   - Legacy format (HasPosition=false): Left/Top = center, used directly
+//   - New format (HasPosition=true): Left/Top = top-left corner
+//   - Legacy format (HasPosition=false): Left/Top = center, apply center→edge compensation
 func filterByRegion(blocks []OCRResult, r TableRegion) []OCRResult {
 	newFormat := len(blocks) > 0 && blocks[0].HasPosition
 	var out []OCRResult
+	rx2 := r.X + r.W
+	ry2 := r.Y + r.H
 	for _, b := range blocks {
 		if r.Page >= 0 && b.PageIndex != r.Page {
 			continue
 		}
-		cx, cy := b.Left, b.Top
+		// Compute block bounding box edges
+		var bx1, by1, bx2, by2 int
 		if newFormat {
-			cx = b.Left + b.Width/2
-			cy = b.Top + b.Height/2
+			bx1 = b.Left
+			by1 = b.Top
+			bx2 = b.Left + b.Width
+			by2 = b.Top + b.Height
+		} else {
+			bx1 = b.Left - b.Width/2
+			by1 = b.Top - b.Height/2
+			bx2 = b.Left + b.Width/2
+			by2 = b.Top + b.Height/2
 		}
-		if cx >= r.X && cx <= r.X+r.W && cy >= r.Y && cy <= r.Y+r.H {
+		// Bounding-box overlap test: two rectangles overlap iff
+		// their projections overlap on both axes.
+		if bx1 < rx2 && bx2 > r.X && by1 < ry2 && by2 > r.Y {
 			out = append(out, b)
 		}
 	}
