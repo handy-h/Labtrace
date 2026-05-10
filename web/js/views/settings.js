@@ -19,8 +19,8 @@ const SettingsView = Vue.defineComponent({
         <span class="text-slate-400">成功{{quota.success_count}} 失败{{quota.fail_count}}</span>
       </div>
       <div class="flex items-center gap-2 mt-2">
-        <span class="text-xs text-slate-500">月配额</span>
-        <input v-model="editTotal" type="number" class="border rounded px-2 py-1 text-sm w-20" min="0">
+        <span class="text-xs text-slate-500">校准用量</span>
+        <input v-model="editUsed" type="number" class="border rounded px-2 py-1 text-sm w-20" min="0">
         <button @click="saveQuota" class="px-3 py-1 bg-blue-600 text-white rounded text-xs">校准</button>
         <span class="text-xs text-slate-400" v-if="quota">当前月份 {{quota.year_month}}</span>
       </div>
@@ -106,7 +106,7 @@ const SettingsView = Vue.defineComponent({
     const hospForm = Vue.ref({ name: '', level: '' });
     const editingHospId = Vue.ref(null);
     const quota = Vue.ref(null);
-    const editTotal = Vue.ref('');
+    const editUsed = Vue.ref('');
 
     const quotaPct = Vue.computed(() => {
       if (!quota.value || quota.value.total_quota === 0) return 0;
@@ -131,17 +131,17 @@ const SettingsView = Vue.defineComponent({
       api.getOCRQuota().then(r => {
         if (r.data) {
           quota.value = r.data;
-          editTotal.value = String(r.data.total_quota);
+          editUsed.value = String(r.data.used_count);
         }
       });
     }
     function saveQuota() {
       if (!quota.value) return;
-      const total = parseInt(editTotal.value);
-      if (isNaN(total) || total < 0) return alert('请输入有效数字');
-      api.updateOCRQuota({ year_month: quota.value.year_month, total_quota: total }).then(r => {
-        if (r.code === 0) { alert('配额已更新'); loadQuota(); }
-        else alert(r.message || '更新失败');
+      const used = parseInt(editUsed.value);
+      if (isNaN(used) || used < 0) return alert('请输入有效数字');
+      api.updateOCRQuota({ year_month: quota.value.year_month, used_count: used }).then(r => {
+        if (r.code === 0) { alert('用量已校准'); loadQuota(); }
+        else alert(r.message || '校准失败');
       });
     }
 
@@ -192,7 +192,7 @@ const SettingsView = Vue.defineComponent({
 
     Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); });
     return { backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId,
-             quota, editTotal, quotaPct, quotaTextClass, quotaBarClass,
+             quota, editUsed, quotaPct, quotaTextClass, quotaBarClass,
              doExport, doImport, deleteBackup, openHospModal, saveHospital, deleteHospital, saveQuota };
   }
 });

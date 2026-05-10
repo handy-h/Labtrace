@@ -21,21 +21,30 @@ const TrendView = Vue.defineComponent({
       <div id="trend-chart" style="height:400px;"></div>
     </div>
     <div v-if="trendData.length" class="bg-white rounded-lg shadow-sm p-4">
-      <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50">
-          <th class="p-2" v-if="!filter.test_item_id">检验项目</th>
-          <th class="p-2">采样日期</th><th class="p-2">医院</th><th class="p-2">数值</th><th class="p-2">单位</th><th class="p-2">置信度</th><th class="p-2">提示符</th><th class="p-2">参考区间</th><th class="p-2">趋势</th>
+      <table class="w-full text-sm" style="border-collapse: collapse;">
+        <thead><tr class="bg-slate-100">
+          <th class="p-2 text-center border-r border-dashed border-slate-200">采样日期</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200" v-if="!filter.test_item_id">检验项目</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">数值</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">参考区间</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">提示符</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">单位</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">趋势</th>
+          <th class="p-2 text-center">医院</th>
         </tr></thead>
         <tbody>
-          <tr v-for="d in trendData" :key="d.report_item_id" class="border-t hover:bg-slate-50">
-            <td class="p-2" v-if="!filter.test_item_id">{{d.test_item_name}}</td>
-            <td class="p-2">{{d.sample_date}}</td><td class="p-2">{{d.hospital_name}}</td>
-            <td class="p-2 font-medium">{{d.converted_value}}</td><td class="p-2">{{d.unit}}</td>
-            <td class="p-2">{{d.confidence}}%</td><td class="p-2" v-html="flagBadge(d.flag)"></td>
-            <td class="p-2 text-slate-500">{{d.ref_min != null && d.ref_max != null ? d.ref_min + '-' + d.ref_max : '-'}}</td>
-            <td class="p-2">
-              <sparkline-chart :data="sparklineData[d.test_item_id] || []" :subject-id="filter.subject_id" :test-item-id="d.test_item_id" @navigate="onSparklineNavigate"></sparkline-chart>
+          <tr v-for="(d, idx) in trendData" :key="d.report_item_id"
+              :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
+            <td class="p-2 text-center border-r border-dashed border-slate-100">{{d.sample_date}}</td>
+            <td class="p-2 text-left border-r border-dashed border-slate-100" v-if="!filter.test_item_id">{{d.test_item_name}}</td>
+            <td class="p-2 text-center font-medium border-r border-dashed border-slate-100">{{d.converted_value}}</td>
+            <td class="p-2 text-center text-slate-500 border-r border-dashed border-slate-100">{{d.ref_interval_text || (d.ref_min != null && d.ref_max != null ? d.ref_min + '-' + d.ref_max : '-')}}</td>
+            <td class="p-2 text-center border-r border-dashed border-slate-100" v-html="flagBadge(d.flag)"></td>
+            <td class="p-2 text-center border-r border-dashed border-slate-100">{{d.unit}}</td>
+            <td class="p-2 text-left border-r border-dashed border-slate-100">
+              <sparkline-chart :data="sparklineData[d.test_item_name || ('item_' + d.report_item_id)] || []" :subject-id="filter.subject_id" :test-item-id="d.test_item_id" @navigate="onSparklineNavigate"></sparkline-chart>
             </td>
+            <td class="p-2 text-left">{{d.hospital_name}}</td>
           </tr>
         </tbody>
       </table>
@@ -90,10 +99,10 @@ const TrendView = Vue.defineComponent({
     }
 
     function loadSparklineData() {
-      // Group sparkline data by test_item_id
+      // Group sparkline data by test_item_name to show trend across multiple reports
       const groups = {};
       trendData.value.forEach(d => {
-        const key = d.test_item_id || 0;
+        const key = d.test_item_name || ('item_' + d.report_item_id);
         if (!groups[key]) groups[key] = [];
         groups[key].push(d.converted_value);
       });
@@ -149,7 +158,9 @@ const TrendView = Vue.defineComponent({
         let ci = 0;
         Object.keys(groups).forEach(name => {
           const data = allDates.map(dt => groups[name][dt] ?? null);
-          series.push({ name, type: 'line', data, symbolSize: 6, connectNulls: true, color: colors[ci % colors.length] });
+          const nonNullCount = data.filter(v => v !== null).length;
+          const chartType = nonNullCount <= 1 ? 'scatter' : 'line';
+          series.push({ name, type: chartType, data, symbolSize: 6, connectNulls: true, color: colors[ci % colors.length] });
           legendData.push(name);
           ci++;
         });
@@ -158,7 +169,9 @@ const TrendView = Vue.defineComponent({
           const pt = trendData.value.find(d => d.sample_date === dt);
           return pt ? pt.converted_value : null;
         });
-        series.push({ name: '数值', type: 'line', data: values, symbolSize: 8, connectNulls: true });
+        const nonNullCount = values.filter(v => v !== null).length;
+        const chartType = nonNullCount <= 1 ? 'scatter' : 'line';
+        series.push({ name: '数值', type: chartType, data: values, symbolSize: 8, connectNulls: true });
         legendData.push('数值');
 
         // Reference bands
@@ -193,8 +206,8 @@ const TrendView = Vue.defineComponent({
     function exportTrendCsv() {
       const isAllItems = !filter.value.test_item_id;
       const headerLabels = isAllItems
-        ? ['检验项目', '采样日期', '医院', '原始值', '转换值', '单位', '置信度', '提示符', '参考区间']
-        : ['采样日期', '医院', '原始值', '转换值', '单位', '置信度', '提示符', '参考区间'];
+        ? ['检验项目', '采样日期', '医院', '原始值', '转换值', '单位', '提示符', '参考区间']
+        : ['采样日期', '医院', '原始值', '转换值', '单位', '提示符', '参考区间'];
       const rows = trendData.value.map(d => {
         const row = {
           sample_date: d.sample_date,
@@ -202,9 +215,8 @@ const TrendView = Vue.defineComponent({
           original_value: d.original_value || '',
           converted_value: d.converted_value,
           unit: d.unit,
-          confidence: d.confidence + '%',
           flag: d.flag || '',
-          ref_range: d.ref_min != null && d.ref_max != null ? d.ref_min + '-' + d.ref_max : ''
+          ref_range: d.ref_interval_text || (d.ref_min != null && d.ref_max != null ? d.ref_min + '-' + d.ref_max : '')
         };
         if (isAllItems) row['检验项目'] = d.test_item_name;
         return row;

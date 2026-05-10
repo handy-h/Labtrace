@@ -123,18 +123,18 @@ func GetOCRQuota(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Success(quota))
 }
 
-// UpdateOCRQuota allows manual adjustment of the monthly OCR quota.
+// UpdateOCRQuota allows manual calibration of the monthly OCR usage count.
 func UpdateOCRQuota(c *gin.Context) {
 	var req struct {
-		YearMonth  string `json:"year_month"`
-		TotalQuota int    `json:"total_quota"`
+		YearMonth string `json:"year_month"`
+		UsedCount int    `json:"used_count"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.Error(err.Error()))
 		return
 	}
 
-	err := services.UpdateOCRQuota(req.YearMonth, req.TotalQuota)
+	err := services.UpdateOCRQuota(req.YearMonth, req.UsedCount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -16,6 +17,7 @@ type Config struct {
 	UploadDir        string
 	BackupDir        string
 	DBPath           string
+	OCRQuotaMonthly  int
 }
 
 func Load() (*Config, error) {
@@ -46,6 +48,16 @@ func Load() (*Config, error) {
 	// OCR credentials
 	cfg.AliAccessKeyID = os.Getenv("ALI_ACCESS_KEY_ID")
 	cfg.AliAccessSecret = os.Getenv("ALI_ACCESS_KEY_SECRET")
+
+	// OCR monthly quota
+	if v := os.Getenv("OCR_QUOTA_MONTHLY"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.OCRQuotaMonthly = n
+		}
+	}
+	if cfg.OCRQuotaMonthly == 0 {
+		cfg.OCRQuotaMonthly = 200
+	}
 
 	return cfg, nil
 }

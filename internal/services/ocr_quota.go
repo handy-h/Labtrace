@@ -7,6 +7,16 @@ import (
 	"labtrace/internal/database"
 )
 
+// ocrQuotaMonthly is the monthly quota limit, set from config at startup.
+var ocrQuotaMonthly = 200
+
+// SetOCRQuotaMonthly sets the monthly OCR quota from config.
+func SetOCRQuotaMonthly(n int) {
+	if n > 0 {
+		ocrQuotaMonthly = n
+	}
+}
+
 // OCRQuota represents monthly OCR usage statistics.
 type OCRQuota struct {
 	YearMonth    string `json:"year_month"`
@@ -52,16 +62,17 @@ func GetOCRQuota() (*OCRQuota, error) {
 
 	q := &OCRQuota{}
 	err = database.DB.QueryRow(
-		`SELECT year_month, total_quota, used_count, success_count, fail_count FROM ocr_quotas WHERE year_month = ?`, ym,
-	).Scan(&q.YearMonth, &q.TotalQuota, &q.UsedCount, &q.SuccessCount, &q.FailCount)
+		`SELECT year_month, used_count, success_count, fail_count FROM ocr_quotas WHERE year_month = ?`, ym,
+	).Scan(&q.YearMonth, &q.UsedCount, &q.SuccessCount, &q.FailCount)
 	if err != nil {
 		return nil, fmt.Errorf("query quota: %w", err)
 	}
+	q.TotalQuota = ocrQuotaMonthly
 	return q, nil
 }
 
-// UpdateOCRQuota updates the total_quota for a given month (admin manual adjustment).
-func UpdateOCRQuota(yearMonth string, totalQuota int) error {
+// UpdateOCRQuota updates the used_count for a given month (admin manual calibration).
+func UpdateOCRQuota(yearMonth string, usedCount int) error {
 	// Ensure row exists
 	err := ensureQuotaRow(yearMonth)
 	if err != nil {
@@ -69,8 +80,8 @@ func UpdateOCRQuota(yearMonth string, totalQuota int) error {
 	}
 
 	_, err = database.DB.Exec(
-		`UPDATE ocr_quotas SET total_quota = ?, updated_at = datetime('now') WHERE year_month = ?`,
-		totalQuota, yearMonth,
+		`UPDATE ocr_quotas SET used_count = ?, updated_at = datetime('now') WHERE year_month = ?`,
+		usedCount, yearMonth,
 	)
 	return err
 }
@@ -84,8 +95,8 @@ func ensureQuotaRow(yearMonth string) error {
 	}
 	if count == 0 {
 		_, err = database.DB.Exec(
-			`INSERT INTO ocr_quotas (year_month, total_quota, used_count, success_count, fail_count) VALUES (?, 200, 0, 0, 0)`,
-			yearMonth,
+			`INSERT INTO ocr_quotas (year_month, total_quota, used_count, success_count, fail_count) VALUES (?, ?, 0, 0, 0)`,
+			yearMonth, ocrQuotaMonthly,
 		)
 	}
 	return err

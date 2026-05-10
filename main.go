@@ -29,6 +29,9 @@ func main() {
 	}
 	defer database.Close()
 
+	// Set OCR monthly quota from config
+	services.SetOCRQuotaMonthly(cfg.OCRQuotaMonthly)
+
 	// Backfill test_item_id on existing report_items
 	if n := services.BackfillTestItemIDs(); n > 0 {
 		fmt.Printf("Backfilled test_item_id for %d report items\n", n)

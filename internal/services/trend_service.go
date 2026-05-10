@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 
 	"labtrace/internal/database"
@@ -10,19 +11,19 @@ import (
 
 // TrendDataPoint represents a single data point in a trend chart.
 type TrendDataPoint struct {
-	ReportItemID   int64    `json:"report_item_id"`
-	TestItemID     int64    `json:"test_item_id"`
-	TestItemName   string   `json:"test_item_name"`
-	SampleDate     string   `json:"sample_date"`
-	HospitalName   string   `json:"hospital_name"`
-	OriginalValue  string   `json:"original_value"`
-	ConvertedValue float64  `json:"converted_value"`
-	Unit           string   `json:"unit"`
-	Confidence     int      `json:"confidence"`
-	Flag           string   `json:"flag"`
-	RefMin         *float64 `json:"ref_min,omitempty"`
-	RefMax         *float64 `json:"ref_max,omitempty"`
-	AgeAtSample    float64  `json:"age_at_sample"`
+	ReportItemID    int64    `json:"report_item_id"`
+	TestItemID      int64    `json:"test_item_id"`
+	TestItemName    string   `json:"test_item_name"`
+	SampleDate      string   `json:"sample_date"`
+	HospitalName    string   `json:"hospital_name"`
+	OriginalValue   string   `json:"original_value"`
+	ConvertedValue  float64  `json:"converted_value"`
+	Unit            string   `json:"unit"`
+	Flag            string   `json:"flag"`
+	RefMin          *float64 `json:"ref_min,omitempty"`
+	RefMax          *float64 `json:"ref_max,omitempty"`
+	RefIntervalText string   `json:"ref_interval_text"`
+	AgeAtSample     float64  `json:"age_at_sample"`
 }
 
 // GetTrendData retrieves trend data for a subject and test item across all reports.
@@ -31,9 +32,10 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 	query := `
 		SELECT ri.id, COALESCE(ri.test_item_id, 0), COALESCE(ri.test_item_name, ti.standard_name, ''),
 			lr.sample_date, COALESCE(h.name, ''),
-			ri.original_value, ri.normalized_value, COALESCE(ri.normalized_unit, ri.original_unit),
-			ri.confidence, ri.flag,
-			ri.ref_interval_id,
+			ri.original_value, ri.normalized_value,
+			COALESCE(NULLIF(ri.normalized_unit, ''), NULLIF(ri.original_unit, ''), ti.default_unit, ''),
+			ri.flag,
+			ri.ref_interval_id, ri.ref_interval_text,
 			s.birth_date
 		FROM report_items ri
 		JOIN lab_reports lr ON lr.id = ri.report_id
@@ -76,17 +78,23 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 		if err := rows.Scan(&p.ReportItemID, &p.TestItemID, &p.TestItemName,
 			&p.SampleDate, &p.HospitalName,
 			&p.OriginalValue, &normValue, &p.Unit,
-			&p.Confidence, &p.Flag, &refID, &birthDate); err != nil {
+			&p.Flag, &refID, &p.RefIntervalText, &birthDate); err != nil {
 			continue
 		}
 
 		if normValue.Valid {
 			p.ConvertedValue = normValue.Float64
 		} else {
-			if v, err := strconv.ParseFloat(p.OriginalValue, 64); err == nil {
+			// Try parsing original_value, handling prefixes like "<" or ">"
+			valStr := strings.TrimLeft(p.OriginalValue, "<>≤≥")
+			valStr = strings.TrimSpace(valStr)
+			if v, err := strconv.ParseFloat(valStr, 64); err == nil {
 				p.ConvertedValue = v
 			}
 		}
+
+		// Trim trailing "/" from unit (OCR often produces "U/L/" instead of "U/L")
+		p.Unit = strings.TrimRight(p.Unit, "/")
 
 		p.AgeAtSample = calcAgeYears(birthDate, p.SampleDate)
 
@@ -100,6 +108,26 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 			}
 			if refMax.Valid {
 				p.RefMax = &refMax.Float64
+			}
+		}
+
+		// Parse ref_interval_text for display and flag calculation
+		// Priority: ref_interval_text (from OCR) > ref_interval_id lookup
+		if p.RefIntervalText != "" {
+			if min, max, ok := parseRefRange(p.RefIntervalText); ok {
+				p.RefMin = &min
+				p.RefMax = &max
+			}
+		}
+
+		// Calculate flag if not set but we have ref range and numeric value
+		if p.Flag == "" && p.RefMin != nil && p.RefMax != nil && p.ConvertedValue != 0 {
+			if p.ConvertedValue < *p.RefMin {
+				p.Flag = "L"
+			} else if p.ConvertedValue > *p.RefMax {
+				p.Flag = "H"
+			} else {
+				p.Flag = "normal"
 			}
 		}
 
@@ -120,4 +148,26 @@ func calcAgeYears(birthDate, sampleDate string) float64 {
 		return 0
 	}
 	return years
+}
+
+// parseRefRange parses a reference range string like "15-40" into min and max values.
+func parseRefRange(s string) (min, max float64, ok bool) {
+	s = strings.TrimSpace(s)
+	// Try "-" separator
+	if parts := strings.SplitN(s, "-", 2); len(parts) == 2 {
+		if a, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64); err == nil {
+			if b, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64); err == nil {
+				return a, b, true
+			}
+		}
+	}
+	// Try "～" separator (Chinese tilde)
+	if parts := strings.SplitN(s, "～", 2); len(parts) == 2 {
+		if a, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64); err == nil {
+			if b, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64); err == nil {
+				return a, b, true
+			}
+		}
+	}
+	return 0, 0, false
 }
