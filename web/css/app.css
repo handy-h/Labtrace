@@ -40,5 +40,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helv
 .mini-sparkline { width: 80px; height: 24px; }
 
 /* ===== 下钻浮窗 ===== */
-.drill-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; }
-.drill-modal > div { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.drill-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.drill-modal > div { display: flex; flex-direction: column; overflow: hidden; background: white; border-radius: 0.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); padding: 1.5rem; max-height: 90vh; }
+.drill-modal > div.drill-modal-full { padding: 0; border-radius: 0; max-height: none; width: 100%; height: 100%; }

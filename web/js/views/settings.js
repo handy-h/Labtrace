@@ -32,11 +32,11 @@ const SettingsView = Vue.defineComponent({
         <button @click="openHospModal(null)" class="px-2 py-1 bg-blue-600 text-white rounded text-xs">+ 新增医院</button>
       </div>
       <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">名称</th><th class="p-2">地址</th><th class="p-2">操作</th></tr></thead>
+        <thead><tr class="bg-slate-50"><th class="p-2">名称</th><th class="p-2">级别</th><th class="p-2">操作</th></tr></thead>
         <tbody>
           <tr v-for="h in hospitals" :key="h.id" class="border-t">
             <td class="p-2 font-medium">{{h.name}}</td>
-            <td class="p-2 text-slate-500">{{h.address || '-'}}</td>
+            <td class="p-2 text-slate-500">{{h.level || '-'}}</td>
             <td class="p-2">
               <button @click="openHospModal(h)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
               <button @click="deleteHospital(h.id)" class="text-red-600 hover:underline text-xs">删除</button>
@@ -49,7 +49,16 @@ const SettingsView = Vue.defineComponent({
     <div v-if="showHospModal" class="drill-modal" @click.self="showHospModal=false"><div class="w-96">
       <h2 class="text-lg font-bold mb-4">{{editingHospId ? '编辑' : '新增'}}医院</h2>
       <input v-model="hospForm.name" placeholder="医院名称" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="hospForm.address" placeholder="地址(可选)" class="w-full border p-2 rounded mb-4 text-sm">
+      <select v-model="hospForm.level" class="w-full border p-2 rounded mb-4 text-sm">
+        <option value="">请选择医院级别</option>
+        <option value="三甲">三甲</option>
+        <option value="三乙">三乙</option>
+        <option value="二甲">二甲</option>
+        <option value="二乙">二乙</option>
+        <option value="一甲">一甲</option>
+        <option value="一乙">一乙</option>
+        <option value="其他">其他</option>
+      </select>
       <div class="flex gap-2 justify-end">
         <button @click="showHospModal=false" class="px-4 py-2 border rounded text-sm">取消</button>
         <button @click="saveHospital" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
@@ -94,7 +103,7 @@ const SettingsView = Vue.defineComponent({
     const auditLogs = Vue.ref([]);
     const hospitals = Vue.ref([]);
     const showHospModal = Vue.ref(false);
-    const hospForm = Vue.ref({ name: '', address: '' });
+    const hospForm = Vue.ref({ name: '', level: '' });
     const editingHospId = Vue.ref(null);
     const quota = Vue.ref(null);
     const editTotal = Vue.ref('');
@@ -159,10 +168,10 @@ const SettingsView = Vue.defineComponent({
     function openHospModal(h) {
       if (h) {
         editingHospId.value = h.id;
-        hospForm.value = deepClone({ name: h.name, address: h.address || '' });
+        hospForm.value = deepClone({ name: h.name, level: h.level || '' });
       } else {
         editingHospId.value = null;
-        hospForm.value = { name: '', address: '' };
+        hospForm.value = { name: '', level: '' };
       }
       showHospModal.value = true;
     }

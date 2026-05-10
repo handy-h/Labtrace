@@ -182,6 +182,16 @@ func groupIntoItem(fields []classifiedField, blocks []OCRResult) *ParsedLabItem 
 	var conf float64
 	var bbox string
 
+	// 从同一行的所有OCR块中取最大置信度作为该item的置信度
+	// 不依赖文本匹配，因为mergeSplitDecimals可能改变了文本导致匹配失败
+	for _, b := range blocks {
+		conf = maxConf(conf, b.Confidence)
+	}
+	// 如果所有OCR块的置信度都为0（API未返回），给一个合理的默认值
+	if conf == 0 {
+		conf = 85
+	}
+
 	// Find the name (first "name" field), then assign remaining fields
 	// using positional context: first value-like field = result value,
 	// second value-like field (if no explicit range) = reference range.
@@ -191,10 +201,9 @@ func groupIntoItem(fields []classifiedField, blocks []OCRResult) *ParsedLabItem 
 		if !nameFound && f.kind == "name" {
 			name = f.text
 			nameFound = true
-			// Get confidence and bbox from the original block matching this text
+			// Get bbox from the original block matching this text
 			for _, b := range blocks {
 				if strings.Contains(b.Text, f.text) || strings.Contains(f.text, b.Text) {
-					conf = maxConf(conf, b.Confidence)
 					if bbox == "" {
 						bbox = bboxJSON(b.Left, b.Top, b.Width, b.Height, b.PageIndex)
 					}
@@ -572,10 +581,11 @@ func parseContentText(content string) []ParsedLabItem {
 
 		if name != "" && value != "" {
 			allItems = append(allItems, ParsedLabItem{
-				Name:  name,
-				Value: value,
-				Unit:  unit,
-				Range: rng,
+				Name:       name,
+				Value:      value,
+				Unit:       unit,
+				Range:      rng,
+				Confidence: 95, // Content-level parsed items default to 95%
 			})
 		}
 	}

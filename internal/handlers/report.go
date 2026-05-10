@@ -102,6 +102,11 @@ func GetReport(c *gin.Context) {
 		r.HospitalName = hospName.String
 	}
 
+	// review状态时自动匹配参考区间和计算提示符，让核效阶段就能看到flag
+	if r.OCRStatus == "review" {
+		matchRefAndCalcFlag(id)
+	}
+
 	// Load report items
 	r.Items = loadReportItems(id)
 
@@ -176,9 +181,26 @@ func UpdateReportItem(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Success(nil))
 }
 
+// DeleteReportItem deletes a single report item.
+func DeleteReportItem(c *gin.Context) {
+	reportID := c.Param("id")
+	itemID := c.Param("itemId")
+
+	_, err := database.DB.Exec(`DELETE FROM report_items WHERE id=? AND report_id=?`, itemID, reportID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, models.Success(nil))
+}
+
 // ConfirmReport marks all items in a report as confirmed (reviewed).
 func ConfirmReport(c *gin.Context) {
 	id := c.Param("id")
+
+	// 匹配参考区间、计算提示符（让核效阶段就能看到flag）
+	matchRefAndCalcFlag(id)
+
 	_, err := database.DB.Exec(`UPDATE report_items SET confidence = 100 WHERE report_id = ?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
@@ -187,18 +209,16 @@ func ConfirmReport(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Success(nil))
 }
 
-// ImportReport imports a report into the database (final step after review).
-func ImportReport(c *gin.Context) {
-	id := c.Param("id")
-
+// matchRefAndCalcFlag 自动匹配test_item_id、参考区间并计算提示符flag。
+// 在确认核效和入库时都会调用。
+func matchRefAndCalcFlag(reportID string) {
 	// Get report info
 	var subjectID int64
 	var sampleDate string
 	err := database.DB.QueryRow(
-		`SELECT lr.subject_id, lr.sample_date FROM lab_reports lr WHERE lr.id = ?`, id,
+		`SELECT lr.subject_id, lr.sample_date FROM lab_reports lr WHERE lr.id = ?`, reportID,
 	).Scan(&subjectID, &sampleDate)
 	if err != nil {
-		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
 		return
 	}
 
@@ -208,20 +228,17 @@ func ImportReport(c *gin.Context) {
 		`SELECT gender, birth_date FROM subjects WHERE id = ?`, subjectID,
 	).Scan(&gender, &birthDate)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, models.Error("受检者信息未找到"))
 		return
 	}
 
-	// Calculate age at sample date
 	ageAtSample := calculateAgeYears(birthDate, sampleDate)
 
-	// Get all report items for processing
+	// Get all report items
 	rows, err := database.DB.Query(
 		`SELECT ri.id, ri.test_item_id, ri.test_item_name, ri.original_value, ri.original_unit
-		FROM report_items ri WHERE ri.report_id = ?`, id,
+		FROM report_items ri WHERE ri.report_id = ?`, reportID,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
 	}
 
@@ -240,9 +257,9 @@ func ImportReport(c *gin.Context) {
 		}
 		items = append(items, it)
 	}
-	rows.Close() // 释放连接，避免后续 DB 调用死锁（SetMaxOpenConns=1）
+	rows.Close()
 
-	// Auto-match test_item_name → test_item_id for items without one
+	// Auto-match test_item_name → test_item_id
 	for i := range items {
 		if items[i].TestItemID == nil && items[i].TestItemName != "" {
 			matchID := services.MatchTestItemByName(items[i].TestItemName)
@@ -253,15 +270,13 @@ func ImportReport(c *gin.Context) {
 		}
 	}
 
-	// Process each item: match reference interval, calculate flag
+	// Match reference interval, calculate flag
 	for _, it := range items {
 		if it.TestItemID == nil {
 			continue
 		}
-
 		ri, _ := services.MatchReference(*it.TestItemID, gender, ageAtSample)
 		flag := services.CalculateFlag(it.OrigValue, ri)
-
 		var refID interface{} = nil
 		if ri != nil {
 			refID = ri.ID
@@ -271,6 +286,14 @@ func ImportReport(c *gin.Context) {
 			refID, flag, it.ID,
 		)
 	}
+}
+
+// ImportReport imports a report into the database (final step after review).
+func ImportReport(c *gin.Context) {
+	id := c.Param("id")
+
+	// 匹配参考区间、计算提示符
+	matchRefAndCalcFlag(id)
 
 	// Calculation validation
 	reportItems := loadReportItems(id)

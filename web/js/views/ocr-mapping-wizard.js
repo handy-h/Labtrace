@@ -519,6 +519,7 @@ const OCRMappingWizard = Vue.defineComponent({
 
     // ── Step 3 ────────────────────────────────────────────
     const parsedItems = Vue.ref([]);
+    const originalItemIds = Vue.ref(new Set()); // Step 3 开始时的item id集合，用于检测删除
     const undoStack = Vue.ref([]);
     const redoStack = Vue.ref([]);
     const selectedRows = Vue.ref(new Set());
@@ -693,6 +694,10 @@ const OCRMappingWizard = Vue.defineComponent({
         group: 0,
       }));
       hasDateCol.value = false;
+      // 自动从OCR块中提取采样日期
+      if (!externalDate.value) {
+        externalDate.value = extractDateFromOCRBlocks(ocrBlocks.value);
+      }
       // 构造一个全局展开选择框
       selectionRect.value = { x: 0, y: 0, w: 1000, h: 1000, page: -1 };
       step.value = 2;
@@ -1000,6 +1005,10 @@ const OCRMappingWizard = Vue.defineComponent({
       hasDateCol.value = cands.some((hc) =>
         /日期|时间|date|time/i.test(hc.text),
       );
+      // 如果表内无日期列，自动从OCR块中提取采样日期
+      if (!hasDateCol.value && !externalDate.value) {
+        externalDate.value = extractDateFromOCRBlocks(ocrBlocks.value);
+      }
       step.value = 2;
       Vue.nextTick(drawPreviewCanvas);
     }
@@ -1265,6 +1274,32 @@ const OCRMappingWizard = Vue.defineComponent({
       return pos[colIdx] || "ignore";
     }
 
+    // 从OCR块中自动提取采样日期
+    function extractDateFromOCRBlocks(blocks) {
+      // 查找包含"采集时间"/"采样时间"/"采样日期"的块
+      for (const b of blocks) {
+        const t = (b.text || "").trim();
+        // 匹配 "采集时间:2026-04-27 03:49" 或 "采样时间 2026/04/27" 等格式
+        const m = t.match(/(?:采集|采样|样本)[时日][间期]?\s*[:：]?\s*(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})/);
+        if (m) {
+          return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+        }
+      }
+      // 回退：查找任何看起来像日期的块（YYYY-MM-DD 或 YYYY/MM/DD 格式）
+      for (const b of blocks) {
+        const t = (b.text || "").trim();
+        const m = t.match(/(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})/);
+        if (m) {
+          const month = parseInt(m[2], 10);
+          const day = parseInt(m[3], 10);
+          if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+          }
+        }
+      }
+      return "";
+    }
+
     function onMappingChange() {
       Vue.nextTick(drawPreviewCanvas);
     }
@@ -1365,6 +1400,7 @@ const OCRMappingWizard = Vue.defineComponent({
         const r = await api.applyColumnMapping(props.reportId, cfg);
         if (r.code === 0 && r.data) {
           parsedItems.value = r.data.items || [];
+          originalItemIds.value = new Set(parsedItems.value.map(it => it.id).filter(Boolean));
           undoStack.value = [];
           redoStack.value = [];
           step.value = 3;
@@ -1561,6 +1597,13 @@ const OCRMappingWizard = Vue.defineComponent({
     async function doApplyAndFinish() {
       isLoading.value = true;
       try {
+        // 先删除用户在Step 3中删除的行
+        const currentItemIds = new Set(parsedItems.value.map(it => it.id).filter(Boolean));
+        for (const origId of originalItemIds.value) {
+          if (!currentItemIds.has(origId)) {
+            await api.deleteReportItem(props.reportId, origId);
+          }
+        }
         // 将 Step 3 中手动编辑的结果逐条 PUT 回服务器
         for (const item of parsedItems.value) {
           if (item.id) {

@@ -161,6 +161,9 @@ func GetReportImage(c *gin.Context) {
 		return
 	}
 
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
 	c.File(filePath)
 }
 

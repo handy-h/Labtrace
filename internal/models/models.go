@@ -21,6 +21,7 @@ type SubjectSummary struct {
 type Hospital struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
+	Level     string `json:"level"` // 三甲|三乙|二甲|二乙|一甲|一乙|其他
 	CreatedAt string `json:"created_at"`
 }
 

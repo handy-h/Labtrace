@@ -42,7 +42,7 @@ const OCRImportView = Vue.defineComponent({
     </div>
     <!-- 报告详情弹窗 -->
     <div v-if="selectedReport" class="drill-modal" @click.self="closeReport">
-      <div class="w-full h-full bg-white flex flex-col">
+      <div class="w-full h-full bg-white flex flex-col drill-modal-full">
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-3 border-b shrink-0">
           <h2 class="text-lg font-bold">报告详情 #{{selectedReport.id}} <span :class="statusClass(selectedReport.ocr_status)">({{statusText(selectedReport.ocr_status)}})</span></h2>
@@ -74,7 +74,7 @@ const OCRImportView = Vue.defineComponent({
           <div class="w-[55%] overflow-auto border-l">
             <table class="w-full text-sm">
               <thead><tr class="bg-slate-50 text-left text-slate-600 sticky top-0">
-                <th class="p-2">项目</th><th class="p-2">结果</th><th class="p-2">参考区间</th><th class="p-2">单位</th><th class="p-2">提示符</th><th class="p-2">置信度</th>
+                <th class="p-2">项目</th><th class="p-2">结果</th><th class="p-2">参考区间</th><th class="p-2">单位</th><th class="p-2">提示符</th>
               </tr></thead>
               <tbody>
                 <tr v-for="(it, idx) in selectedReport.items" :key="it.id"
@@ -131,7 +131,6 @@ const OCRImportView = Vue.defineComponent({
                       <span class="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400">✎</span>
                     </div>
                   </td>
-                  <td class="p-2">{{it.confidence}}%</td>
                 </tr>
               </tbody>
             </table>
@@ -244,7 +243,7 @@ const OCRImportView = Vue.defineComponent({
       api.getReport(id).then((r) => {
         if (r.data) {
           selectedReport.value = r.data;
-          reportImageUrl.value = api.getReportImage(id);
+          reportImageUrl.value = api.getReportImage(r.data.id) + '?t=' + Date.now();
           selectedRowIndex.value = -1;
           editingItemId.value = null;
           // 低置信度自动聚焦
@@ -263,20 +262,61 @@ const OCRImportView = Vue.defineComponent({
     }
     function doImport(id) {
       if (!confirm("确认入库？")) return;
+      // 先保存当前正在编辑的数据
+      flushEditFormToLocal();
+      const pendingSave = editingItemId.value && selectedReport.value;
+      if (pendingSave) {
+        const item = selectedReport.value.items.find((it) => it.id === editingItemId.value);
+        if (item) {
+          const snapshot = { ...editForm.value };
+          api.updateReportItem(selectedReport.value.id, item.id, snapshot).then(() => {
+            editingItemId.value = null;
+            doImportApi(id);
+          });
+          return;
+        }
+      }
+      doImportApi(id);
+    }
+    function doImportApi(id) {
       api.importReport(id).then((r) => {
         if (r.code === 0) {
           alert("入库成功");
           loadReports();
+          // 重新加载报告详情以反映后端修改（匹配test_item_id、计算flag等）
+          if (selectedReport.value) {
+            viewReport(selectedReport.value.id);
+          }
         } else alert(r.message);
       });
     }
     function doConfirm(id) {
       if (!confirm("确认核效？")) return;
+      // 先保存当前正在编辑的数据
+      flushEditFormToLocal();
+      const pendingSave = editingItemId.value && selectedReport.value;
+      if (pendingSave) {
+        const item = selectedReport.value.items.find((it) => it.id === editingItemId.value);
+        if (item) {
+          const snapshot = { ...editForm.value };
+          api.updateReportItem(selectedReport.value.id, item.id, snapshot).then(() => {
+            editingItemId.value = null;
+            doConfirmApi(id);
+          });
+          return;
+        }
+      }
+      doConfirmApi(id);
+    }
+    function doConfirmApi(id) {
       api.confirmReport(id).then((r) => {
         if (r.code === 0) {
           alert("核效成功");
           loadReports();
-          closeReport();
+          // 重新加载报告详情以反映后端修改
+          if (selectedReport.value) {
+            viewReport(selectedReport.value.id);
+          }
         } else alert(r.message);
       });
     }
@@ -353,8 +393,10 @@ const OCRImportView = Vue.defineComponent({
     function saveEdit(item) {
       // 先本地写回
       flushEditFormToLocal();
+      // 快照当前editForm，避免异步回调时editForm已被覆盖
+      const snapshot = { ...editForm.value };
       api
-        .updateReportItem(selectedReport.value.id, item.id, editForm.value)
+        .updateReportItem(selectedReport.value.id, item.id, snapshot)
         .then((r) => {
           if (r.code === 0) {
             editingItemId.value = null;
@@ -365,8 +407,9 @@ const OCRImportView = Vue.defineComponent({
     }
     function saveEditQuiet(item) {
       flushEditFormToLocal();
+      const snapshot = { ...editForm.value };
       api
-        .updateReportItem(selectedReport.value.id, item.id, editForm.value)
+        .updateReportItem(selectedReport.value.id, item.id, snapshot)
         .then(() => { editingItemId.value = null; });
     }
     // blur时的处理：本地写回 + 异步保存到API（不重新加载整个报告）
@@ -375,13 +418,13 @@ const OCRImportView = Vue.defineComponent({
       flushEditFormToLocal();
       const itemId = editingItemId.value;
       const reportId = selectedReport.value.id;
-      // 延迟保存，避免快速切换时重复提交
-      clearTimeout(onEditBlur._timer);
-      onEditBlur._timer = setTimeout(() => {
-        api.updateReportItem(reportId, itemId, editForm.value).catch(() => {});
+      // 快照当前editForm，避免延迟回调时editForm已被下一行覆盖
+      const editFormSnapshot = { ...editForm.value };
+      // 每行独立延迟保存，不取消前一个行的保存
+      setTimeout(() => {
+        api.updateReportItem(reportId, itemId, editFormSnapshot).catch(() => {});
       }, 300);
     }
-    onEditBlur._timer = 0;
     function cancelEdit() {
       editingItemId.value = null;
     }

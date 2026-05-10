@@ -158,6 +158,9 @@ const api = {
   updateReportItem(reportId, itemId, d) {
     return this.put("/reports/" + reportId + "/items/" + itemId, d);
   },
+  deleteReportItem(reportId, itemId) {
+    return this.del("/reports/" + reportId + "/items/" + itemId);
+  },
   confirmReport(id) {
     return this.post("/reports/" + id + "/confirm");
   },

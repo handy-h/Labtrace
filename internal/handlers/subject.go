@@ -125,7 +125,7 @@ func DeleteSubject(c *gin.Context) {
 // --- Hospital CRUD ---
 
 func ListHospitals(c *gin.Context) {
-	rows, err := database.DB.Query(`SELECT id, name, created_at FROM hospitals ORDER BY name`)
+	rows, err := database.DB.Query(`SELECT id, name, level, created_at FROM hospitals ORDER BY name`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
@@ -135,7 +135,7 @@ func ListHospitals(c *gin.Context) {
 	hospitals := []models.Hospital{}
 	for rows.Next() {
 		var h models.Hospital
-		if err := rows.Scan(&h.ID, &h.Name, &h.CreatedAt); err != nil {
+		if err := rows.Scan(&h.ID, &h.Name, &h.Level, &h.CreatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 			return
 		}
@@ -150,7 +150,7 @@ func CreateHospital(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.Error(err.Error()))
 		return
 	}
-	result, err := database.DB.Exec(`INSERT INTO hospitals (name) VALUES (?)`, h.Name)
+	result, err := database.DB.Exec(`INSERT INTO hospitals (name, level) VALUES (?, ?)`, h.Name, h.Level)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
@@ -167,7 +167,7 @@ func UpdateHospital(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.Error(err.Error()))
 		return
 	}
-	_, err := database.DB.Exec(`UPDATE hospitals SET name=? WHERE id=?`, h.Name, id)
+	_, err := database.DB.Exec(`UPDATE hospitals SET name=?, level=? WHERE id=?`, h.Name, h.Level, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return

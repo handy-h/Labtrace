@@ -150,6 +150,7 @@ func migrate(db *sql.DB) error {
 		`ALTER TABLE report_items ADD COLUMN ref_interval_text TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE lab_reports ADD COLUMN column_mapping_json TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE lab_reports ADD COLUMN ocr_table_json TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE hospitals ADD COLUMN level TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, stmt := range alterStmts {
 		db.Exec(stmt) // Ignore error — column may already exist

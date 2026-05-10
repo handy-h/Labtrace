@@ -96,6 +96,7 @@ func main() {
 		v1.GET("/reports", handlers.ListReports)
 		v1.GET("/reports/:id", handlers.GetReport)
 		v1.PUT("/reports/:id/items/:itemId", handlers.UpdateReportItem)
+		v1.DELETE("/reports/:id/items/:itemId", handlers.DeleteReportItem)
 		v1.POST("/reports/:id/confirm", handlers.ConfirmReport)
 		v1.POST("/reports/:id/import", handlers.ImportReport)
 		v1.POST("/reports/:id/re-ocr", handlers.ReOCR)
