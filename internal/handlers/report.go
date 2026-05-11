@@ -170,6 +170,12 @@ func UpdateReportItem(c *gin.Context) {
 		return
 	}
 
+	// If test_item_id is explicitly provided, update it separately
+	if item.TestItemID != nil {
+		database.DB.Exec(`UPDATE report_items SET test_item_id=? WHERE id=? AND report_id=?`,
+			*item.TestItemID, itemID, reportID)
+	}
+
 	_, err := database.DB.Exec(
 		`UPDATE report_items SET test_item_name=?, original_value=?, original_unit=?, ref_interval_text=?, flag=?, confidence=?, row_notes=? WHERE id=? AND report_id=?`,
 		item.TestItemName, item.OriginalValue, item.OriginalUnit, item.RefIntervalText, item.Flag, item.Confidence, item.RowNotes, itemID, reportID,

@@ -31,13 +31,17 @@ const SettingsView = Vue.defineComponent({
         <h2 class="font-semibold">医院管理</h2>
         <button @click="openHospModal(null)" class="px-2 py-1 bg-blue-600 text-white rounded text-xs">+ 新增医院</button>
       </div>
-      <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">名称</th><th class="p-2">级别</th><th class="p-2">操作</th></tr></thead>
+      <table class="w-full text-sm" style="border-collapse: collapse;">
+        <thead><tr class="bg-slate-100">
+          <th class="p-2 text-center border-r border-dashed border-slate-200">名称</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">级别</th>
+          <th class="p-2 text-center">操作</th>
+        </tr></thead>
         <tbody>
-          <tr v-for="h in hospitals" :key="h.id" class="border-t">
-            <td class="p-2 font-medium">{{h.name}}</td>
-            <td class="p-2 text-slate-500">{{h.level || '-'}}</td>
-            <td class="p-2">
+          <tr v-for="(h, idx) in hospitals" :key="h.id" :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
+            <td class="p-2 font-medium border-r border-dashed border-slate-100">{{h.name}}</td>
+            <td class="p-2 text-slate-500 text-center border-r border-dashed border-slate-100">{{h.level || '-'}}</td>
+            <td class="p-2 text-center">
               <button @click="openHospModal(h)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
               <button @click="deleteHospital(h.id)" class="text-red-600 hover:underline text-xs">删除</button>
             </td>
@@ -74,24 +78,38 @@ const SettingsView = Vue.defineComponent({
           导入备份 <input type="file" @change="doImport" accept=".bak" class="hidden">
         </label>
       </div>
-      <table v-if="backups.length" class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">文件名</th><th class="p-2">描述</th><th class="p-2">大小</th><th class="p-2">时间</th><th class="p-2">操作</th></tr></thead>
+      <table v-if="backups.length" class="w-full text-sm" style="border-collapse: collapse;">
+        <thead><tr class="bg-slate-100">
+          <th class="p-2 text-center border-r border-dashed border-slate-200">文件名</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">描述</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">大小</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">时间</th>
+          <th class="p-2 text-center">操作</th>
+        </tr></thead>
         <tbody>
-          <tr v-for="b in backups" :key="b.id" class="border-t">
-            <td class="p-2">{{b.filename}}</td><td class="p-2">{{b.description}}</td>
-            <td class="p-2">{{(b.file_size/1024).toFixed(1)}}KB</td><td class="p-2">{{b.created_at}}</td>
-            <td class="p-2"><button @click="deleteBackup(b.id)" class="text-red-600 hover:underline text-xs">删除</button></td>
+          <tr v-for="(b, idx) in backups" :key="b.id" :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
+            <td class="p-2 border-r border-dashed border-slate-100">{{b.filename}}</td>
+            <td class="p-2 border-r border-dashed border-slate-100">{{b.description}}</td>
+            <td class="p-2 text-center border-r border-dashed border-slate-100">{{(b.file_size/1024).toFixed(1)}}KB</td>
+            <td class="p-2 text-center border-r border-dashed border-slate-100">{{b.created_at}}</td>
+            <td class="p-2 text-center"><button @click="deleteBackup(b.id)" class="text-red-600 hover:underline text-xs">删除</button></td>
           </tr>
         </tbody>
       </table>
     </div>
     <div class="bg-white rounded-lg shadow-sm p-4">
       <h2 class="font-semibold mb-2">审计日志</h2>
-      <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">操作</th><th class="p-2">实体</th><th class="p-2">时间</th></tr></thead>
+      <table class="w-full text-sm" style="border-collapse: collapse;">
+        <thead><tr class="bg-slate-100">
+          <th class="p-2 text-center border-r border-dashed border-slate-200">操作</th>
+          <th class="p-2 text-center border-r border-dashed border-slate-200">实体</th>
+          <th class="p-2 text-center">时间</th>
+        </tr></thead>
         <tbody>
-          <tr v-for="l in auditLogs" :key="l.id" class="border-t">
-            <td class="p-2">{{l.action}}</td><td class="p-2">{{l.entity_type}}#{{l.entity_id}}</td><td class="p-2">{{l.created_at}}</td>
+          <tr v-for="(l, idx) in auditLogs" :key="l.id" :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
+            <td class="p-2 border-r border-dashed border-slate-100">{{l.action}}</td>
+            <td class="p-2 text-center border-r border-dashed border-slate-100">{{l.entity_type}}#{{l.entity_id}}</td>
+            <td class="p-2 text-center">{{l.created_at}}</td>
           </tr>
         </tbody>
       </table>

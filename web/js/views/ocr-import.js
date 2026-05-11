@@ -88,6 +88,9 @@ const OCRImportView = Vue.defineComponent({
                            @keydown.escape="cancelEdit" @blur="onEditBlur" ref="editInput" autofocus>
                     <div v-else class="flex items-center gap-1 rounded border border-transparent hover:border-blue-300 hover:bg-blue-50/50 px-1 transition-all">
                       <span>{{it.test_item_name || '-'}}</span>
+                      <button v-if="!it.test_item_id && it.test_item_name"
+                              @click.stop="openLinkModal(it)"
+                              class="text-[10px] text-blue-500 hover:text-blue-700 border border-blue-200 rounded px-1 py-0 hover:bg-blue-50 transition-all opacity-0 group-hover:opacity-100">关联</button>
                       <span class="opacity-0 group-hover:opacity-100 text-[10px] text-blue-400">✎</span>
                     </div>
                   </td>
@@ -162,6 +165,37 @@ const OCRImportView = Vue.defineComponent({
       @close="wizardVisible=false"
       @done="onWizardDone">
     </ocr-mapping-wizard>
+    <!-- 关联标准项目弹窗 -->
+    <div v-if="showLinkModal" class="drill-modal" @click.self="showLinkModal=false"><div class="w-[420px]">
+      <h2 class="text-lg font-bold mb-3">关联标准项目</h2>
+      <div class="bg-slate-50 rounded p-3 mb-3">
+        <span class="text-sm text-slate-500">OCR 识别名：</span>
+        <span class="font-medium">{{linkingItem.test_item_name}}</span>
+      </div>
+      <div class="mb-3">
+        <label class="text-sm text-slate-600 mb-1 block">选择标准项目</label>
+        <input v-model="linkSearch" placeholder="输入关键字搜索..."
+               class="w-full border rounded px-2 py-1.5 text-sm mb-1" @input="filterLinkItems">
+        <div class="border rounded max-h-48 overflow-auto">
+          <div v-for="it in filteredLinkItems" :key="it.id"
+               class="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50"
+               :class="{'bg-blue-100': linkSelectedId === it.id}"
+               @click="linkSelectedId = it.id">
+            {{it.standard_name}} <span class="text-slate-400 text-xs ml-2">{{it.category}}</span>
+          </div>
+          <div v-if="!filteredLinkItems.length" class="p-3 text-slate-400 text-center text-sm">无匹配项目</div>
+        </div>
+      </div>
+      <label class="flex items-center gap-2 text-sm mb-4 cursor-pointer">
+        <input type="checkbox" v-model="linkCreateAlias" class="rounded">
+        同时创建别名（今后该 OCR 名称自动匹配）
+      </label>
+      <div class="flex gap-2 justify-end">
+        <button @click="showLinkModal=false" class="px-4 py-2 border rounded text-sm">取消</button>
+        <button @click="doLinkItem" :disabled="!linkSelectedId"
+                class="px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50">关联</button>
+      </div>
+    </div></div>
   </div>`,
   setup() {
     const subjects = Vue.ref([]);
@@ -187,6 +221,15 @@ const OCRImportView = Vue.defineComponent({
     const magnifier = Vue.ref(null);
     const editInput = Vue.ref(null);
     let selectedFile = null;
+
+    // 关联项目
+    const showLinkModal = Vue.ref(false);
+    const linkingItem = Vue.ref(null);
+    const linkSearch = Vue.ref('');
+    const allTestItems = Vue.ref([]);
+    const filteredLinkItems = Vue.ref([]);
+    const linkSelectedId = Vue.ref(null);
+    const linkCreateAlias = Vue.ref(true);
 
     // 全局受检者联动
     const currentSubjectId = Vue.inject("currentSubjectId", null);
@@ -583,6 +626,44 @@ const OCRImportView = Vue.defineComponent({
       viewReport(reportId);
     }
 
+    // 关联项目
+    function openLinkModal(item) {
+      linkingItem.value = item;
+      linkSearch.value = '';
+      linkSelectedId.value = null;
+      linkCreateAlias.value = true;
+      showLinkModal.value = true;
+      if (!allTestItems.value.length) {
+        api.listTestItems().then(r => { if (r.data) { allTestItems.value = r.data; filterLinkItems(); } });
+      } else {
+        filterLinkItems();
+      }
+    }
+    function filterLinkItems() {
+      const q = linkSearch.value.toLowerCase();
+      filteredLinkItems.value = allTestItems.value.filter(it =>
+        it.standard_name.toLowerCase().includes(q) || it.code.toLowerCase().includes(q)
+      );
+    }
+    async function doLinkItem() {
+      if (!linkSelectedId.value || !linkingItem.value) return;
+      const reportId = selectedReport.value.id;
+      const itemId = linkingItem.value.id;
+      // 1. 更新 report_item 的 test_item_id
+      const snapshot = Object.assign({}, linkingItem.value, { test_item_id: linkSelectedId.value });
+      await api.updateReportItem(reportId, itemId, snapshot);
+      // 2. 可选：创建别名
+      if (linkCreateAlias.value) {
+        const hospitalId = selectedReport.value.hospital_id || null;
+        await api.createAlias(linkSelectedId.value, { alias_name: linkingItem.value.test_item_name, hospital_id: hospitalId });
+      }
+      // 3. 本地刷新
+      linkingItem.value.test_item_id = linkSelectedId.value;
+      const matched = allTestItems.value.find(it => it.id === linkSelectedId.value);
+      if (matched) linkingItem.value.test_item_name = matched.standard_name;
+      showLinkModal.value = false;
+    }
+
     function statusClass(s) {
       return (
         {
@@ -657,6 +738,15 @@ const OCRImportView = Vue.defineComponent({
       wizardFilePath,
       openMappingWizard,
       onWizardDone,
+      showLinkModal,
+      linkingItem,
+      linkSearch,
+      filteredLinkItems,
+      linkSelectedId,
+      linkCreateAlias,
+      openLinkModal,
+      filterLinkItems,
+      doLinkItem,
     };
   },
 });

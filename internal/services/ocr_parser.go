@@ -652,6 +652,11 @@ func classifyText(s string) string {
 		return "name"
 	}
 
+	// 10. Qualitative result symbols (-, +, ±, 1+~4+)
+	if isQualitativeValue(s) {
+		return "value"
+	}
+
 	// Everything else is noise
 	return "noise"
 }
@@ -663,6 +668,15 @@ func isBoundValue(s string) bool {
 		return true
 	}
 	return false
+}
+
+// isQualitativeValue checks if text is a qualitative result like -, +, ±, 1+~4+.
+func isQualitativeValue(s string) bool {
+	qualitative := map[string]bool{
+		"-": true, "+": true, "±": true,
+		"1+": true, "2+": true, "3+": true, "4+": true,
+	}
+	return qualitative[s]
 }
 
 // isEnglishAbbrev checks if string is an English medical abbreviation.
