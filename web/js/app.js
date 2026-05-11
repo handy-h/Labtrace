@@ -81,6 +81,7 @@ app.component("TrendView", TrendView);
 app.component("SettingsView", SettingsView);
 
 // 注册可复用组件
+app.component("DataTable", DataTable);
 app.component("OcrMappingWizard", OCRMappingWizard);
 app.component("CrudModal", CrudModal);
 app.component("SearchDropdown", SearchDropdown);

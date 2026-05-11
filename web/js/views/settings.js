@@ -1,118 +1,93 @@
-// settings.js — 设置视图（增强：医院管理区）
+// settings.js — 设置视图
 const SettingsView = Vue.defineComponent({
   template: `
-  <div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">设置</h1>
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <h2 class="font-semibold mb-2">数据库加密</h2>
-      <p class="text-sm text-slate-500">加密状态: <span class="text-green-600">已启用</span> (密钥来自 .env)</p>
+  <div class="page">
+    <h1 class="page-title">设置</h1>
+
+    <!-- 数据库加密 -->
+    <div class="card">
+      <h2 class="page-subtitle">数据库加密</h2>
+      <p class="text-sm" style="color: var(--color-text-secondary)">
+        加密状态: <span class="badge badge-success">已启用</span> (密钥来自 .env)
+      </p>
     </div>
+
     <!-- OCR 配额管理 -->
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <h2 class="font-semibold mb-2">OCR 月度配额</h2>
+    <div class="card" style="margin-top: var(--card-gap)">
+      <h2 class="page-subtitle">OCR 月度配额</h2>
       <div class="flex items-center gap-4 text-sm" v-if="quota">
-        <span class="text-slate-600">当前用量</span>
+        <span style="color: var(--color-text-secondary)">当前用量</span>
         <span :class="quotaTextClass">{{quota.used_count}} / {{quota.total_quota}}</span>
-        <div class="w-32 h-2.5 bg-slate-100 rounded-full overflow-hidden">
-          <div class="h-full rounded-full transition-all" :class="quotaBarClass" :style="{width: quotaPct + '%'}"></div>
+        <div class="progress-bar" style="width: 8rem">
+          <div class="progress-bar-fill" :class="quotaBarClass" :style="{width: quotaPct + '%'}"></div>
         </div>
-        <span class="text-slate-400">成功{{quota.success_count}} 失败{{quota.fail_count}}</span>
+        <span style="color: var(--color-text-muted)">成功{{quota.success_count}} 失败{{quota.fail_count}}</span>
       </div>
-      <div class="flex items-center gap-2 mt-2">
-        <span class="text-xs text-slate-500">校准用量</span>
-        <input v-model="editUsed" type="number" class="border rounded px-2 py-1 text-sm w-20" min="0">
-        <button @click="saveQuota" class="px-3 py-1 bg-blue-600 text-white rounded text-xs">校准</button>
-        <span class="text-xs text-slate-400" v-if="quota">当前月份 {{quota.year_month}}</span>
+      <div class="form-row" style="margin-top: 0.5rem">
+        <span class="text-xs" style="color: var(--color-text-secondary)">校准用量</span>
+        <input v-model="editUsed" type="number" class="form-input" style="width: 5rem" min="0">
+        <button @click="saveQuota" class="btn btn-primary btn-sm">校准</button>
+        <span class="text-xs" style="color: var(--color-text-muted)" v-if="quota">当前月份 {{quota.year_month}}</span>
       </div>
     </div>
+
     <!-- 医院管理 -->
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <div class="flex gap-3 items-center mb-2">
-        <h2 class="font-semibold">医院管理</h2>
-        <button @click="openHospModal(null)" class="px-2 py-1 bg-blue-600 text-white rounded text-xs">+ 新增医院</button>
+    <div class="card" style="margin-top: var(--card-gap)">
+      <div class="toolbar">
+        <h2 class="page-subtitle" style="margin-bottom: 0">医院管理</h2>
+        <button @click="openHospModal(null)" class="btn btn-primary btn-sm">+ 新增医院</button>
       </div>
-      <table class="w-full text-sm" style="border-collapse: collapse;">
-        <thead><tr class="bg-slate-100">
-          <th class="p-2 text-center border-r border-dashed border-slate-200">名称</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">级别</th>
-          <th class="p-2 text-center">操作</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="(h, idx) in hospitals" :key="h.id" :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
-            <td class="p-2 font-medium border-r border-dashed border-slate-100">{{h.name}}</td>
-            <td class="p-2 text-slate-500 text-center border-r border-dashed border-slate-100">{{h.level || '-'}}</td>
-            <td class="p-2 text-center">
-              <button @click="openHospModal(h)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
-              <button @click="deleteHospital(h.id)" class="text-red-600 hover:underline text-xs">删除</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <data-table :columns="hospitalColumns" :data="hospitals" empty-text="暂无医院">
+        <template #cell-level="{ row }">
+          <span class="cell-muted">{{row.level || '-'}}</span>
+        </template>
+        <template #cell-actions="{ row }">
+          <button @click="openHospModal(row)" class="btn-ghost">编辑</button>
+          <button @click="deleteHospital(row.id)" class="btn-ghost danger">删除</button>
+        </template>
+      </data-table>
     </div>
+
     <!-- 医院弹窗 -->
-    <div v-if="showHospModal" class="drill-modal" @click.self="showHospModal=false"><div class="w-96">
-      <h2 class="text-lg font-bold mb-4">{{editingHospId ? '编辑' : '新增'}}医院</h2>
-      <input v-model="hospForm.name" placeholder="医院名称" class="w-full border p-2 rounded mb-2 text-sm">
-      <select v-model="hospForm.level" class="w-full border p-2 rounded mb-4 text-sm">
+    <crud-modal :title="(editingHospId ? '编辑' : '新增') + '医院'" :visible="showHospModal" @close="showHospModal=false" @save="saveHospital">
+      <input v-model="hospForm.name" placeholder="医院名称" class="form-input mb-2">
+      <select v-model="hospForm.level" class="form-select">
         <option value="">请选择医院级别</option>
-        <option value="三甲">三甲</option>
-        <option value="三乙">三乙</option>
-        <option value="二甲">二甲</option>
-        <option value="二乙">二乙</option>
-        <option value="一甲">一甲</option>
-        <option value="一乙">一乙</option>
+        <option value="三甲">三甲</option><option value="三乙">三乙</option>
+        <option value="二甲">二甲</option><option value="二乙">二乙</option>
+        <option value="一甲">一甲</option><option value="一乙">一乙</option>
         <option value="其他">其他</option>
       </select>
-      <div class="flex gap-2 justify-end">
-        <button @click="showHospModal=false" class="px-4 py-2 border rounded text-sm">取消</button>
-        <button @click="saveHospital" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
-      </div>
-    </div></div>
+    </crud-modal>
+
     <!-- 备份与恢复 -->
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <h2 class="font-semibold mb-2">备份与恢复</h2>
-      <div class="flex gap-3 mb-3">
-        <input v-model="backupDesc" placeholder="备份描述" class="border rounded px-2 py-1 text-sm">
-        <button @click="doExport" class="px-3 py-1 bg-blue-600 text-white rounded text-sm">导出备份</button>
-        <label class="px-3 py-1 bg-slate-600 text-white rounded text-sm cursor-pointer">
+    <div class="card" style="margin-top: var(--card-gap)">
+      <h2 class="page-subtitle">备份与恢复</h2>
+      <div class="form-row" style="margin-bottom: 0.75rem">
+        <input v-model="backupDesc" placeholder="备份描述" class="form-input" style="max-width: 20rem">
+        <button @click="doExport" class="btn btn-primary btn-sm">导出备份</button>
+        <label class="btn btn-secondary btn-sm" style="cursor: pointer">
           导入备份 <input type="file" @change="doImport" accept=".bak" class="hidden">
         </label>
       </div>
-      <table v-if="backups.length" class="w-full text-sm" style="border-collapse: collapse;">
-        <thead><tr class="bg-slate-100">
-          <th class="p-2 text-center border-r border-dashed border-slate-200">文件名</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">描述</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">大小</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">时间</th>
-          <th class="p-2 text-center">操作</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="(b, idx) in backups" :key="b.id" :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
-            <td class="p-2 border-r border-dashed border-slate-100">{{b.filename}}</td>
-            <td class="p-2 border-r border-dashed border-slate-100">{{b.description}}</td>
-            <td class="p-2 text-center border-r border-dashed border-slate-100">{{(b.file_size/1024).toFixed(1)}}KB</td>
-            <td class="p-2 text-center border-r border-dashed border-slate-100">{{b.created_at}}</td>
-            <td class="p-2 text-center"><button @click="deleteBackup(b.id)" class="text-red-600 hover:underline text-xs">删除</button></td>
-          </tr>
-        </tbody>
-      </table>
+      <data-table v-if="backups.length" :columns="backupColumns" :data="backups" empty-text="">
+        <template #cell-file_size="{ row }">
+          {{(row.file_size/1024).toFixed(1)}}KB
+        </template>
+        <template #cell-actions="{ row }">
+          <button @click="deleteBackup(row.id)" class="btn-ghost danger">删除</button>
+        </template>
+      </data-table>
     </div>
-    <div class="bg-white rounded-lg shadow-sm p-4">
-      <h2 class="font-semibold mb-2">审计日志</h2>
-      <table class="w-full text-sm" style="border-collapse: collapse;">
-        <thead><tr class="bg-slate-100">
-          <th class="p-2 text-center border-r border-dashed border-slate-200">操作</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">实体</th>
-          <th class="p-2 text-center">时间</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="(l, idx) in auditLogs" :key="l.id" :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
-            <td class="p-2 border-r border-dashed border-slate-100">{{l.action}}</td>
-            <td class="p-2 text-center border-r border-dashed border-slate-100">{{l.entity_type}}#{{l.entity_id}}</td>
-            <td class="p-2 text-center">{{l.created_at}}</td>
-          </tr>
-        </tbody>
-      </table>
+
+    <!-- 审计日志 -->
+    <div class="card" style="margin-top: var(--card-gap)">
+      <h2 class="page-subtitle">审计日志</h2>
+      <data-table :columns="auditColumns" :data="auditLogs" empty-text="暂无日志">
+        <template #cell-entity="{ row }">
+          {{row.entity_type}}#{{row.entity_id}}
+        </template>
+      </data-table>
     </div>
   </div>`,
   setup() {
@@ -125,6 +100,24 @@ const SettingsView = Vue.defineComponent({
     const editingHospId = Vue.ref(null);
     const quota = Vue.ref(null);
     const editUsed = Vue.ref('');
+
+    const hospitalColumns = [
+      { key: 'name', label: '名称', medium: true },
+      { key: 'level', label: '级别', align: 'center', muted: true },
+      { key: 'actions', label: '操作', width: '8rem' },
+    ];
+    const backupColumns = [
+      { key: 'filename', label: '文件名' },
+      { key: 'description', label: '描述' },
+      { key: 'file_size', label: '大小', align: 'center' },
+      { key: 'created_at', label: '时间', align: 'center' },
+      { key: 'actions', label: '操作', width: '6rem' },
+    ];
+    const auditColumns = [
+      { key: 'action', label: '操作' },
+      { key: 'entity', label: '实体', align: 'center' },
+      { key: 'created_at', label: '时间', align: 'center' },
+    ];
 
     const quotaPct = Vue.computed(() => {
       if (!quota.value || quota.value.total_quota === 0) return 0;
@@ -147,10 +140,7 @@ const SettingsView = Vue.defineComponent({
 
     function loadQuota() {
       api.getOCRQuota().then(r => {
-        if (r.data) {
-          quota.value = r.data;
-          editUsed.value = String(r.data.used_count);
-        }
+        if (r.data) { quota.value = r.data; editUsed.value = String(r.data.used_count); }
       });
     }
     function saveQuota() {
@@ -182,7 +172,6 @@ const SettingsView = Vue.defineComponent({
     }
     function deleteBackup(id) { if (confirm('确认删除？')) api.deleteBackup(id).then(() => loadBackups()); }
 
-    // 医院CRUD
     function openHospModal(h) {
       if (h) {
         editingHospId.value = h.id;
@@ -209,8 +198,11 @@ const SettingsView = Vue.defineComponent({
     }
 
     Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); });
-    return { backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId,
-             quota, editUsed, quotaPct, quotaTextClass, quotaBarClass,
-             doExport, doImport, deleteBackup, openHospModal, saveHospital, deleteHospital, saveQuota };
+    return {
+      backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId,
+      quota, editUsed, quotaPct, quotaTextClass, quotaBarClass,
+      hospitalColumns, backupColumns, auditColumns,
+      doExport, doImport, deleteBackup, openHospModal, saveHospital, deleteHospital, saveQuota
+    };
   }
 });

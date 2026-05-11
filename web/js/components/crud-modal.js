@@ -9,13 +9,13 @@ const CrudModal = Vue.defineComponent({
   },
   emits: ['close', 'save'],
   template: `
-  <div v-if="visible" class="drill-modal" @click.self="$emit('close')">
-    <div :class="width">
-      <h2 class="text-lg font-bold mb-4">{{title}}</h2>
+  <div v-if="visible" class="modal-overlay" @click.self="$emit('close')">
+    <div :class="['modal-content', width]">
+      <h2 class="modal-title">{{title}}</h2>
       <slot></slot>
-      <div v-if="!hideFooter" class="flex gap-2 justify-end mt-4">
-        <button @click="$emit('close')" class="px-4 py-2 border rounded text-sm hover:bg-slate-50">取消</button>
-        <button @click="$emit('save')" class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">保存</button>
+      <div v-if="!hideFooter" class="modal-footer">
+        <button @click="$emit('close')" class="btn btn-secondary">取消</button>
+        <button @click="$emit('save')" class="btn btn-primary">保存</button>
       </div>
     </div>
   </div>`,

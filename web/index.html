@@ -6,13 +6,24 @@
         <base href="/web/" />
         <title>溯源健康 LabTrace</title>
         <script src="https://cdn.tailwindcss.com"></script>
+        <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              colors: {
+                primary: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' },
+              },
+            },
+          },
+        }
+        </script>
         <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
         <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
         <link rel="stylesheet" href="css/app.css" />
     </head>
-    <body class="bg-gray-50 text-gray-900 font-sans">
+    <body class="font-sans" style="background: var(--color-bg); color: var(--color-text)">
         <div id="app">
             <!-- 顶栏 -->
             <header
@@ -87,6 +98,7 @@
 
         <script src="js/api.js?v=2"></script>
         <script src="js/utils.js?v=2"></script>
+        <script src="js/components/data-table.js?v=2"></script>
         <script src="js/components/crud-modal.js?v=2"></script>
         <script src="js/components/search-dropdown.js?v=2"></script>
         <script src="js/components/subject-selector.js?v=2"></script>

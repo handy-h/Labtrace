@@ -1,253 +1,243 @@
-// test-items.js — 检验项目库视图（增强：别名弹窗+参考区间弹窗+编辑弹窗+单位转换CRUD+计算规则CRUD+医院规则管理）
+// test-items.js — 检验项目库视图
 const TestItemsView = Vue.defineComponent({
   template: `
-  <div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">检验项目库</h1>
-    <div class="grid grid-cols-4 gap-4 mb-4">
-      <div class="bg-white rounded-lg p-3 shadow-sm text-sm"><span class="text-slate-500">标准项目</span> <span class="font-bold">{{items.length}}</span></div>
-      <div class="bg-white rounded-lg p-3 shadow-sm text-sm"><span class="text-slate-500">单位转换</span> <span class="font-bold">{{conversions.length}}</span></div>
-      <div class="bg-white rounded-lg p-3 shadow-sm text-sm"><span class="text-slate-500">计算规则</span> <span class="font-bold">{{calcRules.length}}</span></div>
-      <div class="bg-white rounded-lg p-3 shadow-sm text-sm"><span class="text-slate-500">医院规则</span> <span class="font-bold">{{hospitalRules.length}}</span></div>
+  <div class="page">
+    <h1 class="page-title">检验项目库</h1>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">标准项目</div>
+        <div class="stat-value">{{items.length}}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">单位转换</div>
+        <div class="stat-value">{{conversions.length}}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">计算规则</div>
+        <div class="stat-value">{{calcRules.length}}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">医院规则</div>
+        <div class="stat-value">{{hospitalRules.length}}</div>
+      </div>
     </div>
+
     <!-- 检验项目表 -->
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <div class="flex gap-3 mb-3">
-        <select v-model="category" @change="load" class="border rounded px-2 py-1 text-sm">
+    <div class="card">
+      <div class="toolbar">
+        <select v-model="category" @change="load" class="form-select" style="width: auto">
           <option value="">全部分类</option><option value="血常规">血常规</option><option value="生化">生化</option><option value="免疫">免疫</option><option value="其他">其他</option>
         </select>
-        <button @click="showAddItem = true" class="px-3 py-1 bg-blue-600 text-white rounded text-sm">+ 新增项目</button>
+        <button @click="showAddItem = true" class="btn btn-primary btn-sm">+ 新增项目</button>
       </div>
-      <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50 text-left text-slate-600">
-          <th class="p-2">编码</th><th class="p-2">标准名称</th><th class="p-2">分类</th><th class="p-2">默认单位</th><th class="p-2">类型</th><th class="p-2">操作</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="it in items" :key="it.id" class="border-t hover:bg-slate-50">
-            <td class="p-2 font-mono">{{it.code}}</td><td class="p-2 font-medium">{{it.standard_name}}</td>
-            <td class="p-2">{{it.category}}</td><td class="p-2">{{it.default_unit}}</td><td class="p-2">{{it.value_type}}</td>
-            <td class="p-2">
-              <button @click="viewAliases(it)" class="text-blue-600 hover:underline text-xs mr-1">别名</button>
-              <button @click="viewRefIntervals(it)" class="text-blue-600 hover:underline text-xs mr-1">参考区间</button>
-              <button @click="openEditItem(it)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
-              <button @click="deleteItem(it.id)" class="text-red-600 hover:underline text-xs">删除</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <data-table :columns="itemColumns" :data="items" empty-text="暂无项目">
+        <template #cell-code="{ row }">
+          <span class="cell-mono">{{row.code}}</span>
+        </template>
+        <template #cell-standard_name="{ row }">
+          <span class="cell-medium">{{row.standard_name}}</span>
+        </template>
+        <template #cell-actions="{ row }">
+          <button @click="viewAliases(row)" class="btn-ghost">别名</button>
+          <button @click="viewRefIntervals(row)" class="btn-ghost">参考区间</button>
+          <button @click="openEditItem(row)" class="btn-ghost">编辑</button>
+          <button @click="deleteItem(row.id)" class="btn-ghost danger">删除</button>
+        </template>
+      </data-table>
     </div>
+
     <!-- 单位转换 -->
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <div class="flex gap-3 items-center mb-2">
-        <h2 class="font-semibold">单位转换规则</h2>
-        <button @click="openUcModal(null)" class="px-2 py-1 bg-blue-600 text-white rounded text-xs">+ 新增</button>
+    <div class="card" style="margin-top: var(--card-gap)">
+      <div class="toolbar">
+        <h2 class="page-subtitle" style="margin-bottom: 0">单位转换规则</h2>
+        <button @click="openUcModal(null)" class="btn btn-primary btn-sm">+ 新增</button>
       </div>
-      <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">项目ID</th><th class="p-2">源单位</th><th class="p-2">目标单位</th><th class="p-2">公式</th><th class="p-2">示例</th><th class="p-2">操作</th></tr></thead>
-        <tbody><tr v-for="uc in conversions" :key="uc.id" class="border-t">
-          <td class="p-2">{{uc.test_item_id}}</td><td class="p-2">{{uc.source_unit}}</td><td class="p-2">{{uc.target_unit}}</td>
-          <td class="p-2 font-mono">{{uc.formula}}</td><td class="p-2">{{uc.example_input}} → {{uc.example_output}}</td>
-          <td class="p-2">
-            <button @click="openUcModal(uc)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
-            <button @click="deleteUc(uc.id)" class="text-red-600 hover:underline text-xs">删除</button>
-          </td>
-        </tr></tbody>
-      </table>
+      <data-table :columns="ucColumns" :data="conversions" empty-text="暂无转换规则">
+        <template #cell-formula="{ row }">
+          <span class="cell-mono">{{row.formula}}</span>
+        </template>
+        <template #cell-example="{ row }">
+          {{row.example_input}} → {{row.example_output}}
+        </template>
+        <template #cell-actions="{ row }">
+          <button @click="openUcModal(row)" class="btn-ghost">编辑</button>
+          <button @click="deleteUc(row.id)" class="btn-ghost danger">删除</button>
+        </template>
+      </data-table>
     </div>
+
     <!-- 计算规则 -->
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <div class="flex gap-3 items-center mb-2">
-        <h2 class="font-semibold">计算校验规则</h2>
-        <button @click="openCrModal(null)" class="px-2 py-1 bg-blue-600 text-white rounded text-xs">+ 新增</button>
+    <div class="card" style="margin-top: var(--card-gap)">
+      <div class="toolbar">
+        <h2 class="page-subtitle" style="margin-bottom: 0">计算校验规则</h2>
+        <button @click="openCrModal(null)" class="btn btn-primary btn-sm">+ 新增</button>
       </div>
-      <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">名称</th><th class="p-2">公式</th><th class="p-2">阈值</th><th class="p-2">操作</th></tr></thead>
-        <tbody><tr v-for="r in calcRules" :key="r.id" class="border-t">
-          <td class="p-2">{{r.name}}</td><td class="p-2 font-mono">{{r.formula}}</td><td class="p-2">{{r.threshold}}</td>
-          <td class="p-2">
-            <button @click="openCrModal(r)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
-            <button @click="deleteCr(r.id)" class="text-red-600 hover:underline text-xs">删除</button>
-          </td>
-        </tr></tbody>
-      </table>
+      <data-table :columns="crColumns" :data="calcRules" empty-text="暂无规则">
+        <template #cell-formula="{ row }">
+          <span class="cell-mono">{{row.formula}}</span>
+        </template>
+        <template #cell-actions="{ row }">
+          <button @click="openCrModal(row)" class="btn-ghost">编辑</button>
+          <button @click="deleteCr(row.id)" class="btn-ghost danger">删除</button>
+        </template>
+      </data-table>
     </div>
+
     <!-- 医院解析规则 -->
-    <div class="bg-white rounded-lg shadow-sm p-4">
-      <div class="flex gap-3 items-center mb-2">
-        <h2 class="font-semibold">医院解析规则</h2>
-        <select v-model="hrHospitalId" @change="loadHospitalRules" class="border rounded px-2 py-1 text-sm">
+    <div class="card" style="margin-top: var(--card-gap)">
+      <div class="toolbar">
+        <h2 class="page-subtitle" style="margin-bottom: 0">医院解析规则</h2>
+        <select v-model="hrHospitalId" @change="loadHospitalRules" class="form-select" style="width: auto">
           <option value="">全部医院</option><option v-for="h in hospitals" :key="h.id" :value="h.id">{{h.name}}</option>
         </select>
-        <button @click="openHrModal(null)" class="px-2 py-1 bg-blue-600 text-white rounded text-xs">+ 新增</button>
+        <button @click="openHrModal(null)" class="btn btn-primary btn-sm">+ 新增</button>
       </div>
-      <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50"><th class="p-2">医院</th><th class="p-2">规则名称</th><th class="p-2">列映射</th><th class="p-2">操作</th></tr></thead>
-        <tbody><tr v-for="hr in hospitalRules" :key="hr.id" class="border-t">
-          <td class="p-2">{{hr.hospital_name || hr.hospital_id}}</td>
-          <td class="p-2">{{hr.rule_name}}</td>
-          <td class="p-2 font-mono text-xs truncate max-w-xs">{{hr.column_mappings}}</td>
-          <td class="p-2">
-            <button @click="openHrModal(hr)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
-            <button @click="deleteHr(hr.id)" class="text-red-600 hover:underline text-xs">删除</button>
-          </td>
-        </tr></tbody>
-      </table>
+      <data-table :columns="hrColumns" :data="hospitalRules" empty-text="暂无规则">
+        <template #cell-hospital_name="{ row }">
+          {{row.hospital_name || row.hospital_id}}
+        </template>
+        <template #cell-column_mappings="{ row }">
+          <span class="cell-mono text-xs cell-truncate">{{row.column_mappings}}</span>
+        </template>
+        <template #cell-actions="{ row }">
+          <button @click="openHrModal(row)" class="btn-ghost">编辑</button>
+          <button @click="deleteHr(row.id)" class="btn-ghost danger">删除</button>
+        </template>
+      </data-table>
     </div>
 
-    <!-- 新增项目弹窗 -->
-    <div v-if="showAddItem" class="drill-modal" @click.self="showAddItem=false"><div class="w-96">
-      <h2 class="text-lg font-bold mb-4">新增检验项目</h2>
-      <input v-model="newItem.code" placeholder="编码" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="newItem.standard_name" placeholder="标准名称" class="w-full border p-2 rounded mb-2 text-sm">
-      <select v-model="newItem.category" class="w-full border p-2 rounded mb-2 text-sm">
+    <!-- ===== 弹窗区域 ===== -->
+
+    <!-- 新增项目 -->
+    <crud-modal title="新增检验项目" :visible="showAddItem" @close="showAddItem=false" @save="addItem">
+      <input v-model="newItem.code" placeholder="编码" class="form-input mb-2">
+      <input v-model="newItem.standard_name" placeholder="标准名称" class="form-input mb-2">
+      <select v-model="newItem.category" class="form-select mb-2">
         <option value="血常规">血常规</option><option value="生化">生化</option><option value="免疫">免疫</option><option value="其他">其他</option>
       </select>
-      <input v-model="newItem.default_unit" placeholder="默认单位" class="w-full border p-2 rounded mb-2 text-sm">
-      <select v-model="newItem.value_type" class="w-full border p-2 rounded mb-4 text-sm">
+      <input v-model="newItem.default_unit" placeholder="默认单位" class="form-input mb-2">
+      <select v-model="newItem.value_type" class="form-select">
         <option value="numeric">数值型</option><option value="titer">滴度型</option><option value="qualitative">半定量</option>
       </select>
-      <div class="flex gap-2 justify-end">
-        <button @click="showAddItem=false" class="px-4 py-2 border rounded text-sm">取消</button>
-        <button @click="addItem" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
-      </div>
-    </div></div>
+    </crud-modal>
 
-    <!-- 编辑项目弹窗 -->
-    <div v-if="showEditItem" class="drill-modal" @click.self="showEditItem=false"><div class="w-96">
-      <h2 class="text-lg font-bold mb-4">编辑检验项目</h2>
-      <input v-model="editItemForm.code" placeholder="编码" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="editItemForm.standard_name" placeholder="标准名称" class="w-full border p-2 rounded mb-2 text-sm">
-      <select v-model="editItemForm.category" class="w-full border p-2 rounded mb-2 text-sm">
+    <!-- 编辑项目 -->
+    <crud-modal title="编辑检验项目" :visible="showEditItem" @close="showEditItem=false" @save="saveEditItem">
+      <input v-model="editItemForm.code" placeholder="编码" class="form-input mb-2">
+      <input v-model="editItemForm.standard_name" placeholder="标准名称" class="form-input mb-2">
+      <select v-model="editItemForm.category" class="form-select mb-2">
         <option value="血常规">血常规</option><option value="生化">生化</option><option value="免疫">免疫</option><option value="其他">其他</option>
       </select>
-      <input v-model="editItemForm.default_unit" placeholder="默认单位" class="w-full border p-2 rounded mb-2 text-sm">
-      <select v-model="editItemForm.value_type" class="w-full border p-2 rounded mb-4 text-sm">
+      <input v-model="editItemForm.default_unit" placeholder="默认单位" class="form-input mb-2">
+      <select v-model="editItemForm.value_type" class="form-select">
         <option value="numeric">数值型</option><option value="titer">滴度型</option><option value="qualitative">半定量</option>
       </select>
-      <div class="flex gap-2 justify-end">
-        <button @click="showEditItem=false" class="px-4 py-2 border rounded text-sm">取消</button>
-        <button @click="saveEditItem" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
-      </div>
-    </div></div>
+    </crud-modal>
 
-    <!-- 别名管理弹窗 -->
-    <div v-if="showAliasModal" class="drill-modal" @click.self="showAliasModal=false"><div class="w-[500px]">
-      <h2 class="text-lg font-bold mb-4">别名管理 — {{aliasTargetItem.standard_name}}</h2>
-      <table class="w-full text-sm mb-4">
-        <thead><tr class="bg-slate-50"><th class="p-2">别名</th><th class="p-2">来源医院</th><th class="p-2">操作</th></tr></thead>
-        <tbody>
-          <tr v-for="a in aliasList" :key="a.id" class="border-t">
-            <td class="p-2">{{a.alias_name}}</td><td class="p-2">{{a.hospital_name || '-'}}</td>
-            <td class="p-2"><button @click="deleteAlias(a.id)" class="text-red-600 hover:underline text-xs">删除</button></td>
-          </tr>
-          <tr v-if="!aliasList.length"><td colspan="3" class="p-2 text-slate-400 text-center">暂无别名</td></tr>
-        </tbody>
-      </table>
-      <div class="flex gap-2 items-end">
-        <input v-model="aliasForm.alias_name" placeholder="别名名称" class="border rounded px-2 py-1 text-sm flex-1">
-        <select v-model="aliasForm.hospital_id" class="border rounded px-2 py-1 text-sm">
-          <option value="">无医院</option><option v-for="h in hospitals" :key="h.id" :value="h.id">{{h.name}}</option>
-        </select>
-        <button @click="addAlias" class="px-3 py-1 bg-blue-600 text-white rounded text-sm">新增</button>
+    <!-- 别名管理 -->
+    <div v-if="showAliasModal" class="modal-overlay" @click.self="showAliasModal=false">
+      <div class="modal-content w-[500px]">
+        <h2 class="modal-title">别名管理 — {{aliasTargetItem.standard_name}}</h2>
+        <data-table :columns="aliasTableColumns" :data="aliasList" compact empty-text="暂无别名">
+          <template #cell-actions="{ row }">
+            <button @click="deleteAlias(row.id)" class="btn-ghost danger">删除</button>
+          </template>
+        </data-table>
+        <div class="form-row" style="margin-top: 0.75rem">
+          <input v-model="aliasForm.alias_name" placeholder="别名名称" class="form-input" style="flex:1">
+          <select v-model="aliasForm.hospital_id" class="form-select" style="width: auto">
+            <option value="">无医院</option><option v-for="h in hospitals" :key="h.id" :value="h.id">{{h.name}}</option>
+          </select>
+          <button @click="addAlias" class="btn btn-primary btn-sm">新增</button>
+        </div>
+        <div class="modal-footer">
+          <button @click="showAliasModal=false" class="btn btn-secondary">关闭</button>
+        </div>
       </div>
-      <div class="flex justify-end mt-4">
-        <button @click="showAliasModal=false" class="px-4 py-2 border rounded text-sm">关闭</button>
-      </div>
-    </div></div>
+    </div>
 
-    <!-- 参考区间管理弹窗 -->
-    <div v-if="showRefModal" class="drill-modal" @click.self="showRefModal=false"><div class="w-[600px] max-h-[70vh] overflow-auto">
-      <h2 class="text-lg font-bold mb-4">参考区间 — {{refTargetItem.standard_name}}</h2>
-      <table class="w-full text-sm mb-4">
-        <thead><tr class="bg-slate-50"><th class="p-2">性别</th><th class="p-2">年龄范围</th><th class="p-2">下限</th><th class="p-2">上限</th><th class="p-2">类型</th><th class="p-2">操作</th></tr></thead>
-        <tbody>
-          <tr v-for="ri in refList" :key="ri.id" class="border-t">
-            <td class="p-2">{{ri.gender}}</td>
-            <td class="p-2">{{ri.age_min}}-{{ri.age_max}}{{ri.age_unit || '岁'}}</td>
-            <td class="p-2">{{ri.value_min != null ? ri.value_min : '-'}}</td>
-            <td class="p-2">{{ri.value_max != null ? ri.value_max : '-'}}</td>
-            <td class="p-2">{{ri.value_type}}</td>
-            <td class="p-2">
-              <button @click="openEditRef(ri)" class="text-blue-600 hover:underline text-xs mr-1">编辑</button>
-              <button @click="deleteRef(ri.id)" class="text-red-600 hover:underline text-xs">删除</button>
-            </td>
-          </tr>
-          <tr v-if="!refList.length"><td colspan="6" class="p-2 text-slate-400 text-center">暂无参考区间</td></tr>
-        </tbody>
-      </table>
-      <div class="border-t pt-3">
-        <h3 class="text-sm font-semibold mb-2">{{editingRefId ? '编辑' : '新增'}}参考区间</h3>
-        <div class="grid grid-cols-3 gap-2 mb-2">
-          <select v-model="refForm.gender" class="border rounded px-2 py-1 text-sm">
-            <option value="不限">不限</option><option value="男">男</option><option value="女">女</option>
-          </select>
-          <input v-model.number="refForm.age_min" type="number" placeholder="年龄下限" class="border rounded px-2 py-1 text-sm">
-          <input v-model.number="refForm.age_max" type="number" placeholder="年龄上限" class="border rounded px-2 py-1 text-sm">
+    <!-- 参考区间管理 -->
+    <div v-if="showRefModal" class="modal-overlay" @click.self="showRefModal=false">
+      <div class="modal-content w-[600px]">
+        <h2 class="modal-title">参考区间 — {{refTargetItem.standard_name}}</h2>
+        <data-table :columns="refTableColumns" :data="refList" compact empty-text="暂无参考区间">
+          <template #cell-age_range="{ row }">
+            {{row.age_min}}-{{row.age_max}}{{row.age_unit || '岁'}}
+          </template>
+          <template #cell-value_min="{ row }">
+            {{row.value_min != null ? row.value_min : '-'}}
+          </template>
+          <template #cell-value_max="{ row }">
+            {{row.value_max != null ? row.value_max : '-'}}
+          </template>
+          <template #cell-actions="{ row }">
+            <button @click="openEditRef(row)" class="btn-ghost">编辑</button>
+            <button @click="deleteRef(row.id)" class="btn-ghost danger">删除</button>
+          </template>
+        </data-table>
+
+        <div class="modal-footer" style="flex-direction: column; align-items: stretch">
+          <h3 class="text-sm font-semibold mb-2">{{editingRefId ? '编辑' : '新增'}}参考区间</h3>
+          <div class="grid grid-cols-3 gap-2 mb-2">
+            <select v-model="refForm.gender" class="form-select">
+              <option value="不限">不限</option><option value="男">男</option><option value="女">女</option>
+            </select>
+            <input v-model.number="refForm.age_min" type="number" placeholder="年龄下限" class="form-input">
+            <input v-model.number="refForm.age_max" type="number" placeholder="年龄上限" class="form-input">
+          </div>
+          <div class="grid grid-cols-3 gap-2 mb-2">
+            <input v-model.number="refForm.value_min" type="number" placeholder="下限值" class="form-input">
+            <input v-model.number="refForm.value_max" type="number" placeholder="上限值" class="form-input">
+            <select v-model="refForm.value_type" class="form-select">
+              <option value="numeric">数值型</option><option value="titer">滴度型</option><option value="qualitative">半定量</option>
+            </select>
+          </div>
+          <div v-if="refForm.value_type === 'qualitative'" class="mb-2">
+            <input v-model="refForm.qualitative_value" placeholder="定性值(如: 阴性)" class="form-input">
+          </div>
+          <div class="flex gap-2 justify-end">
+            <button v-if="editingRefId" @click="cancelEditRef" class="btn btn-secondary btn-sm">取消编辑</button>
+            <button @click="saveRef" class="btn btn-primary btn-sm">{{editingRefId ? '更新' : '新增'}}</button>
+          </div>
         </div>
-        <div class="grid grid-cols-3 gap-2 mb-2">
-          <input v-model.number="refForm.value_min" type="number" placeholder="下限值" class="border rounded px-2 py-1 text-sm">
-          <input v-model.number="refForm.value_max" type="number" placeholder="上限值" class="border rounded px-2 py-1 text-sm">
-          <select v-model="refForm.value_type" class="border rounded px-2 py-1 text-sm">
-            <option value="numeric">数值型</option><option value="titer">滴度型</option><option value="qualitative">半定量</option>
-          </select>
-        </div>
-        <div v-if="refForm.value_type === 'qualitative'" class="mb-2">
-          <input v-model="refForm.qualitative_value" placeholder="定性值(如: 阴性)" class="border rounded px-2 py-1 text-sm w-full">
-        </div>
-        <div class="flex gap-2 justify-end">
-          <button v-if="editingRefId" @click="cancelEditRef" class="px-3 py-1 border rounded text-sm">取消编辑</button>
-          <button @click="saveRef" class="px-3 py-1 bg-blue-600 text-white rounded text-sm">{{editingRefId ? '更新' : '新增'}}</button>
+        <div class="modal-footer">
+          <button @click="showRefModal=false" class="btn btn-secondary">关闭</button>
         </div>
       </div>
-      <div class="flex justify-end mt-4">
-        <button @click="showRefModal=false" class="px-4 py-2 border rounded text-sm">关闭</button>
-      </div>
-    </div></div>
+    </div>
 
     <!-- 单位转换弹窗 -->
-    <div v-if="showUcModal" class="drill-modal" @click.self="showUcModal=false"><div class="w-96">
-      <h2 class="text-lg font-bold mb-4">{{editingUcId ? '编辑' : '新增'}}单位转换</h2>
-      <select v-model="ucForm.test_item_id" class="w-full border p-2 rounded mb-2 text-sm">
+    <crud-modal :title="(editingUcId ? '编辑' : '新增') + '单位转换'" :visible="showUcModal" @close="showUcModal=false" @save="saveUc">
+      <select v-model="ucForm.test_item_id" class="form-select mb-2">
         <option value="">选择项目</option><option v-for="it in items" :key="it.id" :value="it.id">{{it.standard_name}}</option>
       </select>
-      <input v-model="ucForm.source_unit" placeholder="源单位" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="ucForm.target_unit" placeholder="目标单位" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="ucForm.formula" placeholder="公式 (如: x*18)" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="ucForm.example_input" placeholder="示例输入" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="ucForm.example_output" placeholder="示例输出" class="w-full border p-2 rounded mb-4 text-sm">
-      <div class="flex gap-2 justify-end">
-        <button @click="showUcModal=false" class="px-4 py-2 border rounded text-sm">取消</button>
-        <button @click="saveUc" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
-      </div>
-    </div></div>
+      <input v-model="ucForm.source_unit" placeholder="源单位" class="form-input mb-2">
+      <input v-model="ucForm.target_unit" placeholder="目标单位" class="form-input mb-2">
+      <input v-model="ucForm.formula" placeholder="公式 (如: x*18)" class="form-input mb-2">
+      <input v-model="ucForm.example_input" placeholder="示例输入" class="form-input mb-2">
+      <input v-model="ucForm.example_output" placeholder="示例输出" class="form-input">
+    </crud-modal>
 
     <!-- 计算规则弹窗 -->
-    <div v-if="showCrModal" class="drill-modal" @click.self="showCrModal=false"><div class="w-96">
-      <h2 class="text-lg font-bold mb-4">{{editingCrId ? '编辑' : '新增'}}计算规则</h2>
-      <input v-model="crForm.name" placeholder="规则名称" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="crForm.formula" placeholder="公式 (如: TP=ALB+GLOB)" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="crForm.threshold" type="number" placeholder="偏差阈值" class="w-full border p-2 rounded mb-2 text-sm">
-      <input v-model="crForm.threshold_unit" placeholder="阈值单位" class="w-full border p-2 rounded mb-4 text-sm">
-      <div class="flex gap-2 justify-end">
-        <button @click="showCrModal=false" class="px-4 py-2 border rounded text-sm">取消</button>
-        <button @click="saveCr" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
-      </div>
-    </div></div>
+    <crud-modal :title="(editingCrId ? '编辑' : '新增') + '计算规则'" :visible="showCrModal" @close="showCrModal=false" @save="saveCr">
+      <input v-model="crForm.name" placeholder="规则名称" class="form-input mb-2">
+      <input v-model="crForm.formula" placeholder="公式 (如: TP=ALB+GLOB)" class="form-input mb-2">
+      <input v-model="crForm.threshold" type="number" placeholder="偏差阈值" class="form-input mb-2">
+      <input v-model="crForm.threshold_unit" placeholder="阈值单位" class="form-input">
+    </crud-modal>
 
     <!-- 医院规则弹窗 -->
-    <div v-if="showHrModal" class="drill-modal" @click.self="showHrModal=false"><div class="w-[500px]">
-      <h2 class="text-lg font-bold mb-4">{{editingHrId ? '编辑' : '新增'}}医院解析规则</h2>
-      <select v-model="hrForm.hospital_id" class="w-full border p-2 rounded mb-2 text-sm">
+    <crud-modal :title="(editingHrId ? '编辑' : '新增') + '医院解析规则'" :visible="showHrModal" @close="showHrModal=false" @save="saveHr">
+      <select v-model="hrForm.hospital_id" class="form-select mb-2">
         <option value="">选择医院</option><option v-for="h in hospitals" :key="h.id" :value="h.id">{{h.name}}</option>
       </select>
-      <input v-model="hrForm.rule_name" placeholder="规则名称" class="w-full border p-2 rounded mb-2 text-sm">
-      <textarea v-model="hrForm.column_mappings" placeholder="列映射 (JSON)" class="w-full border p-2 rounded mb-2 text-sm" rows="3"></textarea>
-      <textarea v-model="hrForm.unit_conversions" placeholder="单位转换 (JSON, 可选)" class="w-full border p-2 rounded mb-2 text-sm" rows="2"></textarea>
-      <input v-model="hrForm.notes_column" type="number" placeholder="备注列位置 (可选)" class="w-full border p-2 rounded mb-4 text-sm">
-      <div class="flex gap-2 justify-end">
-        <button @click="showHrModal=false" class="px-4 py-2 border rounded text-sm">取消</button>
-        <button @click="saveHr" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">保存</button>
-      </div>
-    </div></div>
+      <input v-model="hrForm.rule_name" placeholder="规则名称" class="form-input mb-2">
+      <textarea v-model="hrForm.column_mappings" placeholder="列映射 (JSON)" class="form-input mb-2" rows="3"></textarea>
+      <textarea v-model="hrForm.unit_conversions" placeholder="单位转换 (JSON, 可选)" class="form-input mb-2" rows="2"></textarea>
+      <input v-model="hrForm.notes_column" type="number" placeholder="备注列位置 (可选)" class="form-input">
+    </crud-modal>
   </div>`,
   setup() {
     const items = Vue.ref([]);
@@ -256,10 +246,52 @@ const TestItemsView = Vue.defineComponent({
     const hospitalRules = Vue.ref([]);
     const hospitals = Vue.ref([]);
     const category = Vue.ref('');
+
+    const itemColumns = [
+      { key: 'code', label: '编码', mono: true },
+      { key: 'standard_name', label: '标准名称', medium: true },
+      { key: 'category', label: '分类' },
+      { key: 'default_unit', label: '默认单位' },
+      { key: 'value_type', label: '类型' },
+      { key: 'actions', label: '操作', width: '14rem' },
+    ];
+    const ucColumns = [
+      { key: 'test_item_id', label: '项目ID', align: 'center' },
+      { key: 'source_unit', label: '源单位' },
+      { key: 'target_unit', label: '目标单位' },
+      { key: 'formula', label: '公式', mono: true },
+      { key: 'example', label: '示例' },
+      { key: 'actions', label: '操作', width: '8rem' },
+    ];
+    const crColumns = [
+      { key: 'name', label: '名称' },
+      { key: 'formula', label: '公式', mono: true },
+      { key: 'threshold', label: '阈值', align: 'center' },
+      { key: 'actions', label: '操作', width: '8rem' },
+    ];
+    const hrColumns = [
+      { key: 'hospital_name', label: '医院' },
+      { key: 'rule_name', label: '规则名称' },
+      { key: 'column_mappings', label: '列映射', truncate: true },
+      { key: 'actions', label: '操作', width: '8rem' },
+    ];
+    const aliasTableColumns = [
+      { key: 'alias_name', label: '别名' },
+      { key: 'hospital_name', label: '来源医院' },
+      { key: 'actions', label: '操作', width: '6rem' },
+    ];
+    const refTableColumns = [
+      { key: 'gender', label: '性别', align: 'center' },
+      { key: 'age_range', label: '年龄范围' },
+      { key: 'value_min', label: '下限', align: 'center' },
+      { key: 'value_max', label: '上限', align: 'center' },
+      { key: 'value_type', label: '类型' },
+      { key: 'actions', label: '操作', width: '8rem' },
+    ];
+
+    // 项目CRUD
     const showAddItem = Vue.ref(false);
     const newItem = Vue.ref({ code: '', standard_name: '', category: '血常规', default_unit: '', value_type: 'numeric' });
-
-    // 编辑项目
     const showEditItem = Vue.ref(false);
     const editItemForm = Vue.ref({});
     const editingItemId = Vue.ref(null);
@@ -270,7 +302,7 @@ const TestItemsView = Vue.defineComponent({
     const aliasList = Vue.ref([]);
     const aliasForm = Vue.ref({ alias_name: '', hospital_id: '' });
 
-    // 参考区间管理
+    // 参考区间
     const showRefModal = Vue.ref(false);
     const refTargetItem = Vue.ref({});
     const refList = Vue.ref([]);
@@ -304,7 +336,6 @@ const TestItemsView = Vue.defineComponent({
       api.listHospitalRules(hrHospitalId.value || undefined).then(r => { if (r.data) hospitalRules.value = r.data; });
     }
 
-    // 项目CRUD
     function addItem() {
       api.createTestItem(newItem.value).then(r => {
         if (r.code === 0) { showAddItem.value = false; newItem.value = { code: '', standard_name: '', category: '血常规', default_unit: '', value_type: 'numeric' }; load(); }
@@ -323,7 +354,6 @@ const TestItemsView = Vue.defineComponent({
     }
     function deleteItem(id) { if (confirm('确认删除？')) api.deleteTestItem(id).then(r => { if (r.code !== 0) alert(r.message || '删除失败'); load(); }); }
 
-    // 别名管理
     function viewAliases(it) {
       aliasTargetItem.value = it;
       aliasForm.value = { alias_name: '', hospital_id: '' };
@@ -345,7 +375,6 @@ const TestItemsView = Vue.defineComponent({
       });
     }
 
-    // 参考区间管理
     function viewRefIntervals(it) {
       refTargetItem.value = it;
       refForm.value = { gender: '不限', age_min: 0, age_max: 18, value_min: '', value_max: '', value_type: 'numeric', qualitative_value: '' };
@@ -379,51 +408,31 @@ const TestItemsView = Vue.defineComponent({
       if (!confirm('确认删除？')) return;
       api.deleteRefInterval(id).then(r => {
         if (r.code === 0) api.listRefIntervals(refTargetItem.value.id).then(r2 => { if (r2.data) refList.value = r2.data; });
-        else alert(r.message || '删除失败');
       });
     }
 
-    // 单位转换CRUD
     function openUcModal(uc) {
-      if (uc) {
-        editingUcId.value = uc.id;
-        ucForm.value = deepClone(uc);
-      } else {
-        editingUcId.value = null;
-        ucForm.value = { test_item_id: '', source_unit: '', target_unit: '', formula: '', example_input: '', example_output: '' };
-      }
+      if (uc) { editingUcId.value = uc.id; ucForm.value = deepClone(uc); }
+      else { editingUcId.value = null; ucForm.value = { test_item_id: '', source_unit: '', target_unit: '', formula: '', example_input: '', example_output: '' }; }
       showUcModal.value = true;
     }
     function saveUc() {
       const fn = editingUcId.value ? api.updateUnitConversion(editingUcId.value, ucForm.value) : api.createUnitConversion(ucForm.value);
-      fn.then(r => {
-        if (r.code === 0) { showUcModal.value = false; load(); }
-        else alert(r.message || '保存失败');
-      });
+      fn.then(r => { if (r.code === 0) { showUcModal.value = false; load(); } else alert(r.message || '保存失败'); });
     }
     function deleteUc(id) { if (confirm('确认删除？')) api.deleteUnitConversion(id).then(r => { if (r.code !== 0) alert(r.message || '删除失败'); load(); }); }
 
-    // 计算规则CRUD
     function openCrModal(cr) {
-      if (cr) {
-        editingCrId.value = cr.id;
-        crForm.value = deepClone(cr);
-      } else {
-        editingCrId.value = null;
-        crForm.value = { name: '', formula: '', threshold: '', threshold_unit: '' };
-      }
+      if (cr) { editingCrId.value = cr.id; crForm.value = deepClone(cr); }
+      else { editingCrId.value = null; crForm.value = { name: '', formula: '', threshold: '', threshold_unit: '' }; }
       showCrModal.value = true;
     }
     function saveCr() {
       const fn = editingCrId.value ? api.updateCalcRule(editingCrId.value, crForm.value) : api.createCalcRule(crForm.value);
-      fn.then(r => {
-        if (r.code === 0) { showCrModal.value = false; load(); }
-        else alert(r.message || '保存失败');
-      });
+      fn.then(r => { if (r.code === 0) { showCrModal.value = false; load(); } else alert(r.message || '保存失败'); });
     }
     function deleteCr(id) { if (confirm('确认删除？')) api.deleteCalcRule(id).then(r => { if (r.code !== 0) alert(r.message || '删除失败'); load(); }); }
 
-    // 医院规则CRUD
     function openHrModal(hr) {
       if (hr) {
         editingHrId.value = hr.id;
@@ -436,16 +445,14 @@ const TestItemsView = Vue.defineComponent({
     }
     function saveHr() {
       const fn = editingHrId.value ? api.updateHospitalRule(editingHrId.value, hrForm.value) : api.createHospitalRule(hrForm.value);
-      fn.then(r => {
-        if (r.code === 0) { showHrModal.value = false; loadHospitalRules(); }
-        else alert(r.message || '保存失败');
-      });
+      fn.then(r => { if (r.code === 0) { showHrModal.value = false; loadHospitalRules(); } else alert(r.message || '保存失败'); });
     }
-    function deleteHr(id) { if (confirm('确认删除？')) api.deleteHospitalRule(id).then(r => { if (r.code !== 0) alert(r.message || '删除失败'); loadHospitalRules(); }); }
+    function deleteHr(id) { if (confirm('确认删除？')) api.deleteHospitalRule(id).then(r => { if (r.code === 0) loadHospitalRules(); else alert(r.message || '删除失败'); }); }
 
     load();
     return {
       items, conversions, calcRules, hospitalRules, hospitals, category,
+      itemColumns, ucColumns, crColumns, hrColumns, aliasTableColumns, refTableColumns,
       showAddItem, newItem, addItem,
       showEditItem, editItemForm, openEditItem, saveEditItem, deleteItem,
       showAliasModal, aliasTargetItem, aliasList, aliasForm, viewAliases, addAlias, deleteAlias,

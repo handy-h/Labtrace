@@ -1,54 +1,52 @@
-// trend.js — 纵向趋势分析视图（增强：动态参考带+下钻浮窗+CSV导出+迷你趋势图）
+// trend.js — 纵向趋势分析视图
 const TrendView = Vue.defineComponent({
   template: `
-  <div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">纵向趋势分析</h1>
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
-      <div class="flex gap-3 items-end flex-wrap">
-        <div><label class="text-sm text-slate-600">受检者</label>
-          <select v-model="filter.subject_id" class="border rounded px-2 py-1 text-sm w-40">
+  <div class="page">
+    <h1 class="page-title">纵向趋势分析</h1>
+
+    <!-- 筛选栏 -->
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">受检者</label>
+          <select v-model="filter.subject_id" class="form-select" style="width: 16rem">
             <option value="">请选择</option><option v-for="s in subjects" :key="s.id" :value="s.id">{{s.name}}</option>
-          </select></div>
-        <div><label class="text-sm text-slate-600">检验项目</label>
-          <select v-model="filter.test_item_id" class="border rounded px-2 py-1 text-sm w-40">
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">检验项目</label>
+          <select v-model="filter.test_item_id" class="form-select" style="width: 16rem">
             <option value="">请选择</option><option v-for="it in testItems" :key="it.id" :value="it.id">{{it.standard_name}}</option>
-          </select></div>
-        <button @click="loadTrend" class="px-4 py-2 bg-blue-600 text-white rounded text-sm">查询</button>
-        <button @click="exportTrendCsv" class="px-4 py-2 bg-slate-600 text-white rounded text-sm" v-if="trendData.length">导出CSV</button>
+          </select>
+        </div>
+        <button @click="loadTrend" class="btn btn-primary">查询</button>
+        <button @click="exportTrendCsv" class="btn btn-secondary" v-if="trendData.length">导出CSV</button>
       </div>
     </div>
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
+
+    <!-- 图表 -->
+    <div class="card" style="margin-top: var(--card-gap)">
       <div id="trend-chart" style="height:400px;"></div>
     </div>
-    <div v-if="trendData.length" class="bg-white rounded-lg shadow-sm p-4">
-      <table class="w-full text-sm" style="border-collapse: collapse;">
-        <thead><tr class="bg-slate-100">
-          <th class="p-2 text-center border-r border-dashed border-slate-200">采样日期</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200" v-if="!filter.test_item_id">检验项目</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">数值</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">参考区间</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">提示符</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">单位</th>
-          <th class="p-2 text-center border-r border-dashed border-slate-200">趋势</th>
-          <th class="p-2 text-center">医院</th>
-        </tr></thead>
-        <tbody>
-          <tr v-for="(d, idx) in trendData" :key="d.report_item_id"
-              :class="idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-100'">
-            <td class="p-2 text-center border-r border-dashed border-slate-100">{{d.sample_date}}</td>
-            <td class="p-2 text-left border-r border-dashed border-slate-100" v-if="!filter.test_item_id">{{d.test_item_name}}</td>
-            <td class="p-2 text-center font-medium border-r border-dashed border-slate-100">{{d.converted_value}}</td>
-            <td class="p-2 text-center text-slate-500 border-r border-dashed border-slate-100">{{d.ref_interval_text || (d.ref_min != null && d.ref_max != null ? d.ref_min + '-' + d.ref_max : '-')}}</td>
-            <td class="p-2 text-center border-r border-dashed border-slate-100" v-html="flagBadge(d.flag)"></td>
-            <td class="p-2 text-center border-r border-dashed border-slate-100">{{d.unit}}</td>
-            <td class="p-2 text-left border-r border-dashed border-slate-100">
-              <sparkline-chart :data="sparklineData[d.test_item_name || ('item_' + d.report_item_id)] || []" :subject-id="filter.subject_id" :test-item-id="d.test_item_id" @navigate="onSparklineNavigate"></sparkline-chart>
-            </td>
-            <td class="p-2 text-left">{{d.hospital_name}}</td>
-          </tr>
-        </tbody>
-      </table>
+
+    <!-- 数据表 -->
+    <div v-if="trendData.length" class="card" style="margin-top: var(--card-gap)">
+      <data-table :columns="trendColumns" :data="trendData" empty-text="暂无数据">
+        <template #cell-converted_value="{ row }">
+          <span class="cell-medium">{{row.converted_value}}</span>
+        </template>
+        <template #cell-ref_interval="{ row }">
+          <span class="cell-muted">{{row.ref_interval_text || (row.ref_min != null && row.ref_max != null ? row.ref_min + '-' + row.ref_max : '-')}}</span>
+        </template>
+        <template #cell-flag="{ row }">
+          <span v-html="flagBadge(row.flag)"></span>
+        </template>
+        <template #cell-sparkline="{ row }">
+          <sparkline-chart :data="sparklineData[row.test_item_name || ('item_' + row.report_item_id)] || []" :subject-id="filter.subject_id" :test-item-id="row.test_item_id" @navigate="onSparklineNavigate"></sparkline-chart>
+        </template>
+      </data-table>
     </div>
+
     <!-- 下钻浮窗 -->
     <drilldown-popup :visible="showDrilldown" :data-point="drilldownDataPoint" @close="showDrilldown = false"></drilldown-popup>
   </div>`,
@@ -62,8 +60,25 @@ const TrendView = Vue.defineComponent({
     const sparklineData = Vue.ref({});
     let chartInstance = null;
 
-    // 全局受检者联动
     const currentSubjectId = Vue.inject('currentSubjectId', null);
+
+    const trendColumns = Vue.computed(() => {
+      const cols = [
+        { key: 'sample_date', label: '采样日期', align: 'center' },
+      ];
+      if (!filter.value.test_item_id) {
+        cols.push({ key: 'test_item_name', label: '检验项目' });
+      }
+      cols.push(
+        { key: 'converted_value', label: '数值', align: 'center', medium: true },
+        { key: 'ref_interval', label: '参考区间', align: 'center', muted: true },
+        { key: 'flag', label: '提示符', align: 'center' },
+        { key: 'unit', label: '单位', align: 'center' },
+        { key: 'sparkline', label: '趋势', width: '100px' },
+        { key: 'hospital_name', label: '医院' },
+      );
+      return cols;
+    });
 
     Vue.onMounted(() => {
       api.listSubjects().then(r => { if (r.data) subjects.value = r.data; });
@@ -76,16 +91,11 @@ const TrendView = Vue.defineComponent({
       if (chartInstance) { chartInstance.dispose(); chartInstance = null; }
     });
 
-    // 受检者联动
     if (currentSubjectId) {
-      Vue.watch(currentSubjectId, (id) => {
-        if (id) filter.value.subject_id = id;
-      });
+      Vue.watch(currentSubjectId, (id) => { if (id) filter.value.subject_id = id; });
     }
 
-    function onResize() {
-      if (chartInstance) chartInstance.resize();
-    }
+    function onResize() { if (chartInstance) chartInstance.resize(); }
 
     function loadTrend() {
       if (!filter.value.subject_id) { alert('请选择受检者'); return; }
@@ -99,7 +109,6 @@ const TrendView = Vue.defineComponent({
     }
 
     function loadSparklineData() {
-      // Group sparkline data by test_item_name to show trend across multiple reports
       const groups = {};
       trendData.value.forEach(d => {
         const key = d.test_item_name || ('item_' + d.report_item_id);
@@ -147,7 +156,6 @@ const TrendView = Vue.defineComponent({
       let legendData = [];
 
       if (isAllItems) {
-        // Group by test_item_name for multi-series
         const groups = {};
         trendData.value.forEach(d => {
           const key = d.test_item_name || ('项目' + d.test_item_id);
@@ -174,7 +182,6 @@ const TrendView = Vue.defineComponent({
         series.push({ name: '数值', type: chartType, data: values, symbolSize: 8, connectNulls: true });
         legendData.push('数值');
 
-        // Reference bands
         const refBands = buildRefBands(trendData.value);
         if (refBands.length) {
           series.push({
@@ -193,7 +200,6 @@ const TrendView = Vue.defineComponent({
         series
       });
 
-      // 下钻点击
       chartInstance.on('click', (params) => {
         if (params.seriesIndex === 0 && params.dataIndex >= 0) {
           const dt = allDates[params.dataIndex];
@@ -230,6 +236,6 @@ const TrendView = Vue.defineComponent({
       loadTrend();
     }
 
-    return { subjects, testItems, filter, trendData, showDrilldown, drilldownDataPoint, sparklineData, loadTrend, exportTrendCsv, onSparklineNavigate, flagBadge };
+    return { subjects, testItems, filter, trendData, trendColumns, showDrilldown, drilldownDataPoint, sparklineData, loadTrend, exportTrendCsv, onSparklineNavigate, flagBadge };
   }
 });
