@@ -252,6 +252,7 @@ func ParseLabResultsWithMapping(blocks []OCRResult, cfg ColumnMappingConfig) []P
 					Value:      NormalizeQualitative(value),
 					Unit:       gt.colTexts["unit"],
 					Range:      gt.colTexts["range"],
+					Category:   gt.colTexts["category"],
 					Confidence: int(gt.topConf),
 					BBox:       gt.bboxStr,
 					RowText:    gt.colTexts["notes"],

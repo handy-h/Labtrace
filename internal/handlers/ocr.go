@@ -92,7 +92,7 @@ func Upload(c *gin.Context) {
 
 		if err != nil {
 			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
-			services.LogAction("ocr_failed", "lab_report", reportID, gin.H{"error": err.Error()})
+			services.LogAction("ocr_failed", "OCR失败", "lab_report", reportID, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -104,7 +104,7 @@ func Upload(c *gin.Context) {
 		if len(ocrResults) == 0 {
 			log.Printf("[ocr] OCR returned zero results for report %d", reportID)
 			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
-			services.LogAction("ocr_failed", "lab_report", reportID, gin.H{"error": "OCR returned no results"})
+			services.LogAction("ocr_failed", "OCR失败", "lab_report", reportID, gin.H{"error": "OCR returned no results"})
 			return
 		}
 
@@ -135,7 +135,7 @@ func Upload(c *gin.Context) {
 		database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, reportID)
 
 		// Audit log
-		services.LogAction("ocr_upload", "lab_report", reportID, nil)
+		services.LogAction("ocr_upload", "OCR上传", "lab_report", reportID, nil)
 	}()
 
 	c.JSON(http.StatusCreated, models.Success(gin.H{
@@ -233,6 +233,24 @@ func ApplyColumnMapping(c *gin.Context) {
 		database.DB.Exec(`UPDATE lab_reports SET sample_date = ? WHERE id = ?`, cfg.SampleDate, id)
 	}
 
+	// 处理分类：从映射结果中提取分类名称，匹配 report_categories
+	var mismatchCategory string
+	for _, item := range parsedItems {
+		if item.Category != "" {
+			// 尝试精确匹配分类名
+			var catID int64
+			err := database.DB.QueryRow(`SELECT id FROM report_categories WHERE name = ?`, item.Category).Scan(&catID)
+			if err == nil {
+				// 匹配成功，设置 category_id
+				database.DB.Exec(`UPDATE lab_reports SET category_id = ? WHERE id = ?`, catID, id)
+			} else {
+				// 未匹配，记录原始名称供前端归一化
+				mismatchCategory = item.Category
+			}
+			break // 只取第一个有效分类
+		}
+	}
+
 	mappingJSON, _ := services.MarshalColumnMappingConfig(cfg)
 	database.DB.Exec(`UPDATE lab_reports SET column_mapping_json = ? WHERE id = ?`, mappingJSON, id)
 
@@ -248,7 +266,7 @@ func ApplyColumnMapping(c *gin.Context) {
 	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id)
 
 	reportIDInt, _ := strconv.ParseInt(id, 10, 64)
-	services.LogAction("apply_column_mapping", "lab_report", reportIDInt, gin.H{"item_count": len(parsedItems)})
+	services.LogAction("apply_column_mapping", "应用列映射", "lab_report", reportIDInt, gin.H{"item_count": len(parsedItems)})
 
 	rows, err := database.DB.Query(
 		`SELECT id, report_id, COALESCE(test_item_id, 0), COALESCE(test_item_name,''), original_value, COALESCE(original_unit,''), confidence, COALESCE(flag,''), COALESCE(row_notes,''), COALESCE(ocr_bbox,''), COALESCE(ref_interval_text,'') FROM report_items WHERE report_id = ? ORDER BY id`,
@@ -276,8 +294,9 @@ func ApplyColumnMapping(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
-		"items":      items,
-		"item_count": len(items),
+		"items":               items,
+		"item_count":          len(items),
+		"mismatch_category":   mismatchCategory,
 	}))
 }
 

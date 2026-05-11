@@ -82,6 +82,13 @@ type CalculationRule struct {
 	CreatedAt    string `json:"created_at"`
 }
 
+// ReportCategory — 检验项目分类
+type ReportCategory struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+}
+
 // LabReport — 检验报告单
 type LabReport struct {
 	ID               int64  `json:"id"`
@@ -93,10 +100,12 @@ type LabReport struct {
 	OCRStatus        string `json:"ocr_status"` // pending|processing|review|imported|failed
 	OCRRawJSON       string `json:"ocr_raw_json,omitempty"`
 	WholeReportNotes string `json:"whole_report_notes"`
+	CategoryID       *int64 `json:"category_id,omitempty"`
 	CreatedAt        string `json:"created_at"`
 
 	// Joined fields
 	HospitalName string       `json:"hospital_name,omitempty"`
+	CategoryName string       `json:"category_name,omitempty"`
 	Items        []ReportItem `json:"items,omitempty"`
 }
 
@@ -144,10 +153,15 @@ type Backup struct {
 type AuditLog struct {
 	ID         int64  `json:"id"`
 	Action     string `json:"action"`
+	ActionLabel string `json:"action_label"`
 	EntityType string `json:"entity_type"`
 	EntityID   int64  `json:"entity_id"`
 	Details    string `json:"details"` // JSON
 	CreatedAt  string `json:"created_at"`
+
+	// Joined fields
+	SampleDate   string `json:"sample_date,omitempty"`
+	CategoryName string `json:"category_name,omitempty"`
 }
 
 // --- Request / Response helpers ---

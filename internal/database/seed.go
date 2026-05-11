@@ -19,6 +19,9 @@ func Seed(db *sql.DB) error {
 	if err := seedCalculationRules(db); err != nil {
 		return err
 	}
+	if err := seedReportCategories(db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -267,6 +270,48 @@ func seedCalculationRules(db *sql.DB) error {
 
 	for _, r := range rules {
 		if _, err := stmt.Exec(r.name, r.formula, r.threshold, r.itemIDs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func seedReportCategories(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM report_categories").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	categories := []string{
+		"血常规",
+		"尿常规",
+		"肝功能",
+		"肾功能",
+		"血脂",
+		"血糖",
+		"甲状腺功能",
+		"电解质",
+		"免疫学检查",
+		"肿瘤标志物",
+		"凝血功能",
+		"心肌酶谱",
+		"性激素",
+		"感染四项",
+		"生化全套",
+		"其他",
+	}
+
+	stmt, err := db.Prepare("INSERT INTO report_categories (name) VALUES (?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, name := range categories {
+		if _, err := stmt.Exec(name); err != nil {
 			return err
 		}
 	}

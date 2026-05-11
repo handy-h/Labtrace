@@ -184,6 +184,7 @@ const OCRMappingWizard = Vue.defineComponent({
                           @change="onMappingChange">
                     <option value="name">✦ 检测项目 ★</option>
                     <option value="value">✦ 结果数值 ★</option>
+                    <option value="category">检验项目分类</option>
                     <option value="unit">单位</option>
                     <option value="range">参考范围</option>
                     <option value="notes">备注</option>
@@ -214,6 +215,7 @@ const OCRMappingWizard = Vue.defineComponent({
                         @change="onMappingChange">
                   <option value="name">✦ 检测项目 ★</option>
                   <option value="value">✦ 结果数值 ★</option>
+                  <option value="category">检验项目分类</option>
                   <option value="unit">单位</option>
                   <option value="range">参考范围</option>
                   <option value="notes">备注</option>
@@ -1266,6 +1268,7 @@ const OCRMappingWizard = Vue.defineComponent({
       const t = (text || "").toLowerCase();
       if (/项目|检验|检测|实验|test|item|name/.test(t)) return "name";
       if (/结果|数值|测定|value|result/.test(t)) return "value";
+      if (/分类|类型|category|type/.test(t)) return "category";
       if (/单位|unit/.test(t)) return "unit";
       if (/参考|区间|范围|ref|range|normal/.test(t)) return "range";
       if (/备注|note|镜检|标本|comment|说明/.test(t)) return "notes";

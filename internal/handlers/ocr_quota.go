@@ -106,7 +106,7 @@ func ReOCR(c *gin.Context) {
 	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id)
 
 	// Audit log
-	services.LogAction("re_ocr", "lab_report", parseInt64(id), nil)
+	services.LogAction("re_ocr", "重新识别", "lab_report", parseInt64(id), nil)
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
 		"status": "review",

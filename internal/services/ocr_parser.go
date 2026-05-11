@@ -13,6 +13,7 @@ type ParsedLabItem struct {
 	Value      string `json:"value"`
 	Unit       string `json:"unit"`
 	Range      string `json:"range"`
+	Category   string `json:"category,omitempty"` // 检验项目分类（从映射列提取）
 	Confidence int    `json:"confidence"`
 	BBox       string `json:"bbox"` // JSON: {"x":...,"y":...,"w":...,"h":...,"page":...}
 	RowText    string `json:"row_text"`

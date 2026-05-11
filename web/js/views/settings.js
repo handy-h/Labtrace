@@ -80,12 +80,32 @@ const SettingsView = Vue.defineComponent({
       </data-table>
     </div>
 
+    <!-- 检验项目分类管理 -->
+    <div class="card" style="margin-top: var(--card-gap)">
+      <div class="toolbar">
+        <h2 class="page-subtitle" style="margin-bottom: 0">检验项目分类</h2>
+        <button @click="openCatModal(null)" class="btn btn-primary btn-sm">+ 新增分类</button>
+      </div>
+      <data-table :columns="categoryColumns" :data="categories" empty-text="暂无分类">
+        <template #cell-actions="{ row }">
+          <button @click="openCatModal(row)" class="btn-ghost">编辑</button>
+          <button @click="deleteCategory(row.id)" class="btn-ghost danger">删除</button>
+        </template>
+      </data-table>
+    </div>
+
+    <!-- 分类弹窗 -->
+    <crud-modal :title="(editingCatId ? '编辑' : '新增') + '分类'" :visible="showCatModal" @close="showCatModal=false" @save="saveCategory">
+      <input v-model="catForm.name" placeholder="分类名称" class="form-input">
+    </crud-modal>
+
     <!-- 审计日志 -->
     <div class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">审计日志</h2>
       <data-table :columns="auditColumns" :data="auditLogs" empty-text="暂无日志">
-        <template #cell-entity="{ row }">
-          {{row.entity_type}}#{{row.entity_id}}
+        <template #cell-entity_info="{ row }">
+          <span v-if="row.sample_date">{{ row.sample_date }}<span v-if="row.category_name"> / {{ row.category_name }}</span></span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
         </template>
       </data-table>
     </div>
@@ -114,9 +134,15 @@ const SettingsView = Vue.defineComponent({
       { key: 'actions', label: '操作', width: '6rem' },
     ];
     const auditColumns = [
-      { key: 'action', label: '操作' },
-      { key: 'entity', label: '实体', align: 'center' },
+      { key: 'action_label', label: '操作' },
+      { key: 'entity_info', label: '采样日期/分类', align: 'center' },
       { key: 'created_at', label: '时间', align: 'center' },
+    ];
+
+    const categoryColumns = [
+      { key: 'name', label: '分类名称', medium: true },
+      { key: 'created_at', label: '创建时间', align: 'center' },
+      { key: 'actions', label: '操作', width: '8rem' },
     ];
 
     const quotaPct = Vue.computed(() => {
@@ -156,6 +182,7 @@ const SettingsView = Vue.defineComponent({
     function loadBackups() { api.listBackups().then(r => { if (r.data) backups.value = r.data; }); }
     function loadAudit() { api.listAuditLogs().then(r => { if (r.data) auditLogs.value = r.data; }); }
     function loadHospitals() { api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; }); }
+    function loadCategories() { api.listCategories().then(r => { if (r.data) categories.value = r.data; }); }
     function doExport() {
       api.exportBackup(backupDesc.value).then(r => {
         if (r.code === 0) { alert('备份成功: ' + r.data.filename); backupDesc.value = ''; loadBackups(); }
@@ -197,11 +224,44 @@ const SettingsView = Vue.defineComponent({
       });
     }
 
-    Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); });
+    // 分类管理
+    const categories = Vue.ref([]);
+    const showCatModal = Vue.ref(false);
+    const catForm = Vue.ref({ name: '' });
+    const editingCatId = Vue.ref(null);
+
+    function openCatModal(c) {
+      if (c) {
+        editingCatId.value = c.id;
+        catForm.value = { name: c.name };
+      } else {
+        editingCatId.value = null;
+        catForm.value = { name: '' };
+      }
+      showCatModal.value = true;
+    }
+    function saveCategory() {
+      const fn = editingCatId.value ? api.updateCategory(editingCatId.value, catForm.value) : api.createCategory(catForm.value);
+      fn.then(r => {
+        if (r.code === 0) { showCatModal.value = false; loadCategories(); }
+        else alert(r.message || '保存失败');
+      });
+    }
+    function deleteCategory(id) {
+      if (!confirm('确认删除？删除后引用该分类的报告将变为未分类。')) return;
+      api.deleteCategory(id).then(r => {
+        if (r.code === 0) loadCategories();
+        else alert(r.message || '删除失败');
+      });
+    }
+
+    Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); loadCategories(); });
     return {
       backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId,
       quota, editUsed, quotaPct, quotaTextClass, quotaBarClass,
-      hospitalColumns, backupColumns, auditColumns,
+      hospitalColumns, backupColumns, auditColumns, categoryColumns,
+      categories, showCatModal, catForm, editingCatId,
+      openCatModal, saveCategory, deleteCategory,
       doExport, doImport, deleteBackup, openHospModal, saveHospital, deleteHospital, saveQuota
     };
   }

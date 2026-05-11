@@ -98,6 +98,7 @@ func main() {
 		v1.POST("/ocr/upload", handlers.Upload)
 		v1.GET("/reports", handlers.ListReports)
 		v1.GET("/reports/:id", handlers.GetReport)
+		v1.PUT("/reports/:id", handlers.UpdateReport)
 		v1.PUT("/reports/:id/items/:itemId", handlers.UpdateReportItem)
 		v1.DELETE("/reports/:id/items/:itemId", handlers.DeleteReportItem)
 		v1.POST("/reports/:id/confirm", handlers.ConfirmReport)
@@ -131,6 +132,13 @@ func main() {
 		v1.POST("/backups/import", handlers.ImportBackup)
 		v1.GET("/backups", handlers.ListBackups)
 		v1.DELETE("/backups/:id", handlers.DeleteBackup)
+
+		// Report Categories
+		v1.GET("/categories", handlers.ListCategories)
+		v1.POST("/categories", handlers.CreateCategory)
+		v1.PUT("/categories/:id", handlers.UpdateCategory)
+		v1.DELETE("/categories/:id", handlers.DeleteCategory)
+		v1.POST("/categories/normalize", handlers.NormalizeCategory)
 
 		// Audit Logs
 		v1.GET("/audit-logs", handlers.ListAuditLogs)

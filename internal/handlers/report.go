@@ -19,10 +19,12 @@ func ListReports(c *gin.Context) {
 	hospitalID := c.Query("hospital_id")
 	ocrStatus := c.Query("ocr_status")
 
-	query := `SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
-		h.name as hospital_name
+	query := `SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.category_id, lr.created_at,
+		h.name as hospital_name,
+		COALESCE(rc.name, '') as category_name
 		FROM lab_reports lr
-		LEFT JOIN hospitals h ON h.id = lr.hospital_id`
+		LEFT JOIN hospitals h ON h.id = lr.hospital_id
+		LEFT JOIN report_categories rc ON rc.id = lr.category_id`
 	args := []interface{}{}
 	conditions := []string{}
 
@@ -59,7 +61,8 @@ func ListReports(c *gin.Context) {
 		var r models.LabReport
 		var hospID sql.NullInt64
 		var hospName sql.NullString
-		if err := rows.Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &hospName); err != nil {
+		var catID sql.NullInt64
+		if err := rows.Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &catID, &r.CreatedAt, &hospName, &r.CategoryName); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 			return
 		}
@@ -68,6 +71,9 @@ func ListReports(c *gin.Context) {
 		}
 		if hospName.Valid {
 			r.HospitalName = hospName.String
+		}
+		if catID.Valid {
+			r.CategoryID = &catID.Int64
 		}
 		reports = append(reports, r)
 	}
@@ -80,13 +86,16 @@ func GetReport(c *gin.Context) {
 	var r models.LabReport
 	var hospID sql.NullInt64
 	var hospName sql.NullString
+	var catID sql.NullInt64
 	err := database.DB.QueryRow(
-		`SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
-		h.name as hospital_name
+		`SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.category_id, lr.created_at,
+		h.name as hospital_name,
+		COALESCE(rc.name, '') as category_name
 		FROM lab_reports lr
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
+		LEFT JOIN report_categories rc ON rc.id = lr.category_id
 		WHERE lr.id = ?`, id,
-	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &hospName)
+	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &catID, &r.CreatedAt, &hospName, &r.CategoryName)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
 		return
@@ -100,6 +109,9 @@ func GetReport(c *gin.Context) {
 	}
 	if hospName.Valid {
 		r.HospitalName = hospName.String
+	}
+	if catID.Valid {
+		r.CategoryID = &catID.Int64
 	}
 
 	// review状态时自动匹配参考区间和计算提示符，让核效阶段就能看到flag
@@ -157,6 +169,29 @@ func loadReportItems(reportID string) []models.ReportItem {
 		items = append(items, item)
 	}
 	return items
+}
+
+// UpdateReport updates report-level fields (e.g. category_id).
+func UpdateReport(c *gin.Context) {
+	id := c.Param("id")
+
+	var req struct {
+		CategoryID *int64 `json:"category_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.Error("参数错误"))
+		return
+	}
+
+	if req.CategoryID != nil {
+		if *req.CategoryID == 0 {
+			database.DB.Exec(`UPDATE lab_reports SET category_id = NULL WHERE id = ?`, id)
+		} else {
+			database.DB.Exec(`UPDATE lab_reports SET category_id = ? WHERE id = ?`, *req.CategoryID, id)
+		}
+	}
+
+	c.JSON(http.StatusOK, models.Success(nil))
 }
 
 // UpdateReportItem updates a single report item (for manual correction during review).

@@ -35,6 +35,10 @@ const OCRImportView = Vue.defineComponent({
     <div v-if="reports.length" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">报告列表</h2>
       <data-table :columns="reportListColumns" :data="reports" empty-text="暂无报告">
+        <template #cell-category_name="{ row }">
+          <span v-if="row.category_name">{{ row.category_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
         <template #cell-ocr_status="{ row }">
           <span :class="statusClass(row.ocr_status)">{{statusText(row.ocr_status)}}</span>
         </template>
@@ -53,6 +57,17 @@ const OCRImportView = Vue.defineComponent({
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-3 shrink-0" style="border-bottom: 1px solid var(--table-border)">
           <h2 class="modal-title" style="margin-bottom: 0">报告详情 #{{selectedReport.id}} <span :class="statusClass(selectedReport.ocr_status)">({{statusText(selectedReport.ocr_status)}})</span></h2>
+          <div class="flex items-center gap-2">
+            <label class="text-xs" style="color: var(--color-text-secondary)">分类：</label>
+            <select v-model="selectedReport.category_id" @change="onCategoryChange" class="form-select" style="width: 10rem; padding: 2px 6px; font-size: 0.8rem">
+              <option :value="null">未分类</option>
+              <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+            </select>
+            <span v-if="selectedReport._mismatchCategory" class="flex items-center gap-1">
+              <span class="text-xs text-orange-600">{{ selectedReport._mismatchCategory }}</span>
+              <button @click="showNormalizeModal = true" class="btn-ghost" style="font-size: 0.75rem; color: var(--color-warning); border: 1px solid var(--color-warning); padding: 0 6px; border-radius: 4px">归一</button>
+            </span>
+          </div>
           <span class="text-xs" style="color: var(--color-text-muted)">点击单元格即可编辑</span>
           <div class="flex gap-2">
             <button v-if="selectedReport.ocr_status === 'review'" @click="doConfirm(selectedReport.id)"
@@ -237,6 +252,7 @@ const OCRImportView = Vue.defineComponent({
     const reportListColumns = [
       { key: 'id', label: 'ID', align: 'center' },
       { key: 'sample_date', label: '采样日期', align: 'center' },
+      { key: 'category_name', label: '检验项目分类', align: 'center' },
       { key: 'ocr_status', label: '状态', align: 'center' },
       { key: 'actions', label: '操作', align: 'center', width: '16rem' },
     ];
@@ -252,9 +268,14 @@ const OCRImportView = Vue.defineComponent({
 
     const currentSubjectId = Vue.inject("currentSubjectId", null);
 
+    // 检验项目分类
+    const categories = Vue.ref([]);
+    const showNormalizeModal = Vue.ref(false);
+
     Vue.onMounted(() => {
       api.listSubjects().then((r) => { if (r.data) subjects.value = r.data; });
       api.listHospitals().then((r) => { if (r.data) hospitals.value = r.data; });
+      api.listCategories().then((r) => { if (r.data) categories.value = r.data; });
       loadReports();
       loadQuota();
       document.addEventListener("keydown", onKeyDown);
@@ -510,6 +531,20 @@ const OCRImportView = Vue.defineComponent({
       showLinkModal.value = false;
     }
 
+    function onCategoryChange() {
+      if (!selectedReport.value) return;
+      const catId = selectedReport.value.category_id;
+      api.updateReport(selectedReport.value.id, { category_id: catId || 0 }).then((r) => {
+        if (r.code === 0) {
+          // 更新本地报告列表中的 category_name
+          const cat = categories.value.find(c => c.id === catId);
+          const rep = reports.value.find(r => r.id === selectedReport.value.id);
+          if (rep) rep.category_name = cat ? cat.name : '';
+          selectedReport.value.category_name = cat ? cat.name : '';
+        }
+      });
+    }
+
     function statusClass(s) {
       return { pending: "text-slate-500", processing: "text-yellow-600", review: "text-orange-600", imported: "text-green-600", failed: "text-red-600" }[s] || "";
     }
@@ -525,6 +560,7 @@ const OCRImportView = Vue.defineComponent({
       loadQuota, startEdit, saveEdit, onEditBlur, flushEditFormToLocal, cancelEdit, selectRow,
       onImageLoad, statusClass, statusText, confClass, flagBadge, isPdf,
       wizardVisible, wizardReportId, wizardHospitalId, wizardImageUrl, wizardFilePath, openMappingWizard, onWizardDone,
+      categories, showNormalizeModal, onCategoryChange,
       showLinkModal, linkingItem, linkSearch, filteredLinkItems, linkSelectedId, linkCreateAlias,
       openLinkModal, filterLinkItems, doLinkItem,
     };

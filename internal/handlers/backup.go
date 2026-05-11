@@ -27,7 +27,7 @@ func ExportBackup(c *gin.Context) {
 		return
 	}
 
-	services.LogAction("export", "backup", 0, map[string]interface{}{"filename": filename})
+	services.LogAction("export", "导出备份", "backup", 0, map[string]interface{}{"filename": filename})
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
 		"filename":  filename,
@@ -62,7 +62,7 @@ func ImportBackup(c *gin.Context) {
 		return
 	}
 
-	services.LogAction("import", "backup", 0, nil)
+	services.LogAction("import", "导入备份", "backup", 0, nil)
 	c.JSON(http.StatusOK, models.Success(gin.H{"status": "restored"}))
 }
 
