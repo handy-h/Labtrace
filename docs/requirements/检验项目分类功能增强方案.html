@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>检验项目分类功能增强方案</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.8;
+        color: #333;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        background: #f8f9fa;
+      }
+      .container {
+        background: white;
+        padding: 50px 60px;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        font-size: 28px;
+        color: #1a1a1a;
+        margin-bottom: 8px;
+        border-bottom: 3px solid #2563eb;
+        padding-bottom: 12px;
+      }
+      .subtitle {
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 30px;
+      }
+      h2 {
+        font-size: 20px;
+        color: #1e40af;
+        margin-top: 35px;
+        margin-bottom: 15px;
+        padding-left: 12px;
+        border-left: 4px solid #2563eb;
+      }
+      h3 {
+        font-size: 16px;
+        color: #374151;
+        margin-top: 25px;
+        margin-bottom: 12px;
+        font-weight: 600;
+      }
+      p {
+        margin-bottom: 12px;
+        text-align: justify;
+      }
+      ul, ol {
+        margin-left: 20px;
+        margin-bottom: 15px;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "SF Mono", Monaco, Consolas, monospace;
+        font-size: 14px;
+        color: #dc2626;
+      }
+      pre {
+        background: #1f2937;
+        color: #f9fafb;
+        padding: 20px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin-bottom: 15px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+      .highlight {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 15px 20px;
+        margin: 20px 0;
+        border-radius: 0 8px 8px 0;
+      }
+      .highlight-title {
+        font-weight: 600;
+        color: #92400e;
+        margin-bottom: 8px;
+      }
+      .flow-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+      .flow-step {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 15px;
+      }
+      .flow-step:last-child {
+        margin-bottom: 0;
+      }
+      .flow-step-num {
+        background: #2563eb;
+        color: white;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+        margin-right: 15px;
+        flex-shrink: 0;
+      }
+      .flow-step-content {
+        flex: 1;
+      }
+      .flow-step-title {
+        font-weight: 600;
+        color: #1e40af;
+        margin-bottom: 5px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+      th, td {
+        border: 1px solid #e5e7eb;
+        padding: 12px 15px;
+        text-align: left;
+      }
+      th {
+        background: #f9fafb;
+        font-weight: 600;
+        color: #374151;
+      }
+      tr:hover {
+        background: #f9fafb;
+      }
+      .status-tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .status-done {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .status-new {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>检验项目分类功能增强方案</h1>
+      <div class="subtitle">版本：V1.0 | 更新日期：2026-05-12 | 状态：已实现</div>
+
+      <h2>1. 背景与目标</h2>
+      <p>化验单上通常打印有分类信息（如"【血浆D-二聚体测定(D-Dimer)(急诊)】"），用户希望：</p>
+      <ul>
+        <li>在OCR上传时能够选择或自动识别检验项目分类</li>
+        <li>在列映射向导中支持分类字段的映射</li>
+        <li>在报告详情弹窗中能够手动调整、新建或归一化分类</li>
+      </ul>
+
+      <div class="highlight">
+        <div class="highlight-title">核心价值</div>
+        <p>实现从OCR识别到用户交互的完整分类管理链路，提升化验单管理的组织性和可检索性。</p>
+      </div>
+
+      <h2>2. 功能模块</h2>
+
+      <h3>2.1 OCR上传页面 - 分类选择</h3>
+      <p><span class="status-tag status-done">已实现</span></p>
+
+      <p>在OCR上传表单中新增"检验项目分类"下拉框，允许用户在上传时直接选择分类。</p>
+
+      <h4>实现细节</h4>
+      <ul>
+        <li><strong>前端表单</strong>：在采样日期和文件之间添加分类下拉框</li>
+        <li><strong>表单数据模型</strong>：添加<code>category_id</code>字段</li>
+        <li><strong>上传逻辑</strong>：单文件和批量上传时都将<code>category_id</code>添加到FormData</li>
+        <li><strong>后端接口</strong>：修改<code>POST /api/v1/ocr/upload</code>接收并处理分类参数</li>
+      </ul>
+
+      <h4>用户交互</h4>
+      <ul>
+        <li>分类字段为可选，用户可选择"未分类"</li>
+        <li>批量上传时，所有文件使用相同的分类</li>
+        <li>上传后，分类直接关联到报告记录</li>
+      </ul>
+
+      <h3>2.2 列映射向导 - 分类映射</h3>
+      <p><span class="status-tag status-done">已实现</span></p>
+
+      <p>在列映射向导的Step 2中支持将某一列映射为"检验项目分类"字段。</p>
+
+      <h4>实现细节</h4>
+      <ul>
+        <li><strong>向导Step 2</strong>：列角色映射下拉框中已有"检验项目分类"选项</li>
+        <li><strong>自动检测</strong>：<code>guessField()</code>函数通过正则匹配自动识别分类列</li>
+        <li><strong>后端解析</strong>：<code>ParseLabResultsWithMapping</code>从OCR结果中提取分类</li>
+        <li><strong>分类匹配</strong>：尝试精确匹配<code>report_categories</code>表</li>
+        <li><strong>不匹配处理</strong>：将OCR识别的分类文本保存到<code>mismatch_category</code>字段</li>
+      </ul>
+
+      <h4>数据流</h4>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">用户映射分类列</div>
+            <p>在向导Step 2中，将包含分类信息的列映射为"category"字段</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">后端提取分类</div>
+            <p><code>ApplyColumnMapping</code>从OCR结果中提取分类文本</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">尝试匹配现有分类</div>
+            <p>精确匹配<code>report_categories.name</code>，匹配成功则设置<code>category_id</code></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">处理不匹配情况</div>
+            <p>如果无法匹配，将分类文本保存到<code>mismatch_category</code>字段供前端显示</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>2.3 报告详情弹窗 - 分类管理增强</h3>
+      <p><span class="status-tag status-done">已实现</span></p>
+
+      <p>增强报告详情弹窗的分类管理功能，支持手动输入、新建分类和归一化操作。</p>
+
+      <h4>2.3.1 组合框输入</h4>
+      <p>将原有的<code>&lt;select&gt;</code>下拉框改为组合框（<code>&lt;input&gt;</code> + <code>&lt;datalist&gt;</code>），支持：</p>
+      <ul>
+        <li>从下拉列表选择已有分类</li>
+        <li>手动输入新的分类名称</li>
+        <li>输入时自动匹配已有分类</li>
+      </ul>
+
+      <h4>2.3.2 新建分类</h4>
+      <p>当用户输入的分类名称不存在时：</p>
+      <ul>
+        <li>弹出确认对话框："分类 'xxx' 不存在，是否创建新分类？"</li>
+        <li>确认后调用<code>POST /api/v1/categories</code>创建新分类</li>
+        <li>自动刷新分类列表并将新分类应用到当前报告</li>
+      </ul>
+
+      <h4>2.3.3 归一化模态框</h4>
+      <p>当OCR识别的分类与现有分类不匹配时，显示归一化模态框：</p>
+      <ul>
+        <li>显示OCR识别的分类名称（橙色高亮）</li>
+        <li>提供已有分类的下拉选择</li>
+        <li>确认后调用<code>POST /api/v1/categories/normalize</code>执行归一化</li>
+        <li>自动更新报告分类并清除不匹配标记</li>
+      </ul>
+
+      <h4>2.3.4 不匹配标记</h4>
+      <p>当报告存在<code>mismatch_category</code>时，在分类选择器旁显示：</p>
+      <ul>
+        <li>橙色文本显示OCR识别的分类名称</li>
+        <li>"归一"按钮，点击打开归一化模态框</li>
+      </ul>
+
+      <h2>3. 数据模型</h2>
+
+      <h3>3.1 数据库表</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>表名</th>
+            <th>新增字段</th>
+            <th>类型</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>lab_reports</code></td>
+            <td><code>mismatch_category</code></td>
+            <td>TEXT</td>
+            <td>OCR识别但未匹配到现有分类的文本，默认为空字符串</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.2 数据模型</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>结构体</th>
+            <th>新增字段</th>
+            <th>类型</th>
+            <th>JSON标签</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>LabReport</code></td>
+            <td><code>MismatchCategory</code></td>
+            <td>string</td>
+            <td><code>mismatch_category,omitempty</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>4. API接口</h2>
+
+      <h3>4.1 已有接口修改</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>接口</th>
+            <th>方法</th>
+            <th>修改内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/api/v1/ocr/upload</code></td>
+            <td>POST</td>
+            <td>新增<code>category_id</code>参数，上传时可选择分类</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/reports/:id</code></td>
+            <td>GET</td>
+            <td>返回<code>mismatch_category</code>字段</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/reports/:id</code></td>
+            <td>PUT</td>
+            <td>更新分类时自动清除<code>mismatch_category</code></td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/reports/:id/apply-mapping</code></td>
+            <td>POST</td>
+            <td>持久化<code>mismatch_category</code>到数据库</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>4.2 新增接口</h3>
+      <p>无新增接口，复用现有的分类CRUD接口：</p>
+      <ul>
+        <li><code>POST /api/v1/categories</code> - 创建新分类</li>
+        <li><code>POST /api/v1/categories/normalize</code> - 归一化分类</li>
+      </ul>
+
+      <h2>5. 前端组件</h2>
+
+      <h3>5.1 修改的文件</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>文件</th>
+            <th>修改内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>web/js/views/ocr-import.js</code></td>
+            <td>OCR上传表单添加分类下拉框，报告详情弹窗增强分类管理</td>
+          </tr>
+          <tr>
+            <td><code>web/js/views/ocr-mapping-wizard.js</code></td>
+            <td>向导传递<code>mismatch_category</code>到父组件</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5.2 新增组件</h3>
+      <ul>
+        <li><strong>归一化模态框</strong>：显示OCR识别分类，选择目标分类执行归一化</li>
+        <li><strong>组合框输入</strong>：支持选择已有分类或手动输入新分类</li>
+      </ul>
+
+      <h2>6. 用户交互流程</h2>
+
+      <h3>流程A：OCR上传时选择分类</h3>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <p>打开OCR上传页面，选择受检者、医院、采样日期</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <p>在"检验项目分类"下拉框中选择分类（可选）</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <p>选择文件并上传，分类直接关联到报告</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>流程B：通过列映射向导提取分类</h3>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <p>点击报告的"自定义映射"按钮，打开向导</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <p>在Step 2中，将包含分类信息的列映射为"检验项目分类"</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <p>完成映射后，后端自动提取分类并尝试匹配</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <p>如果无法匹配，报告显示橙色警告和"归一"按钮</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>流程C：归一化不匹配的分类</h3>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <p>在报告详情弹窗中看到橙色警告：OCR识别的分类名称</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <p>点击"归一"按钮，打开归一化模态框</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <p>从下拉列表中选择目标分类，点击"确认归一"</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <p>分类更新成功，警告消失</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>流程D：手动输入新分类</h3>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <p>在报告详情弹窗的分类输入框中输入新的分类名称</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <p>系统检测到分类不存在，弹出确认对话框</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <p>确认创建，系统自动创建新分类并应用到报告</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <p>分类列表刷新，显示新创建的分类</p>
+          </div>
+        </div>
+      </div>
+
+      <h2>7. 技术实现</h2>
+
+      <h3>7.1 后端修改</h3>
+      <ul>
+        <li><code>internal/database/migrations.go</code>：添加<code>mismatch_category</code>列</li>
+        <li><code>internal/models/models.go</code>：添加<code>MismatchCategory</code>字段</li>
+        <li><code>internal/handlers/ocr.go</code>：持久化和清除<code>mismatch_category</code></li>
+        <li><code>internal/handlers/report.go</code>：返回和清除<code>mismatch_category</code></li>
+      </ul>
+
+      <h3>7.2 前端修改</h3>
+      <ul>
+        <li><code>web/js/views/ocr-import.js</code>：上传表单、报告详情弹窗、归一化模态框</li>
+        <li><code>web/js/views/ocr-mapping-wizard.js</code>：向导传递<code>mismatch_category</code></li>
+      </ul>
+
+      <h2>8. 测试验证</h2>
+
+      <h3>8.1 测试场景</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>场景</th>
+            <th>操作</th>
+            <th>预期结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>上传时选择分类</td>
+            <td>在OCR上传页面选择分类后上传文件</td>
+            <td>报告列表中显示正确的分类名称</td>
+          </tr>
+          <tr>
+            <td>向导提取分类</td>
+            <td>使用列映射向导映射分类列</td>
+            <td>报告详情显示OCR识别的分类</td>
+          </tr>
+          <tr>
+            <td>归一化分类</td>
+            <td>点击"归一"按钮，选择目标分类</td>
+            <td>分类更新成功，警告消失</td>
+          </tr>
+          <tr>
+            <td>手动输入新分类</td>
+            <td>在分类输入框输入新名称并确认创建</td>
+            <td>新分类创建成功并应用到报告</td>
+          </tr>
+          <tr>
+            <td>选择已有分类</td>
+            <td>在分类输入框选择已有分类</td>
+            <td>分类更新成功，<code>mismatch_category</code>被清除</td>
+          </tr>
+          <tr>
+            <td>持久化验证</td>
+            <td>关闭并重新打开报告</td>
+            <td><code>mismatch_category</code>仍然存在</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>9. 总结</h2>
+      <p>本次实现完成了检验项目分类功能的完整链路：</p>
+      <ul>
+        <li>OCR上传时支持选择分类</li>
+        <li>列映射向导支持从OCR结果中提取分类</li>
+        <li>报告详情弹窗支持手动输入、新建分类和归一化操作</li>
+        <li><code>mismatch_category</code>持久化存储，保证数据一致性</li>
+      </ul>
+
+      <p>所有功能已通过编译测试，可以正常使用。</p>
+    </div>
+  </body>
+</html>

@@ -104,9 +104,10 @@ type LabReport struct {
 	CreatedAt        string `json:"created_at"`
 
 	// Joined fields
-	HospitalName string       `json:"hospital_name,omitempty"`
-	CategoryName string       `json:"category_name,omitempty"`
-	Items        []ReportItem `json:"items,omitempty"`
+	HospitalName     string       `json:"hospital_name,omitempty"`
+	CategoryName     string       `json:"category_name,omitempty"`
+	MismatchCategory string       `json:"mismatch_category,omitempty"`
+	Items            []ReportItem `json:"items,omitempty"`
 }
 
 // ReportItem — 报告数据行

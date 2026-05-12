@@ -90,12 +90,13 @@ func GetReport(c *gin.Context) {
 	err := database.DB.QueryRow(
 		`SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.category_id, lr.created_at,
 		h.name as hospital_name,
-		COALESCE(rc.name, '') as category_name
+		COALESCE(rc.name, '') as category_name,
+		COALESCE(lr.mismatch_category, '') as mismatch_category
 		FROM lab_reports lr
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
 		LEFT JOIN report_categories rc ON rc.id = lr.category_id
 		WHERE lr.id = ?`, id,
-	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &catID, &r.CreatedAt, &hospName, &r.CategoryName)
+	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &catID, &r.CreatedAt, &hospName, &r.CategoryName, &r.MismatchCategory)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
 		return
@@ -188,6 +189,7 @@ func UpdateReport(c *gin.Context) {
 			database.DB.Exec(`UPDATE lab_reports SET category_id = NULL WHERE id = ?`, id)
 		} else {
 			database.DB.Exec(`UPDATE lab_reports SET category_id = ? WHERE id = ?`, *req.CategoryID, id)
+			database.DB.Exec(`UPDATE lab_reports SET mismatch_category = '' WHERE id = ?`, id)
 		}
 	}
 
