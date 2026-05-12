@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LabTrace 代码审查报告 - 2026-05-12</title>
+<style>
+  :root {
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-border: #e2e8f0;
+    --color-primary: #3b82f6;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-info: #6366f1;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; background: var(--color-bg); color: var(--color-text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 2.5rem; border-radius: var(--radius); margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
+  .report-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .report-header .subtitle { opacity: 0.85; font-size: 0.95rem; }
+  .report-header .meta { display: flex; gap: 2rem; margin-top: 1.25rem; font-size: 0.85rem; opacity: 0.8; }
+  .report-header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* Score Card */
+  .score-section { display: grid; grid-template-columns: 200px 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+  .score-card { background: var(--color-surface); border-radius: var(--radius); padding: 2rem; text-align: center; box-shadow: var(--shadow); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .score-ring { width: 120px; height: 120px; position: relative; }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring .score-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; color: var(--color-primary); }
+  .score-label { margin-top: 0.75rem; font-size: 0.85rem; color: var(--color-text-secondary); }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .stat-card { background: var(--color-surface); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+  .stat-card .stat-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; }
+  .stat-card .stat-label { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem; }
+  .stat-card.critical .stat-value { color: var(--color-danger); }
+  .stat-card.warning .stat-value { color: var(--color-warning); }
+  .stat-card.info .stat-value { color: var(--color-info); }
+
+  /* Section */
+  .section { background: var(--color-surface); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden; }
+  .section-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.75rem; }
+  .section-header h2 { font-size: 1.1rem; font-weight: 600; }
+  .section-header .badge { font-size: 0.75rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-weight: 600; }
+  .badge-critical { background: #fef2f2; color: var(--color-danger); }
+  .badge-warning { background: #fffbeb; color: #b45309; }
+  .badge-info { background: #eef2ff; color: var(--color-info); }
+  .badge-success { background: #f0fdf4; color: #16a34a; }
+
+  /* Issue Item */
+  .issue { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border); }
+  .issue:last-child { border-bottom: none; }
+  .issue-header { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.5rem; }
+  .issue-severity { font-size: 1rem; flex-shrink: 0; margin-top: 0.15rem; }
+  .issue-title { font-weight: 600; font-size: 0.95rem; }
+  .issue-location { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; color: var(--color-primary); background: #eff6ff; padding: 0.15rem 0.5rem; border-radius: 4px; margin-top: 0.35rem; display: inline-block; }
+  .issue-desc { font-size: 0.9rem; color: var(--color-text-secondary); margin: 0.5rem 0; }
+  .issue-fix { background: #f8fafc; border-left: 3px solid var(--color-primary); padding: 0.75rem 1rem; margin-top: 0.75rem; border-radius: 0 6px 6px 0; font-size: 0.85rem; }
+  .issue-fix strong { color: var(--color-text); }
+  .issue-time { font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 0.5rem; }
+
+  /* Table */
+  .review-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .review-table th { background: #f1f5f9; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--color-border); }
+  .review-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .review-table tr:last-child td { border-bottom: none; }
+  .review-table .status-pass { color: var(--color-success); font-weight: 600; }
+  .review-table .status-warn { color: var(--color-warning); font-weight: 600; }
+  .review-table .status-fail { color: var(--color-danger); font-weight: 600; }
+
+  /* Highlight */
+  .highlight-item { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; }
+  .highlight-item:last-child { border-bottom: none; }
+  .highlight-icon { font-size: 1rem; margin-top: 0.1rem; }
+
+  /* Footer */
+  .report-footer { text-align: center; padding: 2rem; color: var(--color-text-secondary); font-size: 0.8rem; border-top: 1px solid var(--color-border); margin-top: 2rem; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .score-section { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr; }
+    .report-header .meta { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="report-header">
+  <h1>LabTrace 代码审查报告</h1>
+  <div class="subtitle">溯源健康 - 个人纵向检验数据管理平台</div>
+  <div class="meta">
+    <span>审核人: AI Assistant (Claude)</span>
+    <span>审核时间: 2026-05-12 23:46</span>
+    <span>技术栈: Go 1.25 + Gin v1.12 + SQLite3 (WAL) + Vue 3 + Tailwind CSS + ECharts 5</span>
+  </div>
+</div>
+
+<!-- Score Section -->
+<div class="score-section">
+  <div class="score-card">
+    <div class="score-ring">
+      <svg width="120" height="120">
+        <circle cx="60" cy="60" r="52" fill="none" stroke="#e2e8f0" stroke-width="8"/>
+        <circle cx="60" cy="60" r="52" fill="none" stroke="#3b82f6" stroke-width="8"
+                stroke-dasharray="326.73" stroke-dashoffset="65.35" stroke-linecap="round"/>
+      </svg>
+      <div class="score-text">80</div>
+    </div>
+    <div class="score-label">综合评分 (百分制)</div>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card critical">
+      <div class="stat-icon">🔴</div>
+      <div class="stat-value">6</div>
+      <div class="stat-label">严重问题</div>
+    </div>
+    <div class="stat-card warning">
+      <div class="stat-icon">🟡</div>
+      <div class="stat-value">11</div>
+      <div class="stat-label">待改进</div>
+    </div>
+    <div class="stat-card info">
+      <div class="stat-icon">🔵</div>
+      <div class="stat-value">11</div>
+      <div class="stat-label">优化建议</div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 1: Critical Issues -->
+<div class="section">
+  <div class="section-header">
+    <h2>🔴 严重问题</h2>
+    <span class="badge badge-critical">6 项</span>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔴</span>
+      <div>
+        <div class="issue-title">Goroutine 中数据库操作缺乏错误处理</div>
+        <span class="issue-location">internal/handlers/ocr.go:90-145</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      OCR 异步处理 goroutine 中多次调用 <code>database.DB.Exec()</code>，所有返回的 error 均被丢弃。若数据库写入失败（如磁盘满、连接断开），报告状态会停留在 'processing'，用户无法感知错误，且可能造成数据不一致。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>为 goroutine 内的每个 DB 操作检查错误并记录日志；设置超时 context 防止 goroutine 永久阻塞；考虑使用事务包裹原子操作。
+    </div>
+    <div class="issue-time">预估修复时间：30分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔴</span>
+      <div>
+        <div class="issue-title">备份恢复使用固定临时文件路径</div>
+        <span class="issue-location">internal/handlers/backup.go:49</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>ImportBackup</code> 使用硬编码路径 <code>/tmp/labtrace_restore.bak</code>。并发请求会导致文件竞争；同一时间两个用户导入备份会造成数据损坏。此外 <code>tmpFile</code> 的创建错误被忽略。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>使用 <code>os.CreateTemp("", "labtrace_restore_*.bak")</code> 生成唯一临时文件；检查 <code>os.Create</code> 返回的 error。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔴</span>
+      <div>
+        <div class="issue-title">os.Exit(0) 跳过 defer，数据库关闭顺序不安全</div>
+        <span class="issue-location">main.go:148-155</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      优雅关闭 goroutine 中调用 <code>database.Close()</code> 后立即 <code>os.Exit(0)</code>。由于 <code>os.Exit</code> 不执行任何 defer，且 <code>r.Run()</code> 仍在主 goroutine 运行，存在竞态：可能在连接关闭前就退出，或连接关闭期间 Gin 仍在处理请求。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>使用 <code>http.Server.Shutdown(ctx)</code> 替代 <code>os.Exit(0)</code>，通过 <code>r.Run</code> 包装为 <code>http.Server</code>，在信号处理中优雅关闭 HTTP 服务后再关闭数据库。
+    </div>
+    <div class="issue-time">预估修复时间：30分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔴</span>
+      <div>
+        <div class="issue-title">CORS 中间件允许所有来源</div>
+        <span class="issue-location">internal/middleware/cors.go:9</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>Access-Control-Allow-Origin: *</code> 允许任意域名的跨域请求。虽然本项目是单体应用，但 API 无认证保护的情况下，任何网站都可以调用 API 读取/删除用户数据。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>将 CORS 配置为仅允许同源请求（不设置 Allow-Origin 头），或从环境变量读取允许的 Origin 白名单。同时添加 CSRF 保护机制。
+    </div>
+    <div class="issue-time">预估修复时间：15分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔴</span>
+      <div>
+        <div class="issue-title">趋势查询存在 N+1 查询问题</div>
+        <span class="issue-location">internal/services/trend_service.go:101-106</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>GetTrendData</code> 在遍历每个 report_item 时，如果 <code>refID.Valid</code>，会对每个点执行一次 <code>SELECT value_min, value_max FROM reference_intervals</code> 查询。当报告积累到数百条时，单次趋势查询可能触发数百次额外 SQL 查询，严重影响性能。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>将参考区间查询改为 JOIN 或在主查询中使用子查询一次性获取；或批量收集所有 refID 后用 <code>WHERE id IN (...)</code> 一次查询。
+    </div>
+    <div class="issue-time">预估修复时间：20分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔴</span>
+      <div>
+        <div class="issue-title">API 无任何认证/授权机制</div>
+        <span class="issue-location">main.go:50-145</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      所有 API 端点完全开放，无认证、无鉴权。任何能访问 8080 端口的人都可以查看所有受检者数据、上传/删除报告、导出/导入备份、修改 OCR 配额。备份文件虽然加密，但数据库本身未加密。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>短期：至少添加基于 token 的简单认证中间件；长期：集成 JWT 或 session 认证，支持多用户隔离。同时考虑对敏感操作（备份导入、删除）添加确认机制。
+    </div>
+    <div class="issue-time">预估修复时间：2小时</div>
+  </div>
+</div>
+
+<!-- Section 2: Warning Issues -->
+<div class="section">
+  <div class="section-header">
+    <h2>🟡 待改进</h2>
+    <span class="badge badge-warning">11 项</span>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">每次请求重复加载配置</div>
+        <span class="issue-location">internal/handlers/ocr.go:52, internal/handlers/backup.go:23,59</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>Upload</code>、<code>ReOCR</code>、<code>ExportBackup</code>、<code>ImportBackup</code> 等函数每次调用都执行 <code>config.Load()</code>，重新解析 .env 文件。这造成不必要的 I/O 和内存分配。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>在 <code>main.go</code> 启动时加载一次配置，通过 Gin 的 Context 或依赖注入传递给 handler。可在 <code>main.go</code> 中使用 <code>r.Set("cfg", cfg)</code> 或闭包方式注入。
+    </div>
+    <div class="issue-time">预估修复时间：20分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">loadReportItems 静默忽略错误</div>
+        <span class="issue-location">internal/handlers/report.go:129-172</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>loadReportItems</code> 函数在查询失败或行扫描失败时返回 <code>nil</code> 或 <code>continue</code>，调用方无法区分"无数据"和"查询出错"。用户看到空列表会误以为没有报告项。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>返回 <code>([]models.ReportItem, error)</code>，让调用方决定如何处理错误。扫描失败时记录日志而非静默跳过。
+    </div>
+    <div class="issue-time">预估修复时间：15分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">DashboardSummary 查询错误被忽略</div>
+        <span class="issue-location">internal/handlers/dashboard.go:17-20</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      四个 <code>database.DB.QueryRow().Scan()</code> 调用的错误全部被丢弃。如果数据库连接异常，前端会显示全零数据而非错误提示。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>至少检查每个 Scan 的错误并记录日志；当查询失败时返回 500 错误而非静默返回零值。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">前端 v-html 潜在 XSS 风险</div>
+        <span class="issue-location">web/js/views/dashboard.js:73, web/js/views/trend.js:43, web/js/components/drilldown-popup.js:28</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      多处使用 <code>v-html="flagBadge(row.flag)"</code>。虽然 <code>flagBadge</code> 函数当前仅输出固定格式的 HTML，但若 flag 值来自用户输入且未经验证，可能被注入恶意脚本。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>在 <code>flagBadge</code> 中对输入值做白名单校验（仅允许 'H'、'L'、'阳性'、'阴性'），或改用 CSS class 方案替代 v-html。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">matchTestItemByName 全表扫描性能隐患</div>
+        <span class="issue-location">internal/services/testitem_service.go:64-83</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>MatchTestItemByName</code> 在第 4 步和第 5 步会对 <code>test_items</code> 表执行全表扫描并加载所有记录到内存。随着检验项目库增长，这将变慢。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>在应用层缓存 test_items 列表（启动时加载，变更时刷新），避免每次匹配都查询数据库。
+    </div>
+    <div class="issue-time">预估修复时间：15分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">parseIntParam/parseInt64 函数重复定义</div>
+        <span class="issue-location">internal/handlers/subject.go:190, internal/handlers/ocr_quota.go:146</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      两个不同的文件中定义了功能相似的字符串转整数辅助函数。代码重复且不一致。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>将通用辅助函数提取到 <code>internal/handlers/helpers.go</code>，统一命名和实现。
+    </div>
+    <div class="issue-time">预估修复时间：5分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">视口宽度固定为 1440px，不支持响应式</div>
+        <span class="issue-location">web/index.html:5</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>&lt;meta name="viewport" content="width=1440"&gt;</code> 将视口固定为 1440px，移动端浏览器会缩放整个页面。这与使用 Tailwind CSS 的初衷相悖。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>改为 <code>width=device-width, initial-scale=1.0</code>，并确保布局在不同屏幕尺寸下正常显示。
+    </div>
+    <div class="issue-time">预估修复时间：15分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">SQL 错误处理不一致</div>
+        <span class="issue-location">internal/handlers/report.go:189-194</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>UpdateReport</code> 中多次 <code>database.DB.Exec()</code> 的错误被忽略。部分 handler 检查错误并返回 500，部分则静默继续，导致行为不一致。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>统一错误处理策略：所有数据库写操作都应检查错误，至少记录日志；关键操作（如状态更新）应在失败时返回错误给客户端。
+    </div>
+    <div class="issue-time">预估修复时间：20分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">前端搜索组件未实现点击外部关闭</div>
+        <span class="issue-location">web/js/components/search-dropdown.js:70-73</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>SearchDropdown</code> 定义了 <code>onClickOutside</code> 函数但从未绑定到 DOM 事件。搜索下拉面板打开后只能通过选择结果关闭，无法通过点击外部关闭。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>在 <code>onMounted</code> 中添加 <code>document.addEventListener('click', onClickOutside)</code>，在 <code>onUnmounted</code> 中移除。
+    </div>
+    <div class="issue-time">预估修复时间：5分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">stop target 包含交互式提示，CI/CD 不兼容</div>
+        <span class="issue-location">Makefile:115-124</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>stop</code> target 在端口被占用时使用 <code>read answer</code> 交互式提示用户确认。在 CI/CD 流水线、cron 定时任务或 <code>make restart</code> 链式调用中，<code>read</code> 会阻塞或失败。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>添加 <code>FORCE</code> 变量（如 <code>make stop FORCE=1</code>），非交互模式下自动跳过提示或强制终止。或拆分为 <code>stop</code>（优雅关闭）和 <code>kill</code>（强制终止）两个独立 target。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">缺少 test target</div>
+        <span class="issue-location">Makefile:24</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      项目存在 <code>internal/services/ocr_parser_test.go</code> 测试文件，但 Makefile 未定义 <code>test</code> target。开发者需要手动执行 <code>go test ./...</code>，不利于标准化测试流程。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>添加 <code>test: ## 运行单元测试</code> target，执行 <code>go test -v ./internal/services/</code>。可选添加 <code>test-cover</code> target 生成覆盖率报告。
+    </div>
+    <div class="issue-time">预估修复时间：5分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🟡</span>
+      <div>
+        <div class="issue-title">dev.log 无日志轮转</div>
+        <span class="issue-location">Makefile:48</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>dev</code> target 使用 <code>tee -a dev.log</code> 追加写入日志。长期运行的开发服务器会导致 <code>dev.log</code> 无限增长，可能耗尽磁盘空间。
+    </div>
+    <div class="issue-fix">
+      <strong>修复建议：</strong>在 dev target 启动前清空旧日志（<code>&gt; dev.log</code>）；或添加日志大小检查，超过阈值时自动轮转。
+    </div>
+    <div class="issue-time">预估修复时间：5分钟</div>
+  </div>
+</div>
+
+<!-- Section 3: Suggestions -->
+<div class="section">
+  <div class="section-header">
+    <h2>🔵 优化建议</h2>
+    <span class="badge badge-info">11 项</span>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">缺少全局错误恢复中间件</div>
+        <span class="issue-location">internal/middleware/</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      项目没有 panic recovery 中间件。Gin 默认的 <code>gin.Default()</code> 包含 Logger 和 Recovery，但如果在自定义中间件或 goroutine 中发生 panic，可能导致整个进程崩溃。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>确认 Gin 默认的 Recovery 中间件已生效；为 goroutine 添加 <code>defer recover()</code> 防止未处理的 panic。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">ECharts 实例未使用响应式更新</div>
+        <span class="issue-location">web/js/components/sparkline.js:53-56</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      Sparkline 组件在数据变化时先 <code>dispose()</code> 再重新 <code>initChart()</code>，而非使用 <code>setOption</code> 增量更新。对于频繁更新的场景会造成不必要的 DOM 操作和闪烁。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>改为使用 <code>chartInstance.setOption(newOption, true)</code> 进行增量更新，仅在容器尺寸变化时才重新初始化。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">缺少输入验证中间件</div>
+        <span class="issue-location">internal/handlers/</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      部分 handler 直接使用路径参数作为 SQL 查询条件，未验证参数格式。虽然使用了参数化查询防止 SQL 注入，但未验证 ID 是否为有效数字。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>创建通用的参数验证中间件或辅助函数，确保路径参数（如 <code>:id</code>）为有效整数。
+    </div>
+    <div class="issue-time">预估修复时间：15分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">前端无全局 loading/error 状态管理</div>
+        <span class="issue-location">web/js/app.js</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      各视图组件独立管理加载状态和错误处理，缺少统一的全局状态管理。API 错误仅通过 <code>console.error</code> 输出，用户看不到友好的错误提示。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>在 <code>api.js</code> 中添加全局错误拦截器，对 401/403/500 等状态码统一处理并显示 toast 提示。
+    </div>
+    <div class="issue-time">预估修复时间：20分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">前端 CDN 依赖无版本锁定</div>
+        <span class="issue-location">web/index.html:8-22</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      Vue、Tailwind、ECharts、pdf.js 均通过 CDN 加载，部分使用最新版本号（如 <code>vue@3</code>）。CDN 内容可能被篡改（供应链攻击），且版本升级可能导致不兼容。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>锁定所有 CDN 依赖的精确版本号（如 <code>vue@3.4.21</code>）；添加 <code>integrity</code> 属性（SRI）防止内容篡改。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">calc_service.go 中 findItemValue 传入 reportID=0</div>
+        <span class="issue-location">internal/services/calc_service.go:106-113</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>findItemValue</code> 在通过 code 查找时，SQL 条件 <code>ri.report_id = ?</code> 传入了硬编码的 <code>0</code>，这意味着它会查找 report_id=0 的记录（实际上不存在），该分支永远不会返回结果。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>移除 report_id=0 的硬编码，改为仅通过 test_item_id 匹配；或传入实际的 report_id。
+    </div>
+    <div class="issue-time">预估修复时间：5分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">备份删除未清理磁盘文件</div>
+        <span class="issue-location">internal/handlers/backup.go:90-98</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>DeleteBackup</code> 仅删除数据库中的备份记录，但备份文件仍保留在磁盘上。长期积累会占用磁盘空间。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>删除记录前先查询文件路径，删除数据库记录后同时删除磁盘文件。
+    </div>
+    <div class="issue-time">预估修复时间：5分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">缺少请求日志和慢查询监控</div>
+        <span class="issue-location">internal/middleware/</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      项目仅有审计日志（业务操作记录），缺少 HTTP 请求级别的访问日志和慢查询监控。无法追踪 API 调用来源、响应时间、错误率等运维指标。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>添加请求日志中间件记录请求方法、路径、状态码、耗时；为慢 SQL 查询添加耗时统计。
+    </div>
+    <div class="issue-time">预估修复时间：20分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">build target 缺少版本信息注入</div>
+        <span class="issue-location">Makefile:15,38</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      编译时使用 <code>-ldflags "-s -w"</code> 仅剥离调试信息，未注入版本号、构建时间、Git commit 等元数据。运行时无法追溯二进制版本。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>添加 <code>VERSION</code>、<code>COMMIT</code>、<code>BUILD_TIME</code> 变量，通过 <code>-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"</code> 注入。
+    </div>
+    <div class="issue-time">预估修复时间：10分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">clean target 的 -i 标志无效</div>
+        <span class="issue-location">Makefile:133</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>go clean -cache -testcache -i</code> 中的 <code>-i</code> 标志用于删除通过 <code>go install</code> 安装的可执行文件，但本项目使用 <code>go build</code> 编译到当前目录，<code>-i</code> 不会删除任何东西。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>移除无效的 <code>-i</code> 标志，简化为 <code>go clean -cache -testcache</code>。
+    </div>
+    <div class="issue-time">预估修复时间：2分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">缺少 lint target</div>
+        <span class="issue-location">Makefile</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      项目无 linter 配置（如 golangci-lint），Makefile 也未定义 <code>lint</code> target。代码风格和潜在 bug 缺少自动化检查。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>添加 <code>lint: ## 代码静态检查</code> target，调用 <code>golangci-lint run</code>。可在 CI 中集成。
+    </div>
+    <div class="issue-time">预估修复时间：5分钟</div>
+  </div>
+
+  <div class="issue">
+    <div class="issue-header">
+      <span class="issue-severity">🔵</span>
+      <div>
+        <div class="issue-title">.PHONY 声明不完整</div>
+        <span class="issue-location">Makefile:24</span>
+      </div>
+    </div>
+    <div class="issue-desc">
+      <code>.PHONY</code> 列表缺少 <code>test</code>（如果添加）、<code>lint</code> 等新增 target。当前声明了 <code>build dev run stop clean help rebuild restart</code>，若后续添加 target 需记得更新。
+    </div>
+    <div class="issue-fix">
+      <strong>优化建议：</strong>确保所有非文件 target 都添加到 <code>.PHONY</code> 声明中。
+    </div>
+    <div class="issue-time">预估修复时间：2分钟</div>
+  </div>
+</div>
+
+<!-- Section 4: Highlights -->
+<div class="section">
+  <div class="section-header">
+    <h2>✅ 项目亮点</h2>
+    <span class="badge badge-success">8 项</span>
+  </div>
+
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>清晰的项目分层架构：</strong>handlers → services → database 三层分离明确，handler 层薄、service 层包含业务逻辑，便于维护和测试。</div>
+  </div>
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>OCR 解析管道设计优秀：</strong>支持 4 种解析路径（structured → linear → content → mapping），层层 fallback，鲁棒性强。文本分类器和状态机设计合理。</div>
+  </div>
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>SQLite WAL 模式配置得当：</strong>启用了 WAL 日志、外键约束、busy_timeout=5000ms，MaxOpenConns=2 匹配 SQLite 单写特性。</div>
+  </div>
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>备份加密实现规范：</strong>使用 AES-256-GCM 加密备份文件，随机 nonce，加密前验证 SQLite 文件头，实现正确且安全。</div>
+  </div>
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>种子数据机制实用：</strong>预置检验项目、参考区间、单位转换规则、计算规则和分类，首次启动即可使用。</div>
+  </div>
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>前端组件化设计合理：</strong>DataTable、CrudModal、SearchDropdown、SubjectSelector 等可复用组件抽象得当，通过 CDN + Vue 3 实现了零构建的组件系统。</div>
+  </div>
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>审计日志覆盖关键操作：</strong>OCR 上传、失败、重新识别、列映射、备份导入导出等关键操作均有审计记录。</div>
+  </div>
+  <div class="highlight-item">
+    <span class="highlight-icon">✅</span>
+    <div><strong>Makefile 设计规范：</strong>支持 dev/run 两种运行模式、优雅停止（SIGTERM + 超时 SIGKILL）、PID 文件管理、彩色输出，开发体验良好。</div>
+  </div>
+</div>
+
+<!-- Section 5: Detailed Review Table -->
+<div class="section">
+  <div class="section-header">
+    <h2>📋 按技术栈分类详细审查表</h2>
+  </div>
+  <div style="overflow-x: auto;">
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th style="width: 20%">检查项</th>
+          <th style="width: 10%">状态</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- 后端 Go -->
+        <tr><td colspan="3" style="background: #f1f5f9; font-weight: 600;">后端 (Go + Gin)</td></tr>
+        <tr>
+          <td>错误处理：使用 %w 包装错误</td>
+          <td class="status-pass">通过</td>
+          <td>config、database、services 层均使用 <code>fmt.Errorf("...: %w", err)</code> 正确包装错误链</td>
+        </tr>
+        <tr>
+          <td>错误处理：errors.Is/As 判断</td>
+          <td class="status-warn">警告</td>
+          <td>仅在 <code>report.go:100</code> 使用了 <code>sql.ErrNoRows</code> 判断，其余处通过字符串匹配错误类型（如 <code>category.go:52</code>）</td>
+        </tr>
+        <tr>
+          <td>错误处理：忽略重要错误</td>
+          <td class="status-fail">失败</td>
+          <td>goroutine 中 DB 操作、Dashboard 查询、部分 handler 的 Exec 调用均忽略 error</td>
+        </tr>
+        <tr>
+          <td>Gin：使用 ShouldBindJSON</td>
+          <td class="status-pass">通过</td>
+          <td>所有 POST/PUT handler 均使用 <code>c.ShouldBindJSON()</code>，未使用已弃用的 <code>c.Bind</code></td>
+        </tr>
+        <tr>
+          <td>Gin：路由分组合理</td>
+          <td class="status-pass">通过</td>
+          <td>所有 API 统一在 <code>/api/v1</code> 分组下，RESTful 路由设计清晰</td>
+        </tr>
+        <tr>
+          <td>SQLite：WAL 模式</td>
+          <td class="status-pass">通过</td>
+          <td>连接字符串包含 <code>_journal_mode=WAL</code>，<code>_foreign_keys=on</code>，<code>_busy_timeout=5000</code></td>
+        </tr>
+        <tr>
+          <td>SQLite：连接池配置</td>
+          <td class="status-pass">通过</td>
+          <td><code>SetMaxOpenConns(2)</code> 匹配 SQLite WAL 的单写者并发模型</td>
+        </tr>
+        <tr>
+          <td>SQLite：defer rows.Close()</td>
+          <td class="status-pass">通过</td>
+          <td>所有 Query 调用后均有 <code>defer rows.Close()</code></td>
+        </tr>
+        <tr>
+          <td>Context 传播</td>
+          <td class="status-fail">失败</td>
+          <td>所有数据库操作均使用全局 <code>database.DB</code>，未传递 context.Context，无法支持超时和取消</td>
+        </tr>
+        <tr>
+          <td>Goroutine 安全</td>
+          <td class="status-warn">警告</td>
+          <td>goroutine 中直接操作全局 DB 变量，虽然 SQLite WAL 支持并发读，但缺乏错误处理可能导致状态不一致</td>
+        </tr>
+        <tr>
+          <td>代码组织：依赖注入</td>
+          <td class="status-warn">警告</td>
+          <td>全局变量 <code>database.DB</code> 作为依赖，未使用依赖注入模式，handler 和 service 直接引用全局状态</td>
+        </tr>
+        <tr>
+          <td>测试覆盖</td>
+          <td class="status-warn">警告</td>
+          <td>仅 <code>ocr_parser_test.go</code> 存在单元测试（覆盖文本分类和解析管道），其余 service 和 handler 无测试</td>
+        </tr>
+
+        <!-- 数据库 -->
+        <tr><td colspan="3" style="background: #f1f5f9; font-weight: 600;">数据库 (SQLite3 WAL)</td></tr>
+        <tr>
+          <td>Schema：主键和索引</td>
+          <td class="status-pass">通过</td>
+          <td>所有表使用 <code>INTEGER PRIMARY KEY AUTOINCREMENT</code>，<code>file_md5</code> 有唯一部分索引</td>
+        </tr>
+        <tr>
+          <td>Schema：外键约束</td>
+          <td class="status-pass">通过</td>
+          <td>表间关系使用 <code>REFERENCES ... ON DELETE CASCADE/SET NULL</code>，连接启用 <code>_foreign_keys=on</code></td>
+        </tr>
+        <tr>
+          <td>Schema：CHECK 约束</td>
+          <td class="status-pass">通过</td>
+          <td>gender、ocr_status、flag、value_type、confidence 等字段均有 CHECK 约束</td>
+        </tr>
+        <tr>
+          <td>查询性能：N+1 问题</td>
+          <td class="status-fail">失败</td>
+          <td><code>trend_service.go</code> 中遍历每个 report_item 查询参考区间；<code>matchRefAndCalcFlag</code> 逐条 UPDATE</td>
+        </tr>
+        <tr>
+          <td>并发安全：busy_timeout</td>
+          <td class="status-pass">通过</td>
+          <td>busy_timeout=5000ms，足够应对 WAL 模式下的短暂写锁等待</td>
+        </tr>
+        <tr>
+          <td>事务管理</td>
+          <td class="status-warn">警告</td>
+          <td><code>ApplyColumnMapping</code> 中 DELETE + 批量 INSERT 操作未包裹在事务中，中断可能导致数据丢失</td>
+        </tr>
+        <tr>
+          <td>Schema：迁移策略</td>
+          <td class="status-pass">通过</td>
+          <td>使用 <code>CREATE TABLE IF NOT EXISTS</code> + <code>ALTER TABLE</code> 忽略已存在列错误，幂等迁移</td>
+        </tr>
+
+        <!-- 前端 -->
+        <tr><td colspan="3" style="background: #f1f5f9; font-weight: 600;">前端 (Vue 3 + Tailwind CSS + ECharts)</td></tr>
+        <tr>
+          <td>Vue 3：Composition API</td>
+          <td class="status-pass">通过</td>
+          <td>所有视图组件使用 <code>defineComponent</code> + <code>setup()</code>，正确使用 <code>ref</code>、<code>computed</code>、<code>reactive</code></td>
+        </tr>
+        <tr>
+          <td>Vue 3：组件拆分</td>
+          <td class="status-pass">通过</td>
+          <td>7 个可复用组件 + 7 个视图组件，职责清晰，复用合理</td>
+        </tr>
+        <tr>
+          <td>ECharts：实例销毁</td>
+          <td class="status-pass">通过</td>
+          <td><code>trend.js</code> 和 <code>sparkline.js</code> 在 <code>onUnmounted</code> 中调用 <code>chartInstance.dispose()</code></td>
+        </tr>
+        <tr>
+          <td>ECharts：窗口自适应</td>
+          <td class="status-pass">通过</td>
+          <td><code>trend.js</code> 监听 <code>resize</code> 事件并调用 <code>chartInstance.resize()</code></td>
+        </tr>
+        <tr>
+          <td>安全性：v-html 使用</td>
+          <td class="status-warn">警告</td>
+          <td>3 处使用 v-html 渲染 flagBadge 输出，当前安全但依赖输入验证</td>
+        </tr>
+        <tr>
+          <td>Tailwind CSS：CDN 引入</td>
+          <td class="status-pass">通过</td>
+          <td>通过 <code>cdn.tailwindcss.com</code> 引入并自定义主题色</td>
+        </tr>
+        <tr>
+          <td>响应式布局</td>
+          <td class="status-fail">失败</td>
+          <td>viewport 固定为 1440px，不支持移动端</td>
+        </tr>
+
+        <!-- 通用 -->
+        <tr><td colspan="3" style="background: #f1f5f9; font-weight: 600;">通用检查项</td></tr>
+        <tr>
+          <td>代码注释</td>
+          <td class="status-pass">通过</td>
+          <td>关键函数有中文注释说明用途和参数；导出类型有文档注释</td>
+        </tr>
+        <tr>
+          <td>配置管理</td>
+          <td class="status-pass">通过</td>
+          <td>环境变量通过 <code>.env</code> 管理，<code>godotenv</code> 加载，有 <code>.env.example</code> 模板</td>
+        </tr>
+        <tr>
+          <td>日志规范</td>
+          <td class="status-warn">警告</td>
+          <td>使用 <code>log.Printf</code> 输出日志，无级别区分；敏感信息（如 DB_KEY）未在日志中出现（通过）</td>
+        </tr>
+        <tr>
+          <td>API 响应格式统一</td>
+          <td class="status-pass">通过</td>
+          <td>所有 API 返回 <code>{"code": 0|1, "message": "...", "data": ...}</code> 统一格式</td>
+        </tr>
+        <tr>
+          <td>硬编码配置提取</td>
+          <td class="status-warn">警告</td>
+          <td>部分值仍硬编码（如 OCR endpoint、region），但主要配置已提取到环境变量</td>
+        </tr>
+
+        <!-- Makefile -->
+        <tr><td colspan="3" style="background: #f1f5f9; font-weight: 600;">构建系统 (Makefile)</td></tr>
+        <tr>
+          <td>运行模式分离</td>
+          <td class="status-pass">通过</td>
+          <td>dev（debug + 日志）和 run（release）模式分离清晰，GIN_MODE 正确设置</td>
+        </tr>
+        <tr>
+          <td>优雅停止</td>
+          <td class="status-pass">通过</td>
+          <td>使用 SIGTERM → 等待 5 秒 → SIGKILL 的渐进式停止策略，PID 文件管理规范</td>
+        </tr>
+        <tr>
+          <td>依赖管理</td>
+          <td class="status-pass">通过</td>
+          <td><code>run</code> 自动检测并编译二进制；<code>rebuild</code> 和 <code>restart</code> 正确声明依赖</td>
+        </tr>
+        <tr>
+          <td>交互式提示</td>
+          <td class="status-fail">失败</td>
+          <td><code>stop</code> target 使用 <code>read</code> 交互式提示，CI/CD 和自动化场景下会阻塞</td>
+        </tr>
+        <tr>
+          <td>test target</td>
+          <td class="status-fail">失败</td>
+          <td>缺少 <code>test</code> target，项目有测试文件但无标准化运行入口</td>
+        </tr>
+        <tr>
+          <td>日志管理</td>
+          <td class="status-warn">警告</td>
+          <td>dev.log 使用追加模式无轮转，长期运行会无限增长</td>
+        </tr>
+        <tr>
+          <td>版本信息注入</td>
+          <td class="status-warn">警告</td>
+          <td>编译时未注入版本号、构建时间等元数据，运行时无法追溯版本</td>
+        </tr>
+        <tr>
+          <td>跨平台兼容</td>
+          <td class="status-warn">警告</td>
+          <td><code>grep -Po</code>（Perl regex）和 <code>lsof</code> 在 macOS/BSD 上不可用，仅支持 Linux</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="report-footer">
+  <p><strong>审核人：</strong>AI Assistant (Claude)</p>
+  <p><strong>审核时间：</strong>2026-05-12 23:46</p>
+  <p><strong>下次复审建议：</strong>2026-05-19（一周后）或下一次功能发版前</p>
+  <p style="margin-top: 0.75rem; opacity: 0.6;">本报告由 AI 自动生成，建议结合人工审查使用</p>
+</div>
+
+</div>
+</body>
+</html>
