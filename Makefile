@@ -21,40 +21,38 @@ RED         := \033[0;31m
 CYAN        := \033[0;36m
 RESET       := \033[0m
 
-.PHONY: build dev run stop clean help
+.PHONY: build dev run stop clean help rebuild restart
 
 # ---- 默认目标 ----
 help: ## 显示帮助信息
-	@echo ""
-	@echo "$(CYAN)LabTrace Makefile$(RESET)"
-	@echo "=================="
-	@echo ""
-	@echo "$(GREEN)Usage:$(RESET) make <target>"
-	@echo ""
+	@printf ""
+	@printf "$(CYAN)LabTrace Makefile$(RESET)\n"
+	@printf "==================\n\n"
+	@printf "$(GREEN)Usage:$(RESET) make <target>\n\n"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-10s$(RESET) %s\n", $$1, $$2}'
-	@echo ""
+	@printf "\n"
 
 build: ## 编译生成可执行二进制文件
-	@echo "$(CYAN)[build]$(RESET) 编译 $(APP_NAME)..."
+	@printf "$(CYAN)[build]$(RESET) 编译 $(APP_NAME)...\n"
 	@$(GO) build -ldflags "$(LDFLAGS)" -o $(APP_NAME) .
-	@echo "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME)"
+	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME)\n"
 
 dev: ## 开发者模式运行（丰富日志）
 	@bash -c ' \
 		if [ -f $(PID_FILE) ]; then \
-			echo "$(YELLOW)[dev]$(RESET) 检测到 PID 文件，尝试先停止旧进程..."; \
+			printf "$(YELLOW)[dev]$(RESET) 检测到 PID 文件，尝试先停止旧进程...\n"; \
 			$(MAKE) --no-print-directory stop; \
 		fi; \
-		echo "$(CYAN)[dev]$(RESET) 以开发者模式启动..."; \
+		printf "$(CYAN)[dev]$(RESET) 以开发者模式启动...\n"; \
 		GIN_MODE=debug ./$(APP_NAME) 2>&1 | tee -a dev.log & \
 		DEV_PID=$$!; \
 		echo $$DEV_PID > $(PID_FILE); \
 		sleep 1; \
 		if kill -0 $$DEV_PID 2>/dev/null; then \
-			echo "$(GREEN)[dev]$(RESET) 已启动 (PID: $$DEV_PID, 端口: $(PORT), 日志: dev.log)"; \
+			printf "$(GREEN)[dev]$(RESET) 已启动 (PID: $$DEV_PID, 端口: $(PORT), 日志: dev.log)\n"; \
 		else \
-			echo "$(RED)[dev]$(RESET) 启动失败，请检查日志"; \
+			printf "$(RED)[dev]$(RESET) 启动失败，请检查日志\n"; \
 			rm -f $(PID_FILE); \
 		fi \
 	'
@@ -62,81 +60,85 @@ dev: ## 开发者模式运行（丰富日志）
 run: ## 生产模式运行（仅必要日志）
 	@bash -c ' \
 		if [ -f $(PID_FILE) ]; then \
-			echo "$(YELLOW)[run]$(RESET) 检测到 PID 文件，尝试先停止旧进程..."; \
+			printf "$(YELLOW)[run]$(RESET) 检测到 PID 文件，尝试先停止旧进程...\n"; \
 			$(MAKE) --no-print-directory stop; \
 		fi; \
 		if ! [ -f $(APP_NAME) ]; then \
-			echo "$(YELLOW)[run]$(RESET) 二进制文件不存在，先编译..."; \
+			printf "$(YELLOW)[run]$(RESET) 二进制文件不存在，先编译...\n"; \
 			$(MAKE) build; \
 		fi; \
-		echo "$(CYAN)[run]$(RESET) 以生产模式启动..."; \
+		printf "$(CYAN)[run]$(RESET) 以生产模式启动...\n"; \
 		GIN_MODE=release ./$(APP_NAME) & \
 		RUN_PID=$$!; \
 		echo $$RUN_PID > $(PID_FILE); \
 		sleep 1; \
 		if kill -0 $$RUN_PID 2>/dev/null; then \
-			echo "$(GREEN)[run]$(RESET) 已启动 (PID: $$RUN_PID, 端口: $(PORT))"; \
+			printf "$(GREEN)[run]$(RESET) 已启动 (PID: $$RUN_PID, 端口: $(PORT))\n"; \
 		else \
-			echo "$(RED)[run]$(RESET) 启动失败，请检查配置"; \
+			printf "$(RED)[run]$(RESET) 启动失败，请检查配置\n"; \
 			rm -f $(PID_FILE); \
 		fi \
 	'
 
 stop: ## 优雅关闭应用
 	@bash -c ' \
-		echo "$(CYAN)[stop]$(RESET) 正在停止..."; \
+		printf "$(CYAN)[stop]$(RESET) 正在停止...\n"; \
 		if [ -f $(PID_FILE) ]; then \
 			PID=$$(cat $(PID_FILE)); \
 			if kill -0 $$PID 2>/dev/null; then \
 				kill -15 $$PID; \
-				echo "$(GREEN)[stop]$(RESET) 已发送 SIGTERM 到进程 $$PID"; \
+				printf "$(GREEN)[stop]$(RESET) 已发送 SIGTERM 到进程 $$PID\n"; \
 				for i in 1 2 3 4 5; do \
 					if ! kill -0 $$PID 2>/dev/null; then \
-						echo "$(GREEN)[stop]$(RESET) 进程已退出"; \
+						printf "$(GREEN)[stop]$(RESET) 进程已退出\n"; \
 						rm -f $(PID_FILE); \
 						exit 0; \
 					fi; \
 					sleep 1; \
 				done; \
-				echo "$(YELLOW)[stop]$(RESET) 进程未在 5 秒内退出，发送 SIGKILL 强制终止"; \
+				printf "$(YELLOW)[stop]$(RESET) 进程未在 5 秒内退出，发送 SIGKILL 强制终止\n"; \
 				kill -9 $$PID 2>/dev/null; \
 				rm -f $(PID_FILE); \
 			else \
-				echo "$(YELLOW)[stop]$(RESET) PID $$PID 已不存在，清理 PID 文件"; \
+				printf "$(YELLOW)[stop]$(RESET) PID $$PID 已不存在，清理 PID 文件\n"; \
 				rm -f $(PID_FILE); \
 			fi; \
 		else \
-			echo "$(YELLOW)[stop]$(RESET) 未找到 PID 文件"; \
+			printf "$(YELLOW)[stop]$(RESET) 未找到 PID 文件\n"; \
 		fi; \
 		PID_ON_PORT=$$(lsof -ti :$(PORT) 2>/dev/null); \
 		if [ -n "$$PID_ON_PORT" ]; then \
-			echo ""; \
-			echo "$(RED)[stop]$(RESET) 端口 $(PORT) 仍被以下进程占用:"; \
+			printf "\n"; \
+			printf "$(RED)[stop]$(RESET) 端口 $(PORT) 仍被以下进程占用:\n"; \
 			lsof -i :$(PORT) 2>/dev/null; \
-			echo ""; \
-			echo "$(YELLOW)[stop]$(RESET) 是否要强制结束占用端口的进程？[y/N] \c"; \
+			printf "\n"; \
+			printf "$(YELLOW)[stop]$(RESET) 是否要强制结束占用端口的进程？[y/N] "; \
 			read answer; \
 			if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
 				for p in $$PID_ON_PORT; do \
 					kill -9 $$p 2>/dev/null; \
-					echo "$(GREEN)[stop]$(RESET) 已强制终止进程 $$p"; \
+					printf "$(GREEN)[stop]$(RESET) 已强制终止进程 $$p\n"; \
 				done; \
 			else \
-				echo "$(YELLOW)[stop]$(RESET) 已跳过，端口 $(PORT) 仍被占用"; \
+				printf "$(YELLOW)[stop]$(RESET) 已跳过，端口 $(PORT) 仍被占用\n"; \
 			fi; \
 		fi \
 	'
 
 clean: ## 清理临时文件、缓存及二进制文件（保留 ./data 目录）
-	@echo "$(CYAN)[clean]$(RESET) 清理编译产物..."
+	@printf "$(CYAN)[clean]$(RESET) 清理编译产物...\n"
 	@rm -f $(APP_NAME)
-	@echo "$(GREEN)[clean]$(RESET) 已删除二进制文件: $(APP_NAME)"
-	@echo "$(CYAN)[clean]$(RESET) 清理 Go 缓存..."
+	@printf "$(GREEN)[clean]$(RESET) 已删除二进制文件: $(APP_NAME)\n"
+	@printf "$(CYAN)[clean]$(RESET) 清理 Go 缓存...\n"
 	@$(GO) clean -cache -testcache -i 2>/dev/null || true
-	@echo "$(GREEN)[clean]$(RESET) Go 缓存已清理"
-	@echo "$(CYAN)[clean]$(RESET) 清理临时文件..."
+	@printf "$(GREEN)[clean]$(RESET) Go 缓存已清理\n"
+	@printf "$(CYAN)[clean]$(RESET) 清理临时文件...\n"
 	@rm -f *.log *.out *.test
 	@rm -f $(PID_FILE)
 	@rm -rf tmp/
-	@echo "$(GREEN)[clean]$(RESET) 临时文件已清理"
-	@echo "$(CYAN)[clean]$(RESET) 保留 ./data 目录及其下所有文件"
+	@printf "$(GREEN)[clean]$(RESET) 临时文件已清理\n"
+	@printf "$(CYAN)[clean]$(RESET) 保留 ./data 目录及其下所有文件\n"
+
+rebuild: clean build ## 先清理再编译
+
+restart: stop run ## 先停止再启动
