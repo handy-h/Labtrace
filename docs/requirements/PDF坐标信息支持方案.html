@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF 坐标信息支持 — 产品方案</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.8;
+        color: #333;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        background: #f8f9fa;
+      }
+      .container {
+        background: white;
+        padding: 50px 60px;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        font-size: 28px;
+        color: #1a1a1a;
+        margin-bottom: 8px;
+        border-bottom: 3px solid #2563eb;
+        padding-bottom: 12px;
+      }
+      .subtitle {
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 30px;
+      }
+      h2 {
+        font-size: 20px;
+        color: #1e40af;
+        margin-top: 35px;
+        margin-bottom: 15px;
+        padding-left: 12px;
+        border-left: 4px solid #2563eb;
+      }
+      h3 {
+        font-size: 16px;
+        color: #374151;
+        margin-top: 25px;
+        margin-bottom: 10px;
+      }
+      h4 {
+        font-size: 15px;
+        color: #334155;
+        margin-top: 22px;
+        margin-bottom: 8px;
+      }
+      p {
+        margin-bottom: 12px;
+      }
+      ul,
+      ol {
+        margin-left: 24px;
+        margin-bottom: 16px;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid #e5e7eb;
+        padding: 10px 14px;
+        text-align: left;
+      }
+      th {
+        background: #f3f4f6;
+        font-weight: 600;
+        color: #374151;
+      }
+      tr:hover {
+        background: #f9fafb;
+      }
+      pre {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 16px 0;
+        overflow-x: auto;
+        font-family: "SF Mono", Monaco, monospace;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "SF Mono", Monaco, monospace;
+        font-size: 13px;
+        color: #dc2626;
+      }
+      footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+        font-size: 13px;
+        color: #9ca3af;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>PDF 坐标信息支持 — 产品方案</h1>
+      <p class="subtitle">溯源健康 (LabTrace) OCR 方案增强</p>
+
+      <h2>1. 问题背景</h2>
+      <p>
+        阿里云 OCR 统一识别（RecognizeAllText）API
+        <strong>支持返回 PDF 坐标信息</strong>，但当前 LabTrace 未启用该能力。
+      </p>
+
+      <h3>现状分析</h3>
+      <table>
+        <tr>
+          <th>维度</th>
+          <th>当前实现</th>
+          <th>问题</th>
+        </tr>
+        <tr>
+          <td>API 调用</td>
+          <td>
+            <code>RecognizeAllText</code>，<code>Type=Advanced</code>，<strong
+              >未设置 OutputCoordinate</strong
+            >
+          </td>
+          <td>API 默认不返回坐标 → PDF 的 <code>BlockRect</code> 为空</td>
+        </tr>
+        <tr>
+          <td>坐标存储</td>
+          <td>
+            <code>OCRResult.Left/Top/Width/Height</code> 从
+            <code>BlockRect.CenterX/Y/Width/Height</code> 映射
+          </td>
+          <td>PDF 返回无坐标时全部为 0</td>
+        </tr>
+        <tr>
+          <td>前端表现</td>
+          <td>
+            <code>ocr-mapping-wizard.js</code> 检测到零坐标后进入
+            <code>noPositionMode</code>
+          </td>
+          <td>降级为纯文本模式，无法框选区域、无法高亮</td>
+        </tr>
+        <tr>
+          <td>高亮/放大镜</td>
+          <td>
+            <code>ocr-import.js</code> 中
+            <code>v-if="highlightRect &amp;&amp; !isPdf"</code> 禁用
+          </td>
+          <td>PDF 永远无法使用高亮呼吸框和放大镜</td>
+        </tr>
+        <tr>
+          <td>自定义映射</td>
+          <td>Step 1 强制跳过区域选择</td>
+          <td>丧失了视觉化布局选择的核心价值</td>
+        </tr>
+      </table>
+
+      <h3>根本原因</h3>
+      <p>
+        <code>ocr_service.go:47-50</code> 构建请求时只设置了
+        <code>Type</code> 和
+        <code>Body</code>，<strong>未设置以下关键参数</strong>：
+      </p>
+      <pre><code>request := &ocr_api.RecognizeAllTextRequest{
+    Body:             strings.NewReader(string(fileBytes)),
+    Type:             tea.String("Advanced"),
+    OutputCoordinate: tea.String("rectangle"),   // 新增：返回矩形坐标
+    OutputOricoord:   tea.Bool(true),             // 新增：原始图像坐标系
+    AdvancedConfig: &ocr_api.RecognizeAllTextRequestAdvancedConfig{
+        OutputTable: tea.Bool(true),              // 新增：返回表格结构
+        OutputRow:   tea.Bool(true),              // 新增：返回行分组
+    },
+}
+</code></pre>
+
+      <h2>2. 产品目标</h2>
+      <ol>
+        <li>
+          <strong>PDF 与图片获得同等坐标支持</strong>：PDF
+          上传后也能在原图上框选区域、高亮单元格、使用放大镜。
+        </li>
+        <li>
+          利用表格识别（TableInfo）提升自动解析率：API 返回结构化单元格，可跳过
+          Y 轴行分组启发式算法。
+        </li>
+        <li>
+          消除 <code>noPositionMode</code> 的降级路径：仅在 OCR
+          完全无返回时才降级。
+        </li>
+        <li>向后兼容：已入库的旧数据仍可正常查看，不做迁移。</li>
+      </ol>
+
+      <h2>3. API 参数变更方案</h2>
+
+      <h3>3.1 请求参数新增</h3>
+      <p>
+        修改 <code>internal/services/ocr_service.go</code> 中
+        <code>Recognize()</code> 函数的请求构建部分。
+      </p>
+
+      <h3>3.2 响应数据增强</h3>
+      <table>
+        <tr>
+          <th>新增字段</th>
+          <th>层级</th>
+          <th>内容</th>
+          <th>用途</th>
+        </tr>
+        <tr>
+          <td><code>BlockRect.CenterX/Y/Width/Height</code></td>
+          <td>BlockDetails</td>
+          <td><strong>PDF 也有值了</strong></td>
+          <td>原有逻辑已处理，无需修改</td>
+        </tr>
+        <tr>
+          <td><code>TableInfo.TableDetails[]</code></td>
+          <td>SubImages</td>
+          <td>表格级结构：行数、列数、表头/表尾</td>
+          <td>自动表格检测和解析</td>
+        </tr>
+        <tr>
+          <td><code>CellDetails[]</code></td>
+          <td>TableDetails</td>
+          <td>
+            单元格级：<code>CellContent</code>、<code>RowStart/End</code>、<code>ColumnStart/End</code>、<code
+              >CellRect</code
+            >
+          </td>
+          <td>精确行列定位</td>
+        </tr>
+        <tr>
+          <td><code>RowInfo.RowDetails[]</code></td>
+          <td>SubImages</td>
+          <td>行级：<code>RowContent</code>、<code>BlockList[]</code></td>
+          <td>行分组辅助验证</td>
+        </tr>
+      </table>
+
+      <h3>3.3 对费用的影响</h3>
+      <p>
+        <code>OutputCoordinate</code>、<code>OutputTable</code>、<code
+          >OutputRow</code
+        >
+        均不额外计费，仍按 OCR 调用次数计费。但开启
+        <code>OutputTable</code> 可能增加响应体积和延迟（约 10-20%），需在 UI
+        上做好加载提示。
+      </p>
+
+      <h2>4. 数据模型变更</h2>
+
+      <h3>4.1 <code>OCRResult</code> 扩展</h3>
+      <p>在 <code>internal/services/ocr_service.go</code> 中扩展结构体：</p>
+      <pre><code>type OCRResult struct {
+    Text        string  `json:"text"`
+    Confidence  float64 `json:"confidence"`
+    Left        int     `json:"left"`
+    Top         int     `json:"top"`
+    Width       int     `json:"width"`
+    Height      int     `json:"height"`
+    Row         int     `json:"row"`
+    PageIndex   int     `json:"page_index"`
+    // --- 新增字段 ---
+    HasPosition bool    `json:"has_position"`
+    ColIndex    int     `json:"col_index"`
+    RowStart    int     `json:"row_start"`
+    RowEnd      int     `json:"row_end"`
+    ColStart    int     `json:"col_start"`
+    ColEnd      int     `json:"col_end"`
+}
+</code></pre>
+      <p>
+        <code>HasPosition</code> 字段关键作用：替代前端当前的
+        <code>noPositionMode</code> 判定逻辑（遍历所有块检查坐标是否全为
+        0），改为直接检查块中是否有 <code>HasPosition=true</code> 的项。
+      </p>
+
+      <h3>4.2 坐标语义修正</h3>
+      <p>
+        当前代码将 <code>BlockRect.CenterX</code> 存入
+        <code>OCRResult.Left</code>，命名与语义不符。建议在
+        <code>parseOCRResponse()</code> 中统一转为左上角坐标：
+      </p>
+      <pre><code>// 之前：r.Left = int(*bd.BlockRect.CenterX)
+// 之后：
+r.Left = int(*bd.BlockRect.CenterX) - int(*bd.BlockRect.Width)/2
+r.Top  = int(*bd.BlockRect.CenterY) - int(*bd.BlockRect.Height)/2
+r.HasPosition = true
+</code></pre>
+      <p>
+        影响评估：<code>AutoDetectTableRegion()</code> 和
+        <code>filterByRegion()</code>
+        已自行做坐标补偿，修正后需移除这些补偿逻辑，避免双重偏移。
+      </p>
+      <ul>
+        <li>
+          <code>internal/services/ocr_mapping.go:43</code> —
+          <code>AutoDetectTableRegion()</code>
+        </li>
+        <li>
+          <code>internal/services/ocr_mapping.go:186</code> —
+          <code>filterByRegion()</code>
+        </li>
+        <li>
+          <code>internal/services/ocr_parser.go</code> —
+          <code>sortByX()</code> 等依赖 <code>Left</code> 为 CenterX 的地方
+        </li>
+      </ul>
+
+      <h3>4.3 TableInfo 存储</h3>
+      <p>
+        新增 <code>OCRTableInfo</code> 结构体，序列化后存入
+        <code>lab_reports.ocr_raw_json</code> 中（与 OCRResult
+        数组并列），或新增数据库列。
+      </p>
+      <p>
+        <strong>推荐方案</strong>：在 <code>lab_reports</code> 表新增
+        <code>ocr_table_json TEXT</code> 列，存储 TableInfo 序列化结果。
+      </p>
+      <pre><code>type OCRTableCell struct {
+    CellContent string `json:"cell_content"`
+    RowStart    int    `json:"row_start"`
+    RowEnd      int    `json:"row_end"`
+    ColStart    int    `json:"col_start"`
+    ColEnd      int    `json:"col_end"`
+    Left        int    `json:"left"`
+    Top         int    `json:"top"`
+    Width       int    `json:"width"`
+    Height      int    `json:"height"`
+    PageIndex   int    `json:"page_index"`
+}
+
+type OCRTable struct {
+    TableID   int            `json:"table_id"`
+    RowCount  int            `json:"row_count"`
+    ColCount  int            `json:"col_count"`
+    Header    []string       `json:"header"`
+    Cells     []OCRTableCell `json:"cells"`
+    Left      int            `json:"left"`
+    Top       int            `json:"top"`
+    Width     int            `json:"width"`
+    Height    int            `json:"height"`
+    PageIndex int            `json:"page_index"`
+}
+</code></pre>
+
+      <h3>4.4 数据库 DDL 变更</h3>
+      <pre><code>ALTER TABLE lab_reports ADD COLUMN ocr_table_json TEXT NOT NULL DEFAULT '';</code></pre>
+      <p>
+        迁移在 <code>internal/database/migrations.go</code> 中追加，遵循现有
+        idempotent 模式。
+      </p>
+
+      <h2>5. 解析管线增强</h2>
+
+      <h3>5.1 当前 4 条解析路径</h3>
+      <table>
+        <tr>
+          <th>路径</th>
+          <th>函数</th>
+          <th>适用场景</th>
+        </tr>
+        <tr>
+          <td>Path 1</td>
+          <td><code>parseStructured()</code></td>
+          <td>有坐标、多行、可按行分组</td>
+        </tr>
+        <tr>
+          <td>Path 2</td>
+          <td><code>parseLinear()</code></td>
+          <td>无坐标、线性状态机</td>
+        </tr>
+        <tr>
+          <td>Path 3</td>
+          <td><code>parseContentText()</code></td>
+          <td>纯文本 Content</td>
+        </tr>
+        <tr>
+          <td>Path 4</td>
+          <td><code>ParseLabResultsWithMapping()</code></td>
+          <td>用户自定义列映射</td>
+        </tr>
+      </table>
+
+      <h3>5.2 新增 Path 0：表格识别优先</h3>
+      <p>
+        当 API 返回
+        <code>TableInfo</code>
+        时，优先使用结构化单元格数据进行解析，跳过所有启发式算法。
+      </p>
+      <pre><code>输入：TableInfo.CellDetails[]（含行列索引 + 坐标 + 内容）
+  ↓
+1. 识别表头行：RowStart=0 的行
+2. 按行组装 item：同一 RowStart 的所有 cell → 一条 ParsedLabItem
+3. 列角色推断：名词性列→ name；数值性列→ value；含单位关键词→ unit；含范围符号→ range；其余→ notes
+4. 组装 ParsedLabItem，bbox 取 CellRect
+5. 置信度取该行所有 cell 对应 BlockConfidence 的最低值
+</code></pre>
+
+      <h3>5.3 解析路径优先级调整</h3>
+      <pre><code>Path 0: TableInfo 结构化（新增，优先级最高）
+  ↓
+Path 1: parseStructured()
+  ↓
+Path 2: parseLinear()
+  ↓
+Path 3: parseContentText()
+  ↓
+Path 4: 用户自定义映射
+</code></pre>
+
+      <h3>5.4 自定义映射向导增强</h3>
+      <ul>
+        <li>
+          当 <code>TableInfo</code> 可用时，自定义映射向导可利用表格结构。
+        </li>
+        <li>Step 1：自动定位到 TableRect，不再需要用户手动画框。</li>
+        <li>
+          Step 2：表头列直接从 <code>Header.Contents</code> 或
+          <code>RowStart=0</code> 的 cells 提取，无需从 Y 坐标启发式推断。
+        </li>
+        <li>
+          Step 3：单元格编辑视图中，每个单元格可精确关联到 CellRect，tooltip
+          显示原始 OCR 文本更准确。
+        </li>
+      </ul>
+
+      <h2>6. 前端变更</h2>
+
+      <h3>6.1 PDF 预览与高亮</h3>
+      <p>
+        <strong>当前：</strong>PDF 使用
+        <code>&lt;embed&gt;</code> 标签，无法叠加 Canvas 高亮层。
+      </p>
+      <p>
+        <strong>方案：</strong>将 PDF 渲染为 Canvas（使用
+        <code>pdf.js</code>），使 PDF 与图片使用统一的高亮/放大镜机制。
+      </p>
+      <ol>
+        <li>引入 <code>pdf.js</code> CDN。</li>
+        <li>
+          上传 PDF 后，<code>pdf.js</code> 渲染指定页面到
+          <code>&lt;canvas&gt;</code>。
+        </li>
+        <li>在 canvas 上叠加高亮层，复用现有高亮动画。</li>
+        <li>放大镜功能改为从 canvas 截取。</li>
+      </ol>
+
+      <h3>6.2 坐标系映射</h3>
+      <pre><code>const scale = canvasWidth / pdfPage.getViewport({ scale: 1 }).width;
+const displayX = ocrBlock.left * scale;
+const displayY = ocrBlock.top * scale;
+const displayW = ocrBlock.width * scale;
+const displayH = ocrBlock.height * scale;
+</code></pre>
+
+      <h3>6.3 noPositionMode 判定逻辑</h3>
+      <pre><code>noPositionMode() {
+    return !this.blocks.some(b => b.has_position);
+}
+</code></pre>
+
+      <h3>6.4 多页 PDF 页面切换</h3>
+      <p>需在映射向导和报告详情中增加页面切换控件。</p>
+
+      <h2>7. 与界面计划的对齐</h2>
+      <table>
+        <tr>
+          <th>界面计划描述</th>
+          <th>当前实现</th>
+          <th>本方案变更</th>
+        </tr>
+        <tr>
+          <td>PDF 文件（无坐标）：OCR 降级路径只返回纯文本块</td>
+          <td>确实如此</td>
+          <td>
+            <strong>启用 OutputCoordinate 后 PDF 也有坐标</strong
+            >，降级场景大幅减少
+          </td>
+        </tr>
+        <tr>
+          <td>切换到 Step 2 时自动从 OCR 文本提取候选表头词</td>
+          <td>已实现</td>
+          <td>保留作为 fallback，但优先使用 TableInfo.Header</td>
+        </tr>
+        <tr>
+          <td>使用虚拟列边界供用户调整</td>
+          <td>已实现</td>
+          <td>保留作为 fallback，有 TableInfo 时直接用 CellRect 列边界</td>
+        </tr>
+        <tr>
+          <td>左侧显示原始图像，高亮呼吸框</td>
+          <td>仅图片支持</td>
+          <td><strong>PDF 也支持</strong>（via pdf.js → canvas）</td>
+        </tr>
+        <tr>
+          <td>鼠标框选功能：允许用户框选列头/列区域</td>
+          <td>仅图片支持</td>
+          <td><strong>PDF 也支持</strong></td>
+        </tr>
+      </table>
+
+      <h2>8. 实施分阶段计划</h2>
+
+      <h3>Phase 1：基础坐标支持（后端最小变更）</h3>
+      <ul>
+        <li>目标：PDF 获得坐标，消除 <code>noPositionMode</code> 降级。</li>
+        <li>
+          后端变更包括请求参数增加、坐标语义修正、<code>HasPosition</code>
+          字段、移除偏移补偿、适配新坐标语义、前端判定改造。
+        </li>
+        <li>
+          验证：上传 PDF 后，映射向导 Step 1 可正常显示 OCR 块分布图和框选功能。
+        </li>
+      </ul>
+
+      <h3>Phase 2：表格结构化识别</h3>
+      <ul>
+        <li>目标：利用 TableInfo 提升自动解析准确率。</li>
+        <li>
+          变更包括请求参数增加、OCRTable 模型、新增
+          <code>ocr_table_json</code> 列、Path 0 解析器、前端
+          <code>tables</code> 字段。
+        </li>
+        <li>验证：包含表格的 PDF 上传后自动解析率显著提升。</li>
+      </ul>
+
+      <h3>Phase 3：PDF 原生高亮与放大镜</h3>
+      <ul>
+        <li>目标：PDF 预览页获得与图片同等的高亮和放大镜功能。</li>
+        <li>
+          引入 <code>pdf.js</code>、改为 Canvas
+          渲染、复用高亮逻辑、多页切换控件。
+        </li>
+        <li>验证：报告详情页中，PDF 文件也能点击表格行后高亮对应区域。</li>
+      </ul>
+
+      <h3>Phase 4：完整自定义映射增强</h3>
+      <ul>
+        <li>目标：映射向导全面利用 TableInfo。</li>
+        <li>
+          支持多表格选择、精确 CellRect 高亮、医院模板保存包含 TableInfo。
+        </li>
+        <li>多页 PDF 每页独立映射。</li>
+      </ul>
+
+      <h2>9. 风险与约束</h2>
+      <table>
+        <tr>
+          <th>风险</th>
+          <th>影响</th>
+          <th>缓解</th>
+        </tr>
+        <tr>
+          <td>坐标语义修正导致旧数据偏移</td>
+          <td>已入库数据的 <code>ocr_bbox</code> 基于 CenterX 语义</td>
+          <td>旧数据读取时检测格式版本，或保持旧数据不动</td>
+        </tr>
+        <tr>
+          <td><code>pdf.js</code> 增加前端体积</td>
+          <td>加载时间增加约 500KB</td>
+          <td>按需加载，仅在打开 PDF 报告时加载</td>
+        </tr>
+        <tr>
+          <td><code>OutputTable</code> 增加响应延迟</td>
+          <td>OCR 识别时间增加 10-20%</td>
+          <td>前端增加“正在识别表格结构…”提示</td>
+        </tr>
+        <tr>
+          <td>部分扫描版 PDF 仍无 BlockRect</td>
+          <td>API 对扫描质量极差的 PDF 可能不返回坐标</td>
+          <td>保留降级路径不变</td>
+        </tr>
+        <tr>
+          <td>TableInfo 与 BlockInfo 行列不一致</td>
+          <td>两种识别引擎可能给出不同分组</td>
+          <td>Path 0 优先使用 TableInfo；用户可切换回 BlockInfo 模式</td>
+        </tr>
+      </table>
+
+      <h2>10. 成功指标</h2>
+      <ul>
+        <li>
+          PDF 上传后 <code>noPositionMode</code> 触发率从 ~90% 降至 <10%。
+        </li>
+        <li>自定义映射向导 Step 1 的 PDF 可用率从 0% 提升至 >90%。</li>
+        <li>含标准表格的 PDF 自动解析准确率提升 30%+。</li>
+        <li>PDF 报告详情页高亮功能可用。</li>
+      </ul>
+
+      <footer>文档结束</footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>溯源健康 (LabTrace) 产品需求文档 V1.1</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.8;
+        color: #333;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        background: #f8f9fa;
+      }
+      .container {
+        background: white;
+        padding: 50px 60px;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        font-size: 28px;
+        color: #1a1a1a;
+        margin-bottom: 8px;
+        border-bottom: 3px solid #2563eb;
+        padding-bottom: 12px;
+      }
+      .subtitle {
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 30px;
+      }
+      h2 {
+        font-size: 20px;
+        color: #1e40af;
+        margin-top: 35px;
+        margin-bottom: 15px;
+        padding-left: 12px;
+        border-left: 4px solid #2563eb;
+      }
+      h3 {
+        font-size: 16px;
+        color: #374151;
+        margin-top: 25px;
+        margin-bottom: 10px;
+      }
+      p {
+        margin-bottom: 12px;
+      }
+      ul,
+      ol {
+        margin-left: 24px;
+        margin-bottom: 16px;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid #e5e7eb;
+        padding: 10px 14px;
+        text-align: left;
+      }
+      th {
+        background: #f3f4f6;
+        font-weight: 600;
+        color: #374151;
+      }
+      tr:hover {
+        background: #f9fafb;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "SF Mono", Monaco, monospace;
+        font-size: 13px;
+        color: #dc2626;
+      }
+      footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+        font-size: 13px;
+        color: #9ca3af;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>溯源健康 (LabTrace) 产品需求文档 V1.1</h1>
+      <p class="subtitle">溯源健康 (LabTrace) - 个人纵向检化验管理平台</p>
+
+      <h2>1. 文档概述</h2>
+
+      <h3>1.1 文档目的</h3>
+      <p>
+        定义“溯源健康
+        (LabTrace)”平台的功能需求与交互逻辑，旨在通过专业的数据治理手段，解决个人在多医疗机构间的检验数据孤岛问题。
+      </p>
+
+      <h3>1.2 产品范围</h3>
+      <ul>
+        <li>
+          核心功能：检验报告单批量数字化、OCR
+          置信度校核、纵向健康趋势分析、生物参考区间动态匹配。
+        </li>
+        <li>终端限制：Web 端访问（PC 优先）。</li>
+        <li>用户体系：无注册功能，通过本地加密数据库实现数据私有化存储。</li>
+      </ul>
+
+      <h2>2. 术语定义</h2>
+      <ul>
+        <li>
+          <strong>受检者 (Subject)</strong>：数据归属主体，数据隔离的根节点。
+        </li>
+        <li><strong>检验项目 (Test Item)</strong>：标准化的数据单元。</li>
+        <li>
+          <strong>检验报告单 (Laboratory Report)</strong
+          >：由医疗机构出具的原始结果集合。
+        </li>
+        <li>
+          <strong>生物参考区间 (Reference Interval)</strong
+          >：对应受检者性别、年龄的正常值标准范围。
+        </li>
+        <li>
+          <strong>提示符 (Flag)</strong>：数值异常的视觉标记（如 H/L，或红点）。
+        </li>
+        <li>
+          <strong>纵向健康趋势 (Longitudinal Trend)</strong
+          >：同一项目在不同时间点的数据演变轨迹。
+        </li>
+      </ul>
+
+      <h2>3. 产品架构与安全</h2>
+
+      <h3>3.1 核心逻辑架构</h3>
+      <p>
+        原始文件 → OCR 引擎 → 置信度评分 → 渐进式解析规则引擎 → 标准化数据库 →
+        纵向趋势图。
+      </p>
+
+      <h3>3.2 数据持久化与安全</h3>
+      <ul>
+        <li>数据库方案：使用 SQLite 存储。</li>
+        <li>安全加密：采用 SQLCipher 进行全盘加密。</li>
+        <li>
+          密钥管理：加密密码通过本地根目录的 .env
+          文件配置，确保程序与数据物理分离后的安全性。
+        </li>
+        <li>备份机制：提供一键导出/导入加密备份包（.bak）功能。</li>
+      </ul>
+
+      <h2>4. 功能需求详情</h2>
+
+      <h3>4.1 受检者与项目管理</h3>
+      <ul>
+        <li>
+          受检者档案：记录姓名、性别、出生日期。系统必须通过出生日期计算检验当日的精确年龄。
+        </li>
+        <li>
+          检验项目库：
+          <ol>
+            <li>标准项目：系统预置常见生化、血常规项目。</li>
+            <li>项目别名：支持跨医院的同类项目归一化映射。</li>
+            <li>
+              计算项目勾稽校验：系统预设计算逻辑（如：总蛋白 = 白蛋白 +
+              球蛋白），入库前自动核对，偏差 >1g/L 时弹出预警。
+            </li>
+          </ol>
+        </li>
+      </ul>
+
+      <h3>4.2 智能解析规则</h3>
+      <ul>
+        <li>解析规则库：绑定医院维度，包含列映射、单位转换、备注列。</li>
+        <li>
+          生物参考区间体系：
+          <ol>
+            <li>适用范围：每条参考区间需绑定性别（男/女/不限）和年龄区间。</li>
+            <li>特殊表示法：支持数值型、滴度型、半定量。</li>
+            <li>
+              动态匹配逻辑：入库时自动根据“受检者采样当日年龄”匹配对应的参考区间。
+            </li>
+          </ol>
+        </li>
+      </ul>
+
+      <h3>4.3 单位标准化引擎</h3>
+      <ul>
+        <li>预设转换矩阵：内置常见单位换算（如血糖 mmol/L 与 mg/dL）。</li>
+        <li>
+          安全阀逻辑：用户自定义公式必须声明“源单位”与“目标单位”，并在界面内执行示例计算验证，防止趋势图出现量级偏差。
+        </li>
+      </ul>
+
+      <h2>5. 化验单录入与 OCR 核效</h2>
+
+      <h3>5.1 渐进式解析流程</h3>
+      <p>
+        流程变更：取消前置规则配置。用户直接上传图片，系统全量 OCR
+        识别后，用户在预览界面通过“点击/框选”指定列属性，系统自动记忆该医院规则。
+      </p>
+      <p>OCR 状态管理：</p>
+      <ul>
+        <li>待识别：初始状态。</li>
+        <li>识别中：调用接口。</li>
+        <li>待核效：识别成功，等待用户确认置信度。</li>
+        <li>已入库：通过 MD5 校验防止重复录入。</li>
+      </ul>
+
+      <h3>5.2 OCR 置信度视觉反馈</h3>
+      <ul>
+        <li>高信心 (≥95%)：标准黑字。</li>
+        <li>中信心 (80-94%)：文字下方显示浅橙色虚线，提醒复核。</li>
+        <li>
+          低信心
+          (<80%)：单元格背景浅红色高亮，且该单元格自动获取焦点，强制人工确认。
+        </li>
+      </ul>
+
+      <h3>5.3 数据字典映射</h3>
+      <p>
+        定性结果标准化：系统内置映射字典。例如：将 OCR 识别出的
+        "Neg"、"(-)"、"阴" 自动归一化为标准值 "阴性 (-)"。
+      </p>
+
+      <h2>6. UI/UX 设计规范（大屏效能）</h2>
+
+      <h3>6.1 沉浸式比对视图</h3>
+      <ul>
+        <li>整体布局：左侧原始凭证，右侧数据网格。</li>
+        <li>
+          双屏联动：右侧选中某行数据，左侧图片对应区域自动高亮并显示局部放大。
+        </li>
+        <li>
+          列结构：状态图标、检验项目、当前结果、单位、生物参考区间、纵向趋势迷你图、备注。
+        </li>
+      </ul>
+
+      <h3>6.2 效能操作</h3>
+      <ul>
+        <li>
+          快捷键：Tab 切换单元格，Enter 保存并跳转下一异常行，Space 缩放图片。
+        </li>
+        <li>
+          异常一键筛选：顶部看板支持快速过滤，仅显示带有“提示符”的数据行。
+        </li>
+      </ul>
+
+      <h2>7. 趋势分析可视化</h2>
+      <ul>
+        <li>多源合并：基于项目别名，将不同医院的数据点绘制在同一坐标系。</li>
+        <li>
+          动态参考带：图背景根据当时匹配的参考区间显示色块，若参考区间随年龄变化，色块呈阶梯状变化。
+        </li>
+        <li>
+          数据下钻：点击数据点，直接浮窗展示原始检验报告单图片及完整备注信息。
+        </li>
+        <li>
+          表格视图：增加列“受检时年龄”、“参考范围（含适用范围说明）”、“备注”。
+        </li>
+      </ul>
+
+      <h2>8. 非功能性需求</h2>
+      <ul>
+        <li>性能：单页 OCR 响应 <5 秒，万条数据级趋势图渲染 <2 秒。</li>
+        <li>兼容性：适配主流 Chromium 内核浏览器，支持分辨率 ≥1024px。</li>
+        <li>环境要求：运行环境需支持读取本地 .env 配置文件。</li>
+      </ul>
+
+      <footer>文档结束</footer>
+    </div>
+  </body>
+</html>

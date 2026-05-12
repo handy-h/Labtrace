@@ -25,9 +25,17 @@ const OCRImportView = Vue.defineComponent({
         </div>
         <div class="form-group">
           <label class="form-label">文件</label>
-          <input type="file" @change="onFileChange" accept="image/*,.pdf" class="text-sm">
+          <input type="file" @change="onFileChange" accept="image/*,.pdf" multiple class="text-sm">
+          <div v-if="selectedFiles.length > 1" class="flex flex-col gap-1 mt-1" style="max-height: 6rem; overflow-y: auto; font-size: 0.75rem">
+            <div v-for="(f, i) in selectedFiles" :key="i" class="flex items-center gap-2">
+              <span style="color: var(--color-text-muted)">#{{i + 1}}</span>
+              <span class="truncate" style="max-width: 14rem">{{ f.name }}</span>
+              <span style="color: var(--color-text-muted)">{{ (f.size / 1024).toFixed(0) }}KB</span>
+              <button @click="removeFile(i)" class="text-red-400 hover:text-red-600" style="font-size: 0.65rem">x</button>
+            </div>
+          </div>
         </div>
-        <button @click="upload" class="btn btn-primary" :disabled="uploading">{{uploading ? '上传中...' : '上传'}}</button>
+        <button @click="upload" class="btn btn-primary" :disabled="uploading || batchUploading">{{ batchUploading ? '正在上传 (' + (batchCurrent + 1) + '/' + batchQueue.length + ')' : uploading ? '上传中...' : '上传' }}</button>
       </div>
     </div>
 
@@ -180,6 +188,28 @@ const OCRImportView = Vue.defineComponent({
       <span style="color: var(--color-text-muted)">成功{{quota.success_count}} 失败{{quota.fail_count}}</span>
     </div>
 
+    <!-- 批量上传队列 -->
+    <div class="fixed bottom-3 left-3 z-50 card"
+         v-if="batchQueue.length > 0"
+         style="padding: 0.6rem 1rem; font-size: 0.75rem; min-width: 14rem; max-width: 20rem">
+      <div class="flex items-center justify-between mb-1">
+        <span class="font-medium" style="color: var(--color-text-secondary)">批量上传队列</span>
+        <span style="color: var(--color-text-muted)">{{ batchDoneCount }}/{{ batchQueue.length }} 已完成</span>
+      </div>
+      <div class="progress-bar" style="width: 100%; margin-bottom: 0.4rem">
+        <div class="progress-bar-fill bg-blue-500" :style="{ width: batchPct + '%' }"></div>
+      </div>
+      <div style="max-height: 5rem; overflow-y: auto">
+        <div v-for="(item, i) in batchQueue" :key="i" class="flex items-center gap-2" style="padding: 1px 0">
+          <span v-if="item.status === 'done'" style="color: var(--color-success)">&#10003;</span>
+          <span v-else-if="item.status === 'error'" style="color: var(--color-danger)">&#10007;</span>
+          <span v-else-if="item.status === 'uploading'" style="color: var(--color-warning)">&#9679;</span>
+          <span v-else style="color: var(--color-text-muted)">&#9675;</span>
+          <span class="truncate" style="max-width: 12rem">{{ item.file.name }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 自定义列映射向导 -->
     <ocr-mapping-wizard
       :visible="wizardVisible"
@@ -247,7 +277,10 @@ const OCRImportView = Vue.defineComponent({
     const imageEl = Vue.ref(null);
     const magnifier = Vue.ref(null);
     const editInput = Vue.ref(null);
-    let selectedFile = null;
+    let selectedFiles = [];
+    const batchQueue = Vue.ref([]);
+    const batchUploading = Vue.ref(false);
+    const batchCurrent = Vue.ref(0);
 
     const reportListColumns = [
       { key: 'id', label: 'ID', align: 'center' },
@@ -288,19 +321,53 @@ const OCRImportView = Vue.defineComponent({
     }
 
     function loadReports() { api.listReports({ ocr_status: "" }).then((r) => { if (r.data) reports.value = r.data; }); }
-    function onFileChange(e) { selectedFile = e.target.files[0]; }
-    function upload() {
-      if (!selectedFile || !form.value.subject_id) return alert("请选择文件和受检者");
-      uploading.value = true;
-      const fd = new FormData();
-      fd.append("file", selectedFile);
-      fd.append("subject_id", form.value.subject_id);
-      fd.append("hospital_id", form.value.hospital_id);
-      fd.append("sample_date", form.value.sample_date);
-      api.ocrUpload(fd).then((r) => {
+    function onFileChange(e) {
+      selectedFiles = Array.from(e.target.files || []);
+      if (!batchUploading.value) { batchQueue.value = []; batchCurrent.value = 0; }
+    }
+    function removeFile(index) { selectedFiles.splice(index, 1); }
+    function clearFileInput() { const input = document.querySelector('input[type="file"]'); if (input) input.value = ''; }
+    async function upload() {
+      if (!selectedFiles.length || !form.value.subject_id) return alert("请选择文件和受检者");
+      const formSnapshot = { ...form.value };
+      if (selectedFiles.length === 1) {
+        uploading.value = true;
+        const fd = new FormData();
+        fd.append("file", selectedFiles[0]);
+        fd.append("subject_id", formSnapshot.subject_id);
+        fd.append("hospital_id", formSnapshot.hospital_id);
+        fd.append("sample_date", formSnapshot.sample_date);
+        const r = await api.ocrUpload(fd);
         uploading.value = false;
         if (r.code === 0) { alert("上传成功，OCR识别中"); loadReports(); } else alert(r.message);
-      });
+        clearFileInput(); selectedFiles = [];
+        return;
+      }
+      batchUploading.value = true;
+      batchCurrent.value = 0;
+      batchQueue.value = selectedFiles.map(f => ({ file: f, status: 'pending', reportId: null, errorMsg: '' }));
+      for (let i = 0; i < batchQueue.value.length; i++) {
+        batchCurrent.value = i;
+        batchQueue.value[i].status = 'uploading';
+        const fd = new FormData();
+        fd.append("file", batchQueue.value[i].file);
+        fd.append("subject_id", formSnapshot.subject_id);
+        fd.append("hospital_id", formSnapshot.hospital_id);
+        fd.append("sample_date", formSnapshot.sample_date);
+        try {
+          const r = await api.ocrUpload(fd);
+          if (r.code === 0) { batchQueue.value[i].status = 'done'; batchQueue.value[i].reportId = r.data.report_id; }
+          else { batchQueue.value[i].status = 'error'; batchQueue.value[i].errorMsg = r.message || "上传失败"; }
+        } catch (err) { batchQueue.value[i].status = 'error'; batchQueue.value[i].errorMsg = err.message || "网络错误"; }
+      }
+      batchUploading.value = false;
+      loadReports();
+      const doneCount = batchQueue.value.filter(x => x.status === 'done').length;
+      const failCount = batchQueue.value.filter(x => x.status === 'error').length;
+      let msg = `批量上传完成：${doneCount} 成功`;
+      if (failCount) msg += `，${failCount} 失败`;
+      alert(msg);
+      clearFileInput(); selectedFiles = [];
     }
     function viewReport(id) {
       api.getReport(id).then((r) => {
@@ -378,6 +445,12 @@ const OCRImportView = Vue.defineComponent({
       if (remain > 50) return "bg-green-500";
       if (remain > 10) return "bg-orange-500";
       return "bg-red-500";
+    });
+
+    const batchDoneCount = Vue.computed(() => batchQueue.value.filter(item => item.status === 'done' || item.status === 'error').length);
+    const batchPct = Vue.computed(() => {
+      if (!batchQueue.value.length) return 0;
+      return Math.round((batchDoneCount.value / batchQueue.value.length) * 100);
     });
 
     // 行内编辑
@@ -563,6 +636,7 @@ const OCRImportView = Vue.defineComponent({
       categories, showNormalizeModal, onCategoryChange,
       showLinkModal, linkingItem, linkSearch, filteredLinkItems, linkSelectedId, linkCreateAlias,
       openLinkModal, filterLinkItems, doLinkItem,
+      selectedFiles, batchQueue, batchUploading, batchCurrent, batchDoneCount, batchPct, removeFile,
     };
   },
 });
