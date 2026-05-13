@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"labtrace/internal/config"
 	"labtrace/internal/database"
@@ -36,8 +39,6 @@ func main() {
 	if n := services.BackfillTestItemIDs(); n > 0 {
 		fmt.Printf("Backfilled test_item_id for %d report items\n", n)
 	}
-
-	fmt.Printf("LabTrace starting on :%s (db: %s)\n", cfg.Port, cfg.DBPath)
 
 	// Gin router
 	r := gin.Default()
@@ -144,17 +145,32 @@ func main() {
 		v1.GET("/audit-logs", handlers.ListAuditLogs)
 	}
 
-	// Graceful shutdown
+	// 创建 HTTP 服务器
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
+	}
+
+	// 优雅关闭
 	go func() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
 		fmt.Println("\nShutting down...")
+
+		// 给正在处理的请求 5 秒时间完成
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("Server shutdown error: %v", err)
+		}
+
 		database.Close()
-		os.Exit(0)
+		fmt.Println("Server stopped.")
 	}()
 
-	if err := r.Run(":" + cfg.Port); err != nil {
+	fmt.Printf("LabTrace listening on :%s\n", cfg.Port)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
 	}
 }

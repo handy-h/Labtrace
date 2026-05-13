@@ -95,6 +95,9 @@ function confClass(c) {
  */
 function flagBadge(f) {
   if (!f || f === 'normal') return '';
-  const cls = (f === 'H' || f === '阳性') ? 'text-red-600 font-bold' : (f === 'L' || f === '阴性') ? 'text-blue-600 font-bold' : '';
+  // 白名单校验，防止 XSS
+  const allowed = { H: 1, L: 1, '阳性': 1, '阴性': 1, '↑': 1, '↓': 1 };
+  if (!(f in allowed)) return '';
+  const cls = (f === 'H' || f === '阳性' || f === '↑') ? 'text-red-600 font-bold' : 'text-blue-600 font-bold';
   return `<span class="${cls}">${f}</span>`;
 }

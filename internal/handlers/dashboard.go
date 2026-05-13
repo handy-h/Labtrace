@@ -14,10 +14,22 @@ import (
 func DashboardSummary(c *gin.Context) {
 	var subjectCount, pendingCount, anomalyCount, hospitalCount int
 
-	database.DB.QueryRow(`SELECT COUNT(*) FROM subjects`).Scan(&subjectCount)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM lab_reports WHERE ocr_status = 'review'`).Scan(&pendingCount)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM report_items WHERE flag IN ('H', 'L', '阳性', '阴性')`).Scan(&anomalyCount)
-	database.DB.QueryRow(`SELECT COUNT(DISTINCT hospital_id) FROM lab_reports WHERE hospital_id IS NOT NULL`).Scan(&hospitalCount)
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM subjects`).Scan(&subjectCount); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("查询受检者统计失败"))
+		return
+	}
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM lab_reports WHERE ocr_status = 'review'`).Scan(&pendingCount); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("查询待处理报告统计失败"))
+		return
+	}
+	if err := database.DB.QueryRow(`SELECT COUNT(*) FROM report_items WHERE flag IN ('H', 'L', '阳性', '阴性')`).Scan(&anomalyCount); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("查询异常项统计失败"))
+		return
+	}
+	if err := database.DB.QueryRow(`SELECT COUNT(DISTINCT hospital_id) FROM lab_reports WHERE hospital_id IS NOT NULL`).Scan(&hospitalCount); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("查询医院统计失败"))
+		return
+	}
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
 		"subjects":  subjectCount,

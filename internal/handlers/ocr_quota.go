@@ -6,8 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
-
 	"labtrace/internal/config"
 	"labtrace/internal/database"
 	"labtrace/internal/models"
@@ -140,10 +138,4 @@ func UpdateOCRQuota(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
-}
-
-// parseInt64 converts a string to int64 (for audit log entity_id).
-func parseInt64(s string) int64 {
-	n, _ := strconv.ParseInt(s, 10, 64)
-	return n
 }

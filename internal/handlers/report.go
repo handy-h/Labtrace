@@ -121,12 +121,17 @@ func GetReport(c *gin.Context) {
 	}
 
 	// Load report items
-	r.Items = loadReportItems(id)
+	items, err := loadReportItems(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("加载报告项失败"))
+		return
+	}
+	r.Items = items
 
 	c.JSON(http.StatusOK, models.Success(r))
 }
 
-func loadReportItems(reportID string) []models.ReportItem {
+func loadReportItems(reportID string) ([]models.ReportItem, error) {
 	rows, err := database.DB.Query(
 		`SELECT ri.id, ri.report_id, ri.test_item_id, ri.original_value, ri.normalized_value, ri.original_unit, ri.normalized_unit,
 		ri.confidence, ri.ref_interval_id, ri.flag, ri.row_notes, ri.ocr_bbox, ri.created_at,
@@ -143,7 +148,7 @@ func loadReportItems(reportID string) []models.ReportItem {
 		WHERE ri.report_id = ? ORDER BY ri.id`, reportID,
 	)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -169,7 +174,7 @@ func loadReportItems(reportID string) []models.ReportItem {
 		}
 		items = append(items, item)
 	}
-	return items
+	return items, nil
 }
 
 // UpdateReport updates report-level fields (e.g. category_id).
@@ -339,7 +344,7 @@ func ImportReport(c *gin.Context) {
 	matchRefAndCalcFlag(id)
 
 	// Calculation validation
-	reportItems := loadReportItems(id)
+	reportItems, _ := loadReportItems(id)
 	warnings, _ := services.ValidateCalculations(reportItems)
 
 	// Update report status

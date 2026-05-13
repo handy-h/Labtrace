@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"strconv"
 
 	"labtrace/internal/database"
 	"labtrace/internal/models"
@@ -183,11 +182,4 @@ func DeleteHospital(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
-}
-
-// --- Common helpers ---
-
-func parseIntParam(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
 }

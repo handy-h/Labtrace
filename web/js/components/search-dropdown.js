@@ -6,7 +6,7 @@ const SearchDropdown = Vue.defineComponent({
   },
   emits: ['navigate'],
   template: `
-  <div v-if="visible && query" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border max-h-80 overflow-auto z-50">
+  <div ref="rootEl" v-if="visible && query" class="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border max-h-80 overflow-auto z-50">
     <div v-if="loading" class="p-3 text-sm text-slate-400">搜索中...</div>
     <template v-else>
       <div v-if="results.subjects.length" class="border-b">
@@ -32,6 +32,7 @@ const SearchDropdown = Vue.defineComponent({
     const results = Vue.reactive({ subjects: [], testItems: [] });
     const loading = Vue.ref(false);
     const visible = Vue.ref(false);
+    const rootEl = Vue.ref(null);
 
     const doSearch = debounce(async (q) => {
       if (!q.trim()) {
@@ -68,9 +69,19 @@ const SearchDropdown = Vue.defineComponent({
     }
 
     function onClickOutside(e) {
-      if (visible.value) visible.value = false;
+      if (rootEl.value && !rootEl.value.contains(e.target)) {
+        visible.value = false;
+      }
     }
 
-    return { results, loading, visible, clickItem };
+    Vue.onMounted(() => {
+      document.addEventListener('click', onClickOutside, true);
+    });
+
+    Vue.onUnmounted(() => {
+      document.removeEventListener('click', onClickOutside, true);
+    });
+
+    return { results, loading, visible, rootEl, clickItem };
   }
 });

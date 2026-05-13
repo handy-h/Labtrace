@@ -97,19 +97,25 @@ func Upload(c *gin.Context) {
 		}
 
 		if err != nil {
-			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
+				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+			}
 			services.LogAction("ocr_failed", "OCR失败", "lab_report", reportID, gin.H{"error": err.Error()})
 			return
 		}
 
 		// Store raw OCR JSON
 		ocrJSON, _ := json.Marshal(ocrResults)
-		database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID)
+		if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID); dbErr != nil {
+			log.Printf("[ocr] 存储OCR原始数据失败: reportID=%d err=%v", reportID, dbErr)
+		}
 
 		// Check if OCR returned any data
 		if len(ocrResults) == 0 {
 			log.Printf("[ocr] OCR returned zero results for report %d", reportID)
-			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
+				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+			}
 			services.LogAction("ocr_failed", "OCR失败", "lab_report", reportID, gin.H{"error": "OCR returned no results"})
 			return
 		}
@@ -117,30 +123,67 @@ func Upload(c *gin.Context) {
 		// Parse OCR results into structured lab items (name/value/unit/range)
 		parsedItems := services.ParseLabResults(ocrResults)
 
+		// 使用事务包裹批量插入，确保原子性
+		tx, txErr := database.DB.Begin()
+		if txErr != nil {
+			log.Printf("[ocr] 开启事务失败: reportID=%d err=%v", reportID, txErr)
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
+				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+			}
+			return
+		}
+
+		insertCount := 0
 		if len(parsedItems) > 0 {
-			// Create report_items from parsed items
 			for _, item := range parsedItems {
 				normalizedValue := services.NormalizeQualitative(item.Value)
-				database.DB.Exec(
+				if _, dbErr := tx.Exec(
 					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range,
-				)
+				); dbErr != nil {
+					log.Printf("[ocr] 插入报告项失败: reportID=%d name=%s err=%v", reportID, item.Name, dbErr)
+					continue
+				}
+				insertCount++
 			}
 		} else {
 			// Fallback: insert raw OCR blocks as individual items
 			for _, r := range ocrResults {
 				normalizedValue := services.NormalizeQualitative(r.Text)
-				database.DB.Exec(
+				if _, dbErr := tx.Exec(
 					`INSERT INTO report_items (report_id, original_value, confidence, ocr_bbox) VALUES (?, ?, ?, ?)`,
 					reportID, normalizedValue, int(r.Confidence), fmt.Sprintf(`{"x":%d,"y":%d,"w":%d,"h":%d}`, r.Left, r.Top, r.Width, r.Height),
-				)
+				); dbErr != nil {
+					log.Printf("[ocr] 插入OCR原始块失败: reportID=%d err=%v", reportID, dbErr)
+					continue
+				}
+				insertCount++
 			}
 		}
 
-		// Update status to review (only if items were inserted)
-		database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, reportID)
+		if insertCount == 0 {
+			log.Printf("[ocr] 未插入任何报告项: reportID=%d", reportID)
+			tx.Rollback()
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
+				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+			}
+			return
+		}
 
-		// Audit log
+		if err := tx.Commit(); err != nil {
+			log.Printf("[ocr] 提交事务失败: reportID=%d err=%v", reportID, err)
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
+				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+			}
+			return
+		}
+
+		// Update status to review
+		if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, reportID); dbErr != nil {
+			log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+		}
+
+		log.Printf("[ocr] 完成: reportID=%d inserted=%d", reportID, insertCount)
 		services.LogAction("ocr_upload", "OCR上传", "lab_report", reportID, nil)
 	}()
 

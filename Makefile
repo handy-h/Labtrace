@@ -10,9 +10,13 @@ PORT        := $(shell grep -Po '(?<=^PORT=)\S+' .env 2>/dev/null || echo 8080)
 # PID 文件，用于记录运行中的进程
 PID_FILE    := .labtrace.pid
 
+# 版本信息（从 git 获取）
+VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_TIME  := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+
 # Go 编译参数
 GO          := go
-LDFLAGS     := -s -w
+LDFLAGS     := -s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)
 
 # 颜色输出
 GREEN       := \033[0;32m
@@ -21,7 +25,7 @@ RED         := \033[0;31m
 CYAN        := \033[0;36m
 RESET       := \033[0m
 
-.PHONY: build dev run stop clean help rebuild restart
+.PHONY: build dev run stop clean help rebuild restart test lint
 
 # ---- 默认目标 ----
 help: ## 显示帮助信息
@@ -36,13 +40,13 @@ help: ## 显示帮助信息
 build: ## 编译生成可执行二进制文件
 	@printf "$(CYAN)[build]$(RESET) 编译 $(APP_NAME)...\n"
 	@$(GO) build -ldflags "$(LDFLAGS)" -o $(APP_NAME) .
-	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME)\n"
+	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME) (version: $(VERSION))\n"
 
 dev: ## 开发者模式运行（丰富日志）
 	@bash -c ' \
 		if [ -f $(PID_FILE) ]; then \
 			printf "$(YELLOW)[dev]$(RESET) 检测到 PID 文件，尝试先停止旧进程...\n"; \
-			$(MAKE) --no-print-directory stop; \
+			$(MAKE) --no-print-directory stop FORCE=1; \
 		fi; \
 		printf "$(CYAN)[dev]$(RESET) 以开发者模式启动...\n"; \
 		GIN_MODE=debug ./$(APP_NAME) 2>&1 | tee -a dev.log & \
@@ -61,7 +65,7 @@ run: ## 生产模式运行（仅必要日志）
 	@bash -c ' \
 		if [ -f $(PID_FILE) ]; then \
 			printf "$(YELLOW)[run]$(RESET) 检测到 PID 文件，尝试先停止旧进程...\n"; \
-			$(MAKE) --no-print-directory stop; \
+			$(MAKE) --no-print-directory stop FORCE=1; \
 		fi; \
 		if ! [ -f $(APP_NAME) ]; then \
 			printf "$(YELLOW)[run]$(RESET) 二进制文件不存在，先编译...\n"; \
@@ -80,7 +84,7 @@ run: ## 生产模式运行（仅必要日志）
 		fi \
 	'
 
-stop: ## 优雅关闭应用
+stop: ## 优雅关闭应用（FORCE=1 跳过交互确认）
 	@bash -c ' \
 		printf "$(CYAN)[stop]$(RESET) 正在停止...\n"; \
 		if [ -f $(PID_FILE) ]; then \
@@ -111,26 +115,43 @@ stop: ## 优雅关闭应用
 			printf "\n"; \
 			printf "$(RED)[stop]$(RESET) 端口 $(PORT) 仍被以下进程占用:\n"; \
 			lsof -i :$(PORT) 2>/dev/null; \
-			printf "\n"; \
-			printf "$(YELLOW)[stop]$(RESET) 是否要强制结束占用端口的进程？[y/N] "; \
-			read answer; \
-			if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
+			if [ "$(FORCE)" = "1" ]; then \
 				for p in $$PID_ON_PORT; do \
 					kill -9 $$p 2>/dev/null; \
 					printf "$(GREEN)[stop]$(RESET) 已强制终止进程 $$p\n"; \
 				done; \
 			else \
-				printf "$(YELLOW)[stop]$(RESET) 已跳过，端口 $(PORT) 仍被占用\n"; \
+				printf "\n"; \
+				printf "$(YELLOW)[stop]$(RESET) 是否要强制结束占用端口的进程？[y/N] "; \
+				read answer; \
+				if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
+					for p in $$PID_ON_PORT; do \
+						kill -9 $$p 2>/dev/null; \
+						printf "$(GREEN)[stop]$(RESET) 已强制终止进程 $$p\n"; \
+					done; \
+				else \
+					printf "$(YELLOW)[stop]$(RESET) 已跳过，端口 $(PORT) 仍被占用\n"; \
+				fi; \
 			fi; \
 		fi \
 	'
+
+test: ## 运行单元测试
+	@printf "$(CYAN)[test]$(RESET) 运行测试...\n"
+	@$(GO) test -v ./internal/services/
+	@printf "$(GREEN)[test]$(RESET) 测试完成\n"
+
+lint: ## 代码静态检查
+	@printf "$(CYAN)[lint]$(RESET) 运行 go vet...\n"
+	@$(GO) vet ./...
+	@printf "$(GREEN)[lint]$(RESET) 检查完成\n"
 
 clean: ## 清理临时文件、缓存及二进制文件（保留 ./data 目录）
 	@printf "$(CYAN)[clean]$(RESET) 清理编译产物...\n"
 	@rm -f $(APP_NAME)
 	@printf "$(GREEN)[clean]$(RESET) 已删除二进制文件: $(APP_NAME)\n"
 	@printf "$(CYAN)[clean]$(RESET) 清理 Go 缓存...\n"
-	@$(GO) clean -cache -testcache -i 2>/dev/null || true
+	@$(GO) clean -cache -testcache 2>/dev/null || true
 	@printf "$(GREEN)[clean]$(RESET) Go 缓存已清理\n"
 	@printf "$(CYAN)[clean]$(RESET) 清理临时文件...\n"
 	@rm -f *.log *.out *.test

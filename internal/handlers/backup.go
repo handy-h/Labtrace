@@ -44,17 +44,21 @@ func ImportBackup(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Save uploaded file temporarily
-	tmpPath := "/tmp/labtrace_restore.bak"
-	tmpFile, _ := os.Create(tmpPath)
-	defer tmpFile.Close()
+	// 使用唯一临时文件避免并发冲突
+	tmpFile, err := os.CreateTemp("", "labtrace_restore_*.bak")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("创建临时文件失败"))
+		return
+	}
+	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
 
-	_, err = tmpFile.ReadFrom(file)
-	if err != nil {
+	if _, err = tmpFile.ReadFrom(file); err != nil {
+		tmpFile.Close()
 		c.JSON(http.StatusInternalServerError, models.Error("保存临时文件失败"))
 		return
 	}
+	tmpFile.Close()
 
 	cfg, _ := config.Load()
 	if err := services.ImportBackup(cfg.DBKey, tmpPath); err != nil {
