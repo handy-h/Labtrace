@@ -430,7 +430,6 @@ const OCRMappingWizard = Vue.defineComponent({
     const autoRegion = Vue.ref(null);
     const selectionRect = Vue.ref(null);
     const blocksLoading = Vue.ref(false);
-    const imageError = Vue.ref(false);
     const pdfLoading = Vue.ref(false); // pdf.js 加载/渲染中
 
     // pdf.js 状态（PDF 模式专用）
@@ -573,12 +572,7 @@ const OCRMappingWizard = Vue.defineComponent({
 
     function onSourceImageError() {
       // 图片加载失败（也可能是 PDF)：降级为无图模式，继续用 OCR 块分布图
-      console.warn(
-        "[wizard] 图片加载失败，降级为块分布模式:",
-        props.reportImageUrl,
-      );
       imgLoaded = true; // 标记为就绪（无图模式）
-      imageError.value = false; // 不展示错误层，直接用块分布图
       if (apiBlocksReady) drawCanvasWhenReady();
       // 否则等 loadBlocks 完成后自动触发
     }
@@ -631,7 +625,6 @@ const OCRMappingWizard = Vue.defineComponent({
           }
         }
       } catch (e) {
-        console.error("[wizard] load blocks error", e);
         blocksLoading.value = false;
         return;
       }
@@ -734,7 +727,6 @@ const OCRMappingWizard = Vue.defineComponent({
         pdfPage = await pdfDoc.getPage(1);
         await renderPdfToBackground();
       } catch (e) {
-        console.error("[wizard] pdf.js load error", e);
         // Fall back to block-only (dark background) on error
         pdfPage = null;
         pdfBgCanvas = null;
@@ -1668,12 +1660,10 @@ const OCRMappingWizard = Vue.defineComponent({
           externalDate.value = "";
           loadedImage = null;
           apiBlocksReady = false;
-          imageError.value = false;
           ocrBlocks.value = [];
           autoRegion.value = null;
           // PDF 模式：跳过图片加载，直接用块分布图作远块背景
           imgLoaded = isPdf.value;
-          imageError.value = false;
           noPositionMode.value = false;
           loadBlocks();
         }

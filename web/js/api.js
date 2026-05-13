@@ -10,9 +10,6 @@ const api = {
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API_BASE + path, opts);
     const json = await res.json();
-    if (json.code !== 0) {
-      console.error("API error:", json.message);
-    }
     return json;
   },
 
@@ -35,11 +32,6 @@ const api = {
   },
   del(path) {
     return this.request("DELETE", path);
-  },
-
-  // Health
-  ping() {
-    return this.get("/ping");
   },
 
   // Subjects

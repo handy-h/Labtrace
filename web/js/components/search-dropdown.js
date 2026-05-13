@@ -54,7 +54,7 @@ const SearchDropdown = Vue.defineComponent({
           it.standard_name.includes(q) || it.code.includes(q)
         );
       } catch (e) {
-        console.error('Search error:', e);
+        // 搜索错误静默处理
       }
       loading.value = false;
     }, 300);

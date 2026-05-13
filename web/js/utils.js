@@ -53,16 +53,6 @@ function deepClone(obj) {
 }
 
 /**
- * 置信度格式化
- * @param {number} val - 置信度值(0-100)
- * @returns {string} 格式化后的字符串
- */
-function formatConfidence(val) {
-  if (val == null) return '-';
-  return val + '%';
-}
-
-/**
  * 计算年龄
  * @param {string} birthDate - 出生日期
  * @param {string} refDate - 参考日期
@@ -100,4 +90,40 @@ function flagBadge(f) {
   if (!(f in allowed)) return '';
   const cls = (f === 'H' || f === '阳性' || f === '↑') ? 'text-red-600 font-bold' : 'text-blue-600 font-bold';
   return `<span class="${cls}">${f}</span>`;
+}
+
+/**
+ * 计算配额使用百分比
+ * @param {Object} quota - 配额对象 {total_quota, used_count}
+ * @returns {number} 使用百分比 (0-100)
+ */
+function quotaPct(quota) {
+  if (!quota || quota.total_quota === 0) return 0;
+  return Math.min(100, Math.round(quota.used_count / quota.total_quota * 100));
+}
+
+/**
+ * 配额文字颜色类名
+ * @param {Object} quota - 配额对象 {total_quota, used_count}
+ * @returns {string} CSS类名
+ */
+function quotaTextClass(quota) {
+  if (!quota) return 'text-slate-500';
+  const remain = quota.total_quota - quota.used_count;
+  if (remain > 50) return 'text-green-600 font-bold';
+  if (remain > 10) return 'text-orange-500 font-bold';
+  return 'text-red-600 font-bold';
+}
+
+/**
+ * 配额进度条颜色类名
+ * @param {Object} quota - 配额对象 {total_quota, used_count}
+ * @returns {string} CSS类名
+ */
+function quotaBarClass(quota) {
+  if (!quota) return 'bg-green-500';
+  const remain = quota.total_quota - quota.used_count;
+  if (remain > 50) return 'bg-green-500';
+  if (remain > 10) return 'bg-orange-500';
+  return 'bg-red-500';
 }

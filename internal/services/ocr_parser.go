@@ -964,11 +964,6 @@ func containsChinese(s string) bool {
 	return false
 }
 
-// containsWhitespace checks if the string contains internal whitespace.
-func containsWhitespace(s string) bool {
-	return strings.Contains(s, " ") || strings.Contains(s, "\t")
-}
-
 // ----------------------------------------------------------------------------
 // Extraction helpers
 // ----------------------------------------------------------------------------

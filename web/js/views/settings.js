@@ -145,24 +145,9 @@ const SettingsView = Vue.defineComponent({
       { key: 'actions', label: '操作', width: '8rem' },
     ];
 
-    const quotaPct = Vue.computed(() => {
-      if (!quota.value || quota.value.total_quota === 0) return 0;
-      return Math.min(100, Math.round(quota.value.used_count / quota.value.total_quota * 100));
-    });
-    const quotaTextClass = Vue.computed(() => {
-      if (!quota.value) return 'text-slate-500';
-      const remain = quota.value.total_quota - quota.value.used_count;
-      if (remain > 50) return 'text-green-600 font-bold';
-      if (remain > 10) return 'text-orange-500 font-bold';
-      return 'text-red-600 font-bold';
-    });
-    const quotaBarClass = Vue.computed(() => {
-      if (!quota.value) return 'bg-green-500';
-      const remain = quota.value.total_quota - quota.value.used_count;
-      if (remain > 50) return 'bg-green-500';
-      if (remain > 10) return 'bg-orange-500';
-      return 'bg-red-500';
-    });
+    const quotaPct = Vue.computed(() => quotaPct(quota.value));
+    const quotaTextClass = Vue.computed(() => quotaTextClass(quota.value));
+    const quotaBarClass = Vue.computed(() => quotaBarClass(quota.value));
 
     function loadQuota() {
       api.getOCRQuota().then(r => {

@@ -475,24 +475,9 @@ const OCRImportView = Vue.defineComponent({
       });
     }
     function loadQuota() { api.getOCRQuota().then((r) => { if (r.data) quota.value = r.data; }); }
-    const quotaPct = Vue.computed(() => {
-      if (!quota.value || quota.value.total_quota === 0) return 0;
-      return Math.min(100, Math.round((quota.value.used_count / quota.value.total_quota) * 100));
-    });
-    const quotaClass = Vue.computed(() => {
-      if (!quota.value || quota.value.total_quota === 0) return "font-bold text-slate-600";
-      const remain = quota.value.total_quota - quota.value.used_count;
-      if (remain > 50) return "font-bold text-green-600";
-      if (remain > 10) return "font-bold text-orange-500";
-      return "font-bold text-red-600";
-    });
-    const quotaBarClass = Vue.computed(() => {
-      if (!quota.value || quota.value.total_quota === 0) return "bg-green-500";
-      const remain = quota.value.total_quota - quota.value.used_count;
-      if (remain > 50) return "bg-green-500";
-      if (remain > 10) return "bg-orange-500";
-      return "bg-red-500";
-    });
+    const quotaPct = Vue.computed(() => quotaPct(quota.value));
+    const quotaClass = Vue.computed(() => quotaTextClass(quota.value));
+    const quotaBarClass = Vue.computed(() => quotaBarClass(quota.value));
 
     const batchDoneCount = Vue.computed(() => batchQueue.value.filter(item => item.status === 'done' || item.status === 'error').length);
     const batchPct = Vue.computed(() => {
@@ -555,7 +540,6 @@ const OCRImportView = Vue.defineComponent({
       return { left: r.x + r.w + 8 + "px", top: Math.max(0, r.y - 20) + "px" };
     });
 
-    function onImageLoad() {}
     function updateHighlight(idx) {
       if (!selectedReport.value || !selectedReport.value.items || idx < 0 || idx >= selectedReport.value.items.length) {
         highlightRect.value = null; magnifierReady.value = false; return;
