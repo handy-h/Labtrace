@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR 多栏表头映射 & ImportReport 死锁 & 核效自动入库 - 2026-05-10</title>
+<style>
+  :root {
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-border: #e2e8f0;
+    --color-primary: #3b82f6;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-info: #6366f1;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; background: var(--color-bg); color: var(--color-text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #1e3a8a, #6366f1); color: white; padding: 2.5rem; border-radius: var(--radius); margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
+  .report-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .report-header .subtitle { opacity: 0.85; font-size: 0.95rem; }
+  .report-header .meta { display: flex; gap: 2rem; margin-top: 1.25rem; font-size: 0.85rem; opacity: 0.8; flex-wrap: wrap; }
+  .report-header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--color-surface); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+  .stat-card .stat-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; }
+  .stat-card .stat-label { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem; }
+  .stat-card.danger .stat-value { color: var(--color-danger); }
+  .stat-card.warning .stat-value { color: var(--color-warning); }
+  .stat-card.success .stat-value { color: var(--color-success); }
+  .stat-card.info .stat-value { color: var(--color-info); }
+
+  /* Section */
+  .section { background: var(--color-surface); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden; }
+  .section-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.75rem; }
+  .section-header h2 { font-size: 1.1rem; font-weight: 600; }
+  .section-header .badge { font-size: 0.75rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-weight: 600; }
+  .badge-danger { background: #fef2f2; color: var(--color-danger); }
+  .badge-success { background: #f0fdf4; color: #16a34a; }
+  .badge-info { background: #eef2ff; color: var(--color-info); }
+  .badge-warning { background: #fffbeb; color: #b45309; }
+
+  /* Bug Card */
+  .bug { padding: 1.5rem; border-bottom: 1px solid var(--color-border); }
+  .bug:last-child { border-bottom: none; }
+  .bug-header { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem; }
+  .bug-number { background: var(--color-primary); color: white; font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 6px; flex-shrink: 0; }
+  .bug-title { font-weight: 600; font-size: 1rem; }
+  .bug-block { margin-bottom: 1rem; }
+  .bug-block:last-child { margin-bottom: 0; }
+  .bug-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+  .bug-desc { font-size: 0.9rem; color: var(--color-text); }
+  .bug-desc code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85em; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  /* Code Block */
+  pre { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0.5rem 0; }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  /* Diff highlight */
+  .diff-add { background: #dcfce7; color: #166534; padding: 0.1rem 0.3rem; border-radius: 3px; }
+  .diff-del { background: #fee2e2; color: #991b1b; padding: 0.1rem 0.3rem; border-radius: 3px; text-decoration: line-through; }
+
+  /* Table */
+  .review-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .review-table th { background: #f1f5f9; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--color-border); }
+  .review-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .review-table tr:last-child td { border-bottom: none; }
+  .review-table .op-create { color: var(--color-success); font-weight: 600; }
+  .review-table .op-rewrite { color: var(--color-danger); font-weight: 600; }
+  .review-table .op-modify { color: var(--color-warning); font-weight: 600; }
+
+  /* Tech Debt */
+  .debt-item { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; }
+  .debt-item:last-child { border-bottom: none; }
+  .debt-icon { font-size: 1rem; margin-top: 0.1rem; flex-shrink: 0; }
+
+  /* Footer */
+  .report-footer { text-align: center; padding: 2rem; color: var(--color-text-secondary); font-size: 0.8rem; border-top: 1px solid var(--color-border); margin-top: 2rem; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .report-header .meta { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="report-header">
+  <h1>OCR 多栏表头映射 & ImportReport 死锁 & 核效自动入库</h1>
+  <div class="subtitle">溯源健康 - 修复 OCR 多栏识别、数据库连接池死锁和核效自动入库问题</div>
+  <div class="meta">
+    <span>日期: 2026-05-10</span>
+    <span>类型: Bug 修复</span>
+    <span>涉及: 前端 + 后端 + OCR 解析器 + 数据库</span>
+    <span>变更文件: 6 个</span>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card danger">
+    <div class="stat-icon">🐛</div>
+    <div class="stat-value">4</div>
+    <div class="stat-label">修复 Bug</div>
+  </div>
+  <div class="stat-card info">
+    <div class="stat-icon">📄</div>
+    <div class="stat-value">6</div>
+    <div class="stat-label">变更文件</div>
+  </div>
+  <div class="stat-card success">
+    <div class="stat-icon">✨</div>
+    <div class="stat-value">1</div>
+    <div class="stat-label">新增功能</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-icon">⚠️</div>
+    <div class="stat-value">1</div>
+    <div class="stat-label">架构改进</div>
+  </div>
+</div>
+
+<!-- Bug 1 -->
+<div class="section">
+  <div class="section-header">
+    <h2>Bug 修复详情</h2>
+    <span class="badge badge-danger">4 项</span>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#1</span>
+      <div class="bug-title">多栏表头映射校验阻止进入下一步</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">
+        医院化验单为双栏布局（左栏/右栏各有独立的"项目/结果/单位/参考范围"表头），OCR 识别出两组表头后，<code>step2Error</code> 校验要求 <code>name</code> 和 <code>value</code> 字段全局唯一，导致报错"项目列重复"无法进入 Step 3。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>step2Error</code> 计算属性中，<code>nameN</code>（项目列数量）和 <code>valN</code>（结果列数量）大于 1 时直接报错，未考虑多栏场景下每组栏各有自己的 name/value 列。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li>新增 <code>headerGroups</code> 计算属性，按 <code>group</code> 字段分组</li>
+          <li><code>step2Error</code> 改为逐组校验：每组至少有一个 name 和一个 value，不再要求全局唯一</li>
+          <li><code>extractHeaderCandidates</code> 重写为基于语义角色检测的多栏识别：
+            <ul style="padding-left: 1.5rem; margin-top: 0.25rem;">
+              <li>对每个表头块调用 <code>guessField()</code> 获取语义角色（name/value/unit/range）</li>
+              <li>若 <code>name</code> 或 <code>value</code> 角色出现多次，判定为多栏</li>
+              <li>按 <code>name</code> 角色位置分组（每个 name 开始一个新组）</li>
+              <li>回退策略：X 间距分割</li>
+            </ul>
+          </li>
+          <li>Step 2 模板增加分组标签（"第1栏"/"第2栏"）和提示信息</li>
+          <li><code>buildMappingConfig</code> 增加 <code>header_row_ys</code> 和 <code>group</code> 字段</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <table class="review-table">
+        <thead><tr><th>文件</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td><code>web/js/views/ocr-mapping-wizard.js</code></td><td><code>step2Error</code>、<code>headerGroups</code>、<code>extractHeaderCandidates</code>、<code>goStep2</code>、<code>buildMappingConfig</code>、<code>guessField</code>、Step 2 模板</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bug 2 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#2</span>
+      <div class="bug-title">多栏数据合并为一条记录</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">左右两栏的解析数据被合并到同一列，如"白细胞计数"（左栏）和"血红蛋白"（右栏）的值合并到同一个结果字段。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        所有列都分配到 <code>group: 0</code>，后端 <code>ParseLabResultsWithMapping</code> 将同一行的所有列数据合并为一个 <code>ParsedLabItem</code>。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li>前端 <code>extractHeaderCandidates</code> 为每个分组分配 <code>globalGroup</code> 索引</li>
+          <li>后端 <code>ColumnMappingConfig</code> 增加 <code>HeaderRowYs []int</code> 字段</li>
+          <li>后端 <code>ColumnDef</code> 增加 <code>Group int</code> 字段</li>
+          <li><code>ParseLabResultsWithMapping</code> 按 <code>col.Group</code> 分组，每组独立生成 <code>ParsedLabItem</code> 记录</li>
+          <li>输出顺序：先输出 group 0（左栏）所有行，再输出 group 1（右栏）所有行</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <table class="review-table">
+        <thead><tr><th>文件</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td><code>web/js/views/ocr-mapping-wizard.js</code></td><td><code>extractHeaderCandidates</code>、<code>goStep2</code>、<code>buildMappingConfig</code></td></tr>
+          <tr><td><code>internal/services/ocr_mapping.go</code></td><td><code>ColumnMappingConfig</code>、<code>ColumnDef</code>、<code>ParseLabResultsWithMapping</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bug 3 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#3</span>
+      <div class="bug-title">ImportReport handler 数据库连接池死锁</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">
+        调用 <code>POST /api/v1/reports/:id/import</code> API 时请求永久阻塞（超时），Gin 日志无记录。前端入库操作无响应，页面刷新后数据消失。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>database/db.go</code> 中 <code>SetMaxOpenConns(1)</code> 限制 SQLite 连接池只有 1 个连接。<code>ImportReport</code> handler 执行流程：
+        <pre><code>1. DB.QueryRow(...) → 获取报告信息 → Scan 后释放连接
+2. DB.QueryRow(...) → 获取受检者信息 → Scan 后释放连接
+3. DB.Query(...) → 获取 report_items → 持有连接直到 rows.Close()
+4. services.MatchReference(...) → 内部 DB.Query(...) → 等待连接 → 死锁！</code></pre>
+        第 3 步的 <code>rows</code>（<code>defer rows.Close()</code>）占用唯一连接直到函数返回，第 4 步无法获取新连接，永久阻塞。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><strong><code>database/db.go</code></strong>：<code>SetMaxOpenConns(1)</code> → <code>SetMaxOpenConns(2)</code>，<code>SetMaxIdleConns(1)</code> → <code>SetMaxIdleConns(2)</code>
+            <ul style="padding-left: 1.5rem; margin-top: 0.25rem;">
+              <li>SQLite WAL 模式支持并发读+写，2 个连接避免同 handler 内查询互相等待</li>
+            </ul>
+          </li>
+          <li><strong><code>database/db.go</code></strong>：连接字符串添加 <code>_busy_timeout=5000</code>，SQLite 遇到写锁时等待 5 秒而非立即报错</li>
+          <li><strong><code>handlers/report.go</code></strong>：<code>ImportReport</code> 中 <code>defer rows.Close()</code> → 显式 <code>rows.Close()</code>（遍历完 rows 后立即释放连接，避免后续 DB 调用死锁）</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <table class="review-table">
+        <thead><tr><th>文件</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td><code>internal/database/db.go</code></td><td><code>Open</code> 函数</td></tr>
+          <tr><td><code>internal/handlers/report.go</code></td><td><code>ImportReport</code> 函数</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bug 4 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#4</span>
+      <div class="bug-title">核效完成后未自动入库</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">
+        OCR 映射向导 Step 3 点击"完成，进入核效"后，<code>report_items</code> 已更新但 <code>lab_reports.ocr_status</code> 仍为 <code>review</code>，未变为 <code>imported</code>。页面刷新后按"已入库"状态筛选查不到数据。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>doApplyAndFinish</code> 函数只逐条 PUT 更新 <code>report_items</code>，未调用 <code>api.importReport()</code> 完成入库（匹配参考区间、计算提示符、更新状态为 imported）。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>doApplyAndFinish</code> 中，更新完 <code>report_items</code> 后自动调用 <code>api.importReport(props.reportId)</code></li>
+          <li>入库失败时弹出错误提示并阻止关闭向导</li>
+          <li>按钮文字从"完成，进入核效"改为"完成并入库"</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <table class="review-table">
+        <thead><tr><th>文件</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td><code>web/js/views/ocr-mapping-wizard.js</code></td><td><code>doApplyAndFinish</code> 函数、Step 3 模板按钮文字</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Verification Results -->
+<div class="section">
+  <div class="section-header">
+    <h2>✅ 验证结果</h2>
+    <span class="badge badge-success">通过</span>
+  </div>
+  <div style="padding: 1.5rem;">
+    <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+      <li>多栏化验单：左右栏表头正确分组，数据独立生成记录，左栏全部行先输出再右栏</li>
+      <li>Import API：正常响应（之前超时/死锁），3 个报告全部成功入库</li>
+      <li>Dashboard/Subjects/Reports API：入库后数据正常返回</li>
+      <li>核效完成并入库：一键完成，状态自动更新为 <code>imported</code></li>
+    </ul>
+  </div>
+</div>
+
+<!-- Summary Table -->
+<div class="section">
+  <div class="section-header">
+    <h2>📋 变更文件清单</h2>
+    <span class="badge badge-info">6 项</span>
+  </div>
+  <div style="overflow-x: auto;">
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th style="width: 5%">#</th>
+          <th style="width: 40%">文件</th>
+          <th style="width: 12%">操作</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>web/js/views/ocr-mapping-wizard.js</code></td><td><span class="op-modify">修改</span></td><td>多栏表头识别、分组校验、自动入库</td></tr>
+        <tr><td>2</td><td><code>internal/services/ocr_mapping.go</code></td><td><span class="op-modify">修改</span></td><td>ColumnMappingConfig 增加 Group 字段，ParseLabResultsWithMapping 按组分发</td></tr>
+        <tr><td>3</td><td><code>internal/database/db.go</code></td><td><span class="op-modify">修改</span></td><td>连接池大小 1→2，busy_timeout 5000ms</td></tr>
+        <tr><td>4</td><td><code>internal/handlers/report.go</code></td><td><span class="op-modify">修改</span></td><td>ImportReport 显式关闭 rows 避免死锁</td></tr>
+        <tr><td>5</td><td><code>web/js/api.js</code></td><td><span class="op-modify">修改</span></td><td>新增 importReport API 方法</td></tr>
+        <tr><td>6</td><td><code>go.mod</code> / <code>go.sum</code></td><td><span class="op-modify">修改</span></td><td>依赖更新</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="report-footer">
+  <p><strong>日期：</strong>2026-05-10</p>
+  <p><strong>类型：</strong>Bug 修复</p>
+  <p style="margin-top: 0.75rem; opacity: 0.6;">本文档由 AI 辅助生成，记录 OCR 多栏表头映射、数据库连接池死锁和核效自动入库问题的修复过程</p>
+</div>
+
+</div>
+</body>
+</html>

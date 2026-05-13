@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR核效与编辑相关Bug修复 - 2026-05-10</title>
+<style>
+  :root {
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-border: #e2e8f0;
+    --color-primary: #3b82f6;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-info: #6366f1;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; background: var(--color-bg); color: var(--color-text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #1e3a8a, #6366f1); color: white; padding: 2.5rem; border-radius: var(--radius); margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
+  .report-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .report-header .subtitle { opacity: 0.85; font-size: 0.95rem; }
+  .report-header .meta { display: flex; gap: 2rem; margin-top: 1.25rem; font-size: 0.85rem; opacity: 0.8; flex-wrap: wrap; }
+  .report-header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--color-surface); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+  .stat-card .stat-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; }
+  .stat-card .stat-label { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem; }
+  .stat-card.danger .stat-value { color: var(--color-danger); }
+  .stat-card.warning .stat-value { color: var(--color-warning); }
+  .stat-card.success .stat-value { color: var(--color-success); }
+  .stat-card.info .stat-value { color: var(--color-info); }
+
+  /* Section */
+  .section { background: var(--color-surface); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden; }
+  .section-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.75rem; }
+  .section-header h2 { font-size: 1.1rem; font-weight: 600; }
+  .section-header .badge { font-size: 0.75rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-weight: 600; }
+  .badge-danger { background: #fef2f2; color: var(--color-danger); }
+  .badge-success { background: #f0fdf4; color: #16a34a; }
+  .badge-info { background: #eef2ff; color: var(--color-info); }
+  .badge-warning { background: #fffbeb; color: #b45309; }
+
+  /* Bug Card */
+  .bug { padding: 1.5rem; border-bottom: 1px solid var(--color-border); }
+  .bug:last-child { border-bottom: none; }
+  .bug-header { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem; }
+  .bug-number { background: var(--color-primary); color: white; font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 6px; flex-shrink: 0; }
+  .bug-title { font-weight: 600; font-size: 1rem; }
+  .bug-block { margin-bottom: 1rem; }
+  .bug-block:last-child { margin-bottom: 0; }
+  .bug-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+  .bug-desc { font-size: 0.9rem; color: var(--color-text); }
+  .bug-desc code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85em; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  /* Code Block */
+  pre { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0.5rem 0; }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  /* Diff highlight */
+  .diff-add { background: #dcfce7; color: #166534; padding: 0.1rem 0.3rem; border-radius: 3px; }
+  .diff-del { background: #fee2e2; color: #991b1b; padding: 0.1rem 0.3rem; border-radius: 3px; text-decoration: line-through; }
+
+  /* Table */
+  .review-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .review-table th { background: #f1f5f9; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--color-border); }
+  .review-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .review-table tr:last-child td { border-bottom: none; }
+  .review-table .op-create { color: var(--color-success); font-weight: 600; }
+  .review-table .op-rewrite { color: var(--color-danger); font-weight: 600; }
+  .review-table .op-modify { color: var(--color-warning); font-weight: 600; }
+
+  /* Tech Debt */
+  .debt-item { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; }
+  .debt-item:last-child { border-bottom: none; }
+  .debt-icon { font-size: 1rem; margin-top: 0.1rem; flex-shrink: 0; }
+
+  /* Footer */
+  .report-footer { text-align: center; padding: 2rem; color: var(--color-text-secondary); font-size: 0.8rem; border-top: 1px solid var(--color-border); margin-top: 2rem; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .report-header .meta { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="report-header">
+  <h1>OCR核效与编辑相关Bug修复</h1>
+  <div class="subtitle">溯源健康 - 修复从 OCR 核效到数据入库全流程中的 10 个 Bug</div>
+  <div class="meta">
+    <span>日期: 2026-05-10</span>
+    <span>严重程度: 高</span>
+    <span>状态: 已修复</span>
+    <span>变更文件: 12 个</span>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card danger">
+    <div class="stat-icon">🐛</div>
+    <div class="stat-value">10</div>
+    <div class="stat-label">修复 Bug</div>
+  </div>
+  <div class="stat-card info">
+    <div class="stat-icon">📄</div>
+    <div class="stat-value">12</div>
+    <div class="stat-label">变更文件</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-icon">⚠️</div>
+    <div class="stat-value">高</div>
+    <div class="stat-label">严重程度</div>
+  </div>
+  <div class="stat-card success">
+    <div class="stat-icon">✅</div>
+    <div class="stat-value">已修复</div>
+    <div class="stat-label">当前状态</div>
+  </div>
+</div>
+
+<!-- Bug List -->
+<div class="section">
+  <div class="section-header">
+    <h2>Bug 修复详情</h2>
+    <span class="badge badge-danger">10 项</span>
+  </div>
+
+  <!-- Bug 1 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#1</span>
+      <div class="bug-title">浮层样式丢失</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">新建受检者/医院弹窗浮层样式丢失，弹窗内容撑满全屏。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>app.css</code> 中 <code>.drill-modal &gt; div</code> 设置了 <code>flex: 1</code>，导致弹窗内容区域撑满遮罩层。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>web/css/app.css</code> — <code>.drill-modal</code> 增加 <code>align-items: center; justify-content: center</code>；<code>.drill-modal &gt; div</code> 移除 <code>flex: 1</code>，增加弹窗样式（白色背景、圆角、阴影、padding、max-height）；新增 <code>.drill-modal-full</code> 类用于全屏弹窗</li>
+          <li><code>web/js/views/ocr-import.js</code> — 报告详情弹窗添加 <code>drill-modal-full</code> 类</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 2 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#2</span>
+      <div class="bug-title">医院表单字段调整</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">新建医院表单有"地址"字段，但不需要；缺少"医院级别"字段。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>internal/models/models.go</code> — Hospital 模型增加 <code>Level</code> 字段</li>
+          <li><code>internal/database/migrations.go</code> — 增加 <code>ALTER TABLE hospitals ADD COLUMN level</code> 迁移</li>
+          <li><code>internal/handlers/subject.go</code> — ListHospitals/CreateHospital/UpdateHospital 增加 level 字段</li>
+          <li><code>web/js/views/settings.js</code> — 前端医院列表"地址"改为"级别"，弹窗表单 address 输入框改为 level 下拉选择（三甲/三乙/二甲/二乙/一甲/一乙/其他）</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 3 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#3</span>
+      <div class="bug-title">预览文件不一致</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">OCR核效页面预览文件与上传文件不一致。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>GetReportImage</code> 未设置 <code>Cache-Control</code> 响应头，浏览器可能缓存图片响应。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>internal/handlers/ocr.go</code> — <code>GetReportImage</code> 添加 <code>Cache-Control: no-cache, no-store, must-revalidate</code> 等响应头</li>
+          <li><code>web/js/views/ocr-import.js</code> — <code>viewReport</code> 中使用 <code>r.data.id</code> 替代 <code>id</code>，添加 <code>?t=Date.now()</code> 时间戳参数</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 4 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#4</span>
+      <div class="bug-title">置信度全部为0</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">OCR识别后置信度全部为0。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>parseContentText</code>（Path 3）创建 <code>ParsedLabItem</code> 时未设置 <code>Confidence</code> 字段；<code>groupIntoItem</code>（Path 1）依赖文本匹配获取置信度，<code>mergeSplitDecimals</code> 合并文本后匹配失败导致置信度为0。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>internal/services/ocr_parser.go</code> — <code>parseContentText</code> 中设置 <code>Confidence: 95</code>；<code>groupIntoItem</code> 中改为从同一行所有OCR块中取最大置信度，不依赖文本匹配</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 5 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#5</span>
+      <div class="bug-title">行编辑保存数据错位</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">行内编辑保存数据错位——只有第一行正确，后续行保存的是上一行数据。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        所有调用 <code>api.updateReportItem</code> 的地方直接引用 <code>editForm.value</code>，但 <code>editForm.value</code> 是响应式对象，在异步回调执行时可能已被 <code>startEdit</code> 覆盖为下一行数据。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>web/js/views/ocr-import.js</code> — <code>saveEdit</code>、<code>saveEditQuiet</code>、<code>onEditBlur</code>、<code>doConfirm</code>、<code>doImport</code> 中所有 <code>editForm.value</code> 传给API前先做浅拷贝快照 <code>const snapshot = { ...editForm.value }</code>；<code>onEditBlur</code> 移除 <code>clearTimeout</code> 取消前一行保存的逻辑，改为每行独立延迟保存</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 6 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#6</span>
+      <div class="bug-title">入库后查看数据不一致</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">修改保存入库后，查看页面数据与修改时不一致。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>doConfirm</code> 成功后调用 <code>closeReport()</code> 关闭弹窗而非重新加载；<code>doImport</code> 入库后也未重新加载报告详情。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>web/js/views/ocr-import.js</code> — <code>doConfirm</code> 和 <code>doImport</code> 成功后调用 <code>viewReport()</code> 重新加载报告详情；确认/入库前先保存当前编辑中的数据</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 7 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#7</span>
+      <div class="bug-title">取消置信度展示</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">置信度字段不需要展示。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>web/js/views/ocr-import.js</code> — 表头移除"置信度"列，移除置信度数据单元格</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 8 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#8</span>
+      <div class="bug-title">提示符在核效阶段不显示</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">提示符(flag)字段在核效阶段不展示，只有入库后才显示。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>flag</code> 只有在 <code>ImportReport</code> 时才计算，<code>ConfirmReport</code> 和 <code>GetReport</code> 都不计算。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>internal/handlers/report.go</code> — 提取 <code>matchRefAndCalcFlag</code> 函数；<code>ConfirmReport</code> 中调用 <code>matchRefAndCalcFlag</code>；<code>GetReport</code> 中 review 状态自动调用 <code>matchRefAndCalcFlag</code>；<code>ImportReport</code> 简化为调用 <code>matchRefAndCalcFlag</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 9 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#9</span>
+      <div class="bug-title">采样日期未自动填入</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">表头映射环节采样日期未自动填入。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>goStep2</code> 检测到表内无日期列时只显示手动输入框，未从OCR块中自动提取日期。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>web/js/views/ocr-mapping-wizard.js</code> — 新增 <code>extractDateFromOCRBlocks</code> 函数，从OCR块中自动提取采样日期（优先匹配"采集时间/采样时间"前缀，回退匹配任意YYYY-MM-DD格式）；<code>goStep2</code> 和 <code>skipToStep2</code> 中自动调用</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 10 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#10</span>
+      <div class="bug-title">删除的噪声行入库后又显示</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">单元格修复中删除的噪声行(采集时间/医院地址)入库后又显示。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>doApplyAndFinish</code> 只更新 <code>parsedItems.value</code> 中存在的行，未删除用户在Step 3中删除的行，数据库中对应记录仍存在。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修改</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>internal/handlers/report.go</code> — 新增 <code>DeleteReportItem</code> API</li>
+          <li><code>main.go</code> — 注册路由 <code>DELETE /reports/:id/items/:itemId</code></li>
+          <li><code>web/js/api.js</code> — 新增 <code>deleteReportItem</code> 前端API方法</li>
+          <li><code>web/js/views/ocr-mapping-wizard.js</code> — 新增 <code>originalItemIds</code> ref记录Step 3开始时的item id；<code>doApplyAndFinish</code> 中对比原始id和当前id，删除不在当前列表中的行</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Summary Table -->
+<div class="section">
+  <div class="section-header">
+    <h2>📋 变更文件清单</h2>
+    <span class="badge badge-info">12 项</span>
+  </div>
+  <div style="overflow-x: auto;">
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th style="width: 5%">#</th>
+          <th style="width: 45%">文件</th>
+          <th style="width: 12%">操作</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>web/css/app.css</code></td><td><span class="op-modify">修改</span></td><td>弹窗布局样式调整</td></tr>
+        <tr><td>2</td><td><code>web/js/api.js</code></td><td><span class="op-modify">修改</span></td><td>新增 deleteReportItem API</td></tr>
+        <tr><td>3</td><td><code>web/js/views/ocr-import.js</code></td><td><span class="op-modify">修改</span></td><td>弹窗类名、缓存控制、数据快照、重载逻辑、置信度移除</td></tr>
+        <tr><td>4</td><td><code>web/js/views/settings.js</code></td><td><span class="op-modify">修改</span></td><td>医院表单字段 address → level</td></tr>
+        <tr><td>5</td><td><code>web/js/views/ocr-mapping-wizard.js</code></td><td><span class="op-modify">修改</span></td><td>采样日期自动提取 + 删除噪声行逻辑</td></tr>
+        <tr><td>6</td><td><code>internal/models/models.go</code></td><td><span class="op-modify">修改</span></td><td>Hospital 增加 Level 字段</td></tr>
+        <tr><td>7</td><td><code>internal/database/migrations.go</code></td><td><span class="op-modify">修改</span></td><td>新增 hospitals.level 列迁移</td></tr>
+        <tr><td>8</td><td><code>internal/handlers/subject.go</code></td><td><span class="op-modify">修改</span></td><td>Hospital CRUD 增加 level 字段</td></tr>
+        <tr><td>9</td><td><code>internal/handlers/ocr.go</code></td><td><span class="op-modify">修改</span></td><td>GetReportImage 添加 Cache-Control</td></tr>
+        <tr><td>10</td><td><code>internal/handlers/report.go</code></td><td><span class="op-modify">修改</span></td><td>新增 DeleteReportItem + 提取 matchRefAndCalcFlag</td></tr>
+        <tr><td>11</td><td><code>internal/services/ocr_parser.go</code></td><td><span class="op-modify">修改</span></td><td>置信度默认值 + 最大置信度取值逻辑</td></tr>
+        <tr><td>12</td><td><code>main.go</code></td><td><span class="op-modify">修改</span></td><td>注册 DELETE /reports/:id/items/:itemId 路由</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="report-footer">
+  <p><strong>日期：</strong>2026-05-10</p>
+  <p><strong>严重程度：</strong>高</p>
+  <p><strong>状态：</strong>已修复</p>
+  <p style="margin-top: 0.75rem; opacity: 0.6;">本文档由 AI 辅助生成，记录 OCR 核效与编辑相关 Bug 的完整修复过程</p>
+</div>
+
+</div>
+</body>
+</html>

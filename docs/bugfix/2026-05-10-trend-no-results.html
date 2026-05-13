@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>趋势分析查询无结果 - 2026-05-10</title>
+<style>
+  :root {
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-border: #e2e8f0;
+    --color-primary: #3b82f6;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-info: #6366f1;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; background: var(--color-bg); color: var(--color-text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #1e3a8a, #6366f1); color: white; padding: 2.5rem; border-radius: var(--radius); margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
+  .report-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .report-header .subtitle { opacity: 0.85; font-size: 0.95rem; }
+  .report-header .meta { display: flex; gap: 2rem; margin-top: 1.25rem; font-size: 0.85rem; opacity: 0.8; flex-wrap: wrap; }
+  .report-header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--color-surface); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+  .stat-card .stat-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; }
+  .stat-card .stat-label { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem; }
+  .stat-card.danger .stat-value { color: var(--color-danger); }
+  .stat-card.warning .stat-value { color: var(--color-warning); }
+  .stat-card.success .stat-value { color: var(--color-success); }
+  .stat-card.info .stat-value { color: var(--color-info); }
+
+  /* Section */
+  .section { background: var(--color-surface); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden; }
+  .section-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.75rem; }
+  .section-header h2 { font-size: 1.1rem; font-weight: 600; }
+  .section-header .badge { font-size: 0.75rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-weight: 600; }
+  .badge-danger { background: #fef2f2; color: var(--color-danger); }
+  .badge-success { background: #f0fdf4; color: #16a34a; }
+  .badge-info { background: #eef2ff; color: var(--color-info); }
+  .badge-warning { background: #fffbeb; color: #b45309; }
+
+  /* Bug Card */
+  .bug { padding: 1.5rem; border-bottom: 1px solid var(--color-border); }
+  .bug:last-child { border-bottom: none; }
+  .bug-header { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem; }
+  .bug-number { background: var(--color-primary); color: white; font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 6px; flex-shrink: 0; }
+  .bug-title { font-weight: 600; font-size: 1rem; }
+  .bug-block { margin-bottom: 1rem; }
+  .bug-block:last-child { margin-bottom: 0; }
+  .bug-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+  .bug-desc { font-size: 0.9rem; color: var(--color-text); }
+  .bug-desc code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85em; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  /* Code Block */
+  pre { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0.5rem 0; }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  /* Diff highlight */
+  .diff-add { background: #dcfce7; color: #166534; padding: 0.1rem 0.3rem; border-radius: 3px; }
+  .diff-del { background: #fee2e2; color: #991b1b; padding: 0.1rem 0.3rem; border-radius: 3px; text-decoration: line-through; }
+
+  /* Table */
+  .review-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .review-table th { background: #f1f5f9; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--color-border); }
+  .review-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .review-table tr:last-child td { border-bottom: none; }
+  .review-table .op-create { color: var(--color-success); font-weight: 600; }
+  .review-table .op-rewrite { color: var(--color-danger); font-weight: 600; }
+  .review-table .op-modify { color: var(--color-warning); font-weight: 600; }
+
+  /* Tech Debt */
+  .debt-item { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: flex-start; gap: 0.75rem; font-size: 0.9rem; }
+  .debt-item:last-child { border-bottom: none; }
+  .debt-icon { font-size: 1rem; margin-top: 0.1rem; flex-shrink: 0; }
+
+  /* Footer */
+  .report-footer { text-align: center; padding: 2rem; color: var(--color-text-secondary); font-size: 0.8rem; border-top: 1px solid var(--color-border); margin-top: 2rem; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .report-header .meta { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="report-header">
+  <h1>趋势分析查询无结果</h1>
+  <div class="subtitle">溯源健康 - 修复趋势分析页面因 test_item_id 全为 NULL 导致查询无结果的问题</div>
+  <div class="meta">
+    <span>日期: 2026-05-10</span>
+    <span>严重程度: 高</span>
+    <span>状态: 已修复</span>
+    <span>变更文件: 6 个</span>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card danger">
+    <div class="stat-icon">🐛</div>
+    <div class="stat-value">1</div>
+    <div class="stat-label">核心问题</div>
+  </div>
+  <div class="stat-card info">
+    <div class="stat-icon">🔧</div>
+    <div class="stat-value">6</div>
+    <div class="stat-label">修复步骤</div>
+  </div>
+  <div class="stat-card success">
+    <div class="stat-icon">📄</div>
+    <div class="stat-value">6</div>
+    <div class="stat-label">变更文件</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-icon">⚠️</div>
+    <div class="stat-value">3</div>
+    <div class="stat-label">后续建议</div>
+  </div>
+</div>
+
+<!-- Bug Detail -->
+<div class="section">
+  <div class="section-header">
+    <h2>问题分析详情</h2>
+    <span class="badge badge-danger">高优先级</span>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#1</span>
+      <div class="bug-title">趋势分析查询无结果</div>
+    </div>
+
+    <!-- 现象 -->
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">
+        趋势分析页面中，选择受检者后，无论是否选择检验项目，点击"查询"按钮都没有任何结果。
+      </div>
+    </div>
+
+    <!-- 根因 -->
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>report_items</code> 表中所有记录的 <code>test_item_id</code> 字段均为 <code>NULL</code>。
+      </div>
+    </div>
+
+    <!-- 根因分析 -->
+    <div class="bug-block">
+      <div class="bug-label">为什么 test_item_id 全为 NULL？</div>
+      <div class="bug-desc">
+        OCR 导入流程存在设计缺陷：
+        <ol style="margin-top: 0.5rem; padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><strong>OCR 上传</strong> (<code>internal/handlers/ocr.go:118-121</code>) — 解析报告后插入 <code>report_items</code>，只写入 <code>test_item_name</code>（OCR 识别出的文本），未写入 <code>test_item_id</code></li>
+          <li><strong>列映射</strong> (<code>internal/handlers/ocr.go:239-242</code>) — <code>ApplyColumnMapping</code> 重新插入 <code>report_items</code> 时同样未设置 <code>test_item_id</code></li>
+          <li><strong>导入确认</strong> (<code>internal/handlers/report.go:190-274</code>) — <code>ImportReport</code> 只处理参考区间匹配和 flag 计算，跳过了 <code>test_item_id</code> 为 NULL 的项（<code>if it.TestItemID == nil { continue }</code>），从未回填</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 为什么查询不到数据 -->
+    <div class="bug-block">
+      <div class="bug-label">为什么查询不到数据？</div>
+      <div class="bug-desc">
+        趋势查询 SQL (<code>internal/services/trend_service.go:38</code>):
+        <pre><code>WHERE lr.subject_id = ? AND ri.test_item_id = ? AND lr.ocr_status = 'imported'</code></pre>
+        <code>ri.test_item_id = NULL</code> 永远不匹配任何 <code>?</code> 参数值，因此查询结果始终为空。
+      </div>
+    </div>
+
+    <!-- 修复步骤 -->
+    <div class="bug-block">
+      <div class="bug-label">修复步骤</div>
+      <div class="bug-desc">
+        <ol style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li style="margin-bottom: 0.75rem;">
+            <strong>新增 <code>internal/services/testitem_service.go</code></strong>
+            <ul style="margin-top: 0.25rem; padding-left: 1.25rem;">
+              <li><code>MatchTestItemByName(name)</code> — 级联匹配策略：精确匹配标准名、别名匹配、大小写不敏感匹配、标准化匹配、包含匹配</li>
+              <li><code>BackfillTestItemIDs()</code> — 启动时自动回填存量数据中 <code>test_item_id</code> 为 NULL 的记录</li>
+            </ul>
+          </li>
+          <li style="margin-bottom: 0.75rem;">
+            <strong>修改 <code>internal/handlers/report.go</code></strong>
+            <ul style="margin-top: 0.25rem; padding-left: 1.25rem;">
+              <li><code>ImportReport</code> 中新增自动匹配逻辑：导入时遍历每个 <code>report_item</code>，若 <code>test_item_id</code> 为 NULL 则调用 <code>MatchTestItemByName</code> 自动匹配并更新</li>
+            </ul>
+          </li>
+          <li style="margin-bottom: 0.75rem;">
+            <strong>修改 <code>internal/services/trend_service.go</code></strong>
+            <ul style="margin-top: 0.25rem; padding-left: 1.25rem;">
+              <li><code>TrendDataPoint</code> 新增 <code>test_item_id</code> 和 <code>test_item_name</code> 字段</li>
+              <li><code>GetTrendData</code> 支持 <code>test_item_id=0</code>（不选项目）时返回该受检者所有已录入项目的趋势数据</li>
+            </ul>
+          </li>
+          <li style="margin-bottom: 0.75rem;">
+            <strong>修改 <code>internal/handlers/trend.go</code></strong>
+            <ul style="margin-top: 0.25rem; padding-left: 1.25rem;">
+              <li><code>test_item_id</code> 从必填改为可选（仅 <code>subject_id</code> 为必填）</li>
+            </ul>
+          </li>
+          <li style="margin-bottom: 0.75rem;">
+            <strong>修改 <code>web/js/views/trend.js</code></strong>
+            <ul style="margin-top: 0.25rem; padding-left: 1.25rem;">
+              <li>不选检验项目时查询该受检者所有已录入项目的趋势</li>
+              <li>图表自动按项目分多条曲线展示（不同颜色）</li>
+              <li>表格动态显示"检验项目"列</li>
+              <li>CSV 导出包含项目名</li>
+              <li>迷你趋势图支持多项目数据</li>
+            </ul>
+          </li>
+          <li>
+            <strong>修改 <code>main.go</code></strong>
+            <ul style="margin-top: 0.25rem; padding-left: 1.25rem;">
+              <li>启动时自动执行 <code>BackfillTestItemIDs()</code>，首次启动回填了 22/23 个项目（仅"血小板压积"缺少对应 <code>test_items</code> 记录）</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 回滚方案 -->
+    <div class="bug-block">
+      <div class="bug-label">回滚方案</div>
+      <div class="bug-desc">
+        如需回滚：
+        <pre><code># 还原代码
+git checkout -- internal/services/testitem_service.go internal/handlers/report.go internal/services/trend_service.go internal/handlers/trend.go web/js/views/trend.js main.go
+
+# 回滚数据库（将 test_item_id 重置为 NULL）
+sqlite3 data/labtrace.db "UPDATE report_items SET test_item_id = NULL;"</code></pre>
+      </div>
+    </div>
+
+    <!-- 后续建议 -->
+    <div class="bug-block">
+      <div class="bug-label">后续建议</div>
+      <div class="bug-desc">
+        <div class="debt-item" style="padding: 0.5rem 0; border: none;">
+          <span class="debt-icon">💡</span>
+          <div><code>test_items</code> 表缺少"乳酸脱氢酶"、"磷酸肌酸激酶"、"肌酸激酶同工酶"、"D-二聚体"、"血小板压积"等常用项目，需补充 seed 数据</div>
+        </div>
+        <div class="debt-item" style="padding: 0.5rem 0; border: none;">
+          <span class="debt-icon">💡</span>
+          <div>考虑在 <code>ApplyColumnMapping</code> 环节也加入自动匹配逻辑</div>
+        </div>
+        <div class="debt-item" style="padding: 0.5rem 0; border: none;">
+          <span class="debt-icon">💡</span>
+          <div>考虑添加 <code>test_item_aliases</code> 条目以提高匹配率（如"血小板压积"→"PCT"）</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="report-footer">
+  <p><strong>日期：</strong>2026-05-10</p>
+  <p><strong>类型：</strong>Bug 修复</p>
+  <p><strong>严重程度：</strong>高</p>
+  <p style="margin-top: 0.75rem; opacity: 0.6;">本文档由 AI 辅助生成，记录趋势分析查询无问题的完整修复过程</p>
+</div>
+
+</div>
+</body>
+</html>

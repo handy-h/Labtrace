@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR 解析器分类逻辑修复 & 单位继承 & 列顺序调整 - 2026-05-07</title>
+<style>
+  :root {
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-border: #e2e8f0;
+    --color-primary: #3b82f6;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-info: #6366f1;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; background: var(--color-bg); color: var(--color-text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #1e3a8a, #6366f1); color: white; padding: 2.5rem; border-radius: var(--radius); margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
+  .report-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .report-header .subtitle { opacity: 0.85; font-size: 0.95rem; }
+  .report-header .meta { display: flex; gap: 2rem; margin-top: 1.25rem; font-size: 0.85rem; opacity: 0.8; flex-wrap: wrap; }
+  .report-header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--color-surface); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+  .stat-card .stat-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; }
+  .stat-card .stat-label { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem; }
+  .stat-card.danger .stat-value { color: var(--color-danger); }
+  .stat-card.warning .stat-value { color: var(--color-warning); }
+  .stat-card.success .stat-value { color: var(--color-success); }
+  .stat-card.info .stat-value { color: var(--color-info); }
+
+  /* Section */
+  .section { background: var(--color-surface); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden; }
+  .section-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.75rem; }
+  .section-header h2 { font-size: 1.1rem; font-weight: 600; }
+  .section-header .badge { font-size: 0.75rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-weight: 600; }
+  .badge-danger { background: #fef2f2; color: var(--color-danger); }
+  .badge-success { background: #f0fdf4; color: #16a34a; }
+  .badge-info { background: #eef2ff; color: var(--color-info); }
+  .badge-warning { background: #fffbeb; color: #b45309; }
+
+  /* Bug Card */
+  .bug { padding: 1.5rem; border-bottom: 1px solid var(--color-border); }
+  .bug:last-child { border-bottom: none; }
+  .bug-header { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem; }
+  .bug-number { background: var(--color-primary); color: white; font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 6px; flex-shrink: 0; }
+  .bug-title { font-weight: 600; font-size: 1rem; }
+  .bug-block { margin-bottom: 1rem; }
+  .bug-block:last-child { margin-bottom: 0; }
+  .bug-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+  .bug-desc { font-size: 0.9rem; color: var(--color-text); }
+  .bug-desc code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85em; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  /* Code Block */
+  pre { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0.5rem 0; }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  /* Diff highlight */
+  .diff-add { background: #dcfce7; color: #166534; padding: 0.1rem 0.3rem; border-radius: 3px; }
+  .diff-del { background: #fee2e2; color: #991b1b; padding: 0.1rem 0.3rem; border-radius: 3px; text-decoration: line-through; }
+
+  /* Table */
+  .review-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .review-table th { background: #f1f5f9; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--color-border); }
+  .review-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .review-table tr:last-child td { border-bottom: none; }
+  .review-table .op-create { color: var(--color-success); font-weight: 600; }
+  .review-table .op-rewrite { color: var(--color-danger); font-weight: 600; }
+  .review-table .op-modify { color: var(--color-warning); font-weight: 600; }
+
+  /* Footer */
+  .report-footer { text-align: center; padding: 2rem; color: var(--color-text-secondary); font-size: 0.8rem; border-top: 1px solid var(--color-border); margin-top: 2rem; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .report-header .meta { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="report-header">
+  <h1>OCR 解析器分类逻辑修复 & 单位继承 & 列顺序调整</h1>
+  <div class="subtitle">溯源健康 - 修复 OCR 解析器中多个分类逻辑缺陷，解决检验报告解析结果全部显示在"结果"列、单位缺失、说明文字误解析等问题</div>
+  <div class="meta">
+    <span>日期: 2026-05-07</span>
+    <span>类型: Bug 修复</span>
+    <span>涉及: OCR 解析器 + 数据库迁移 + 前端</span>
+    <span>变更文件: 7 个</span>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card danger">
+    <div class="stat-icon">🐛</div>
+    <div class="stat-value">7</div>
+    <div class="stat-label">修复 Bug</div>
+  </div>
+  <div class="stat-card info">
+    <div class="stat-icon">📄</div>
+    <div class="stat-value">7</div>
+    <div class="stat-label">变更文件</div>
+  </div>
+  <div class="stat-card success">
+    <div class="stat-icon">✨</div>
+    <div class="stat-value">1</div>
+    <div class="stat-label">新增测试</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-icon">📊</div>
+    <div class="stat-value">2</div>
+    <div class="stat-label">验证通过</div>
+  </div>
+</div>
+
+<!-- Bug 1 -->
+<div class="section">
+  <div class="section-header">
+    <h2>Bug 修复详情</h2>
+    <span class="badge badge-danger">7 项</span>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#1</span>
+      <div class="bug-title"><code>&lt;220</code>/<code>&lt;500</code> 等 <code>&lt;X</code> 格式被错误分类为 <code>range</code></div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">
+        D-二聚体报告的 <code>&lt;220</code>（结果值）和 <code>&lt;500</code>（参考区间）都被分类为 <code>range</code>，导致状态机无法正确识别项目结构，<code>ParseLabResults</code> 返回 0 个 item，走 fallback 路径将每个 OCR 文本块单独插入数据库。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>isRangeStr</code> 函数使用正则 <code>^[<>]?\s*\d+...</code> 匹配范围，将 <code>&lt;X</code> 和 <code>&gt;X</code> 格式也匹配为参考区间。但在检验报告中，<code>&lt;220</code> 是结果值，<code>&lt;500</code> 是参考区间上限，两者格式相同，需要通过位置上下文区分。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ol style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>isRangeStr</code> 仅匹配 <code>X-Y</code> 或 <code>X~Y</code> 区间格式，不再匹配 <code>&lt;X</code>/<code>&gt;X</code></li>
+          <li>新增 <code>isBoundValue</code> 函数，将 <code>&lt;X</code>/<code>&gt;X</code>/<code>≤X</code>/<code>≥X</code> 分类为 <code>value</code></li>
+          <li><code>groupIntoItem</code> 使用位置上下文：第一个 value = 结果值，第二个 value = 参考区间</li>
+          <li><code>parseLinear</code> 状态机 <code>sVal</code> 状态下，第二个 value 视为参考区间</li>
+        </ol>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <div class="bug-desc">
+        <code>internal/services/ocr_parser.go</code>：<code>isRangeStr</code>、<code>isBoundValue</code>、<code>classifyText</code>、<code>groupIntoItem</code>、<code>parseLinear</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 2 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#2</span>
+      <div class="bug-title"><code>ug/L FEU</code> 等单位不在已知单位列表中</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">D-二聚体单位 <code>ug/L FEU</code> 被分类为 <code>noise</code> 而非 <code>unit</code>，导致解析结果缺少单位。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>isKnownUnitStr</code> 的 <code>knownUnits</code> 列表缺少 D-二聚体常用单位 <code>ug/L FEU</code>、<code>μg/L FEU</code>、<code>mg/L FEU</code>、<code>ug/L</code>、<code>FEU</code> 等。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        扩展 <code>knownUnits</code> 列表，添加：
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>ug/L FEU</code>、<code>μg/L FEU</code>、<code>mg/L FEU</code>、<code>ug/L</code>、<code>FEU</code></li>
+          <li><code>umol/L</code>、<code>nmol/L</code>、<code>pmol/L</code></li>
+          <li><code>U/ml</code>、<code>mU/ml</code>、<code>IU/ml</code></li>
+          <li><code>cells/μL</code>、<code>cells/uL</code></li>
+          <li><code>s</code>、<code>sec</code>、<code>min</code>、<code>Ratio</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <div class="bug-desc"><code>internal/services/ocr_parser.go</code>：<code>isKnownUnitStr</code></div>
+    </div>
+  </div>
+
+  <!-- Bug 3 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#3</span>
+      <div class="bug-title">噪声过滤不足——人名、说明文字、日期时间未被过滤</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li>人名"王靖程"被分类为 <code>name</code>，与检验项目名混淆</li>
+          <li>说明文字"※D-二聚体&lt;500 ug/L FEU，有99.7%概率可排除静脉血栓栓塞症"被分类为 <code>name</code></li>
+          <li>OCR 合并的日期时间"2026-04-2703：49"未被过滤</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>isHeaderFooterNoise</code> 缺少以下过滤规则：
+        <ul style="margin-top: 0.5rem; padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li>中文人名（2-3 个汉字，以常见姓氏开头）</li>
+          <li>※ 开头的临床说明文字</li>
+          <li>超过 10 个汉字的长文本（几乎总是说明/免责声明）</li>
+          <li>OCR 合并的日期时间格式</li>
+          <li>含"概率"、"排除"、"血栓发"等关键词的说明文字</li>
+        </ul>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ol style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li>新增 <code>isPersonNameLike</code> 函数，识别常见姓氏开头的 2-3 字中文名</li>
+          <li>添加 <code>※</code>/<code>*</code> 开头文本过滤</li>
+          <li>添加超过 10 个汉字的长文本过滤</li>
+          <li>添加 OCR 合并日期时间正则 <code>^\d{4}\d{2}\d{2}\d{2}[：:]\d{2}</code></li>
+          <li>扩展 <code>noisePatterns</code> 添加"概率"、"排除"、"血栓发"、"静脉血栓"等</li>
+        </ol>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <div class="bug-desc"><code>internal/services/ocr_parser.go</code>：<code>isHeaderFooterNoise</code>、<code>isPersonNameLike</code></div>
+    </div>
+  </div>
+
+  <!-- Bug 4 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#4</span>
+      <div class="bug-title"><code>parseLinear</code> 被跳过——<code>hasMergeableBlocks</code> 误判</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">当 OCR 返回的所有文本块 Row=0、坐标=0 时，<code>parseStructured</code> 返回 nil，<code>parseLinear</code> 也被跳过（因部分文本含空格+中文被误判为"合并行"），最终 <code>parseContentText</code> 也返回 0。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>ParseLabResults</code> 中 <code>hasMergeableBlocks</code> 检测逻辑：只要有一个文本块含空格和中文就跳过 <code>parseLinear</code>。但大部分文本块是单 token，<code>parseLinear</code> 才是正确路径。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">简化 <code>ParseLabResults</code> 入口逻辑：始终先尝试 <code>parseStructured</code>，再尝试 <code>parseLinear</code>，最后 fallback 到 <code>parseContentText</code>。移除 <code>hasMergeableBlocks</code> 判断。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <div class="bug-desc"><code>internal/services/ocr_parser.go</code>：<code>ParseLabResults</code></div>
+    </div>
+  </div>
+
+  <!-- Bug 5 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#5</span>
+      <div class="bug-title">数据库缺少 <code>test_item_name</code> 和 <code>ref_interval_text</code> 列</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">INSERT 语句引用 <code>test_item_name</code> 列，但 <code>report_items</code> 表 schema 中不存在该列，导致 SQL 错误。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">
+        <code>migrations.go</code> 中 <code>report_items</code> 表定义未包含 <code>test_item_name</code> 和 <code>ref_interval_text</code> 列，但 <code>ocr.go</code> 和 <code>ocr_quota.go</code> 的 INSERT 语句使用了这些列。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ol style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><code>migrations.go</code> 添加 ALTER TABLE 迁移：
+            <pre><code>ALTER TABLE report_items ADD COLUMN test_item_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE report_items ADD COLUMN ref_interval_text TEXT NOT NULL DEFAULT '';</code></pre>
+          </li>
+          <li><code>report.go</code> 的 <code>loadReportItems</code> 查询改为 <code>COALESCE(ri.test_item_name, ti.standard_name, '')</code> 优先使用 OCR 原始项目名</li>
+          <li>INSERT 语句同时填充 <code>ref_interval_text</code> 和 <code>row_notes</code></li>
+        </ol>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <div class="bug-desc">
+        <table class="review-table">
+          <thead><tr><th>文件</th></tr></thead>
+          <tbody>
+            <tr><td><code>internal/database/migrations.go</code></td></tr>
+            <tr><td><code>internal/handlers/ocr.go</code></td></tr>
+            <tr><td><code>internal/handlers/ocr_quota.go</code></td></tr>
+            <tr><td><code>internal/handlers/report.go</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 6 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#6</span>
+      <div class="bug-title">血小板分布宽度和平均血小板体积单位缺失</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">PDW 和 MPV 的 <code>original_unit</code> 为空，因为 OCR 识别时多行共享同一单位列，只识别了第一个出现的 "fl"。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">根因</div>
+      <div class="bug-desc">OCR 对共享单位列只输出一次单位文本块，后续行没有单位块。解析器无单位继承/默认单位机制。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        在 <code>parseLinear</code> 的 <code>tryEmit</code> 中添加：
+        <ol style="margin-top: 0.5rem; padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><strong>已知项目默认单位映射</strong> <code>defaultUnitMap</code>：PDW→fl, MPV→fl, MCV→fl, MCH→pg, RDW→%, PCT→% 等</li>
+          <li>当 OCR 未识别出单位时，优先查表获取默认单位</li>
+          <li>其次继承上一个 item 的单位（fallback）</li>
+        </ol>
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <div class="bug-desc"><code>internal/services/ocr_parser.go</code>：<code>parseLinear</code></div>
+    </div>
+  </div>
+
+  <!-- Bug 7 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#7</span>
+      <div class="bug-title">核效页面表格列顺序不合理</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">现象</div>
+      <div class="bug-desc">
+        表格列顺序为：项目→结果→单位→置信度→提示符→参考区间<br>
+        用户期望：项目→结果→参考区间→单位→提示符→置信度
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">调整 <code>ocr-import.js</code> 中 <code>&lt;thead&gt;</code> 和 <code>&lt;tbody&gt;</code> 的列顺序。</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">涉及文件</div>
+      <div class="bug-desc"><code>web/js/views/ocr-import.js</code></div>
+    </div>
+  </div>
+</div>
+
+<!-- Summary Table -->
+<div class="section">
+  <div class="section-header">
+    <h2>修改文件汇总</h2>
+    <span class="badge badge-info">7 项</span>
+  </div>
+  <div style="overflow-x: auto;">
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th style="width: 5%">#</th>
+          <th style="width: 45%">文件</th>
+          <th style="width: 12%">操作</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>internal/services/ocr_parser.go</code></td><td><span class="op-rewrite">重写</span></td><td>修复分类逻辑、添加单位继承、增强噪声过滤</td></tr>
+        <tr><td>2</td><td><code>internal/services/ocr_parser_test.go</code></td><td><span class="op-create">新增</span></td><td>8 个单元测试</td></tr>
+        <tr><td>3</td><td><code>internal/database/migrations.go</code></td><td><span class="op-modify">修改</span></td><td>添加 ALTER TABLE 迁移</td></tr>
+        <tr><td>4</td><td><code>internal/handlers/ocr.go</code></td><td><span class="op-modify">修改</span></td><td>INSERT 添加 ref_interval_text</td></tr>
+        <tr><td>5</td><td><code>internal/handlers/ocr_quota.go</code></td><td><span class="op-modify">修改</span></td><td>INSERT 添加 ref_interval_text</td></tr>
+        <tr><td>6</td><td><code>internal/handlers/report.go</code></td><td><span class="op-modify">修改</span></td><td>查询优先使用 ri.test_item_name</td></tr>
+        <tr><td>7</td><td><code>web/js/views/ocr-import.js</code></td><td><span class="op-modify">修改</span></td><td>调整表格列顺序</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Verification Results -->
+<div class="section">
+  <div class="section-header">
+    <h2>验证结果</h2>
+    <span class="badge badge-success">通过</span>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">V1</span>
+      <div class="bug-title">D-二聚体报告（报告 #2）</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复前</div>
+      <div class="bug-desc">35 个 item，每个 OCR 文本块单独成行，<code>test_item_name</code> 为空</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复后</div>
+      <div class="bug-desc">1 个 item
+        <pre><code>name=1.D-二聚体., value=&lt;220, unit=ug/L FEU, ref=&lt;500, conf=99</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">V2</span>
+      <div class="bug-title">血常规报告（报告 #1）</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复前</div>
+      <div class="bug-desc">PDW 和 MPV 单位为空</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复后</div>
+      <div class="bug-desc">单位继承正确
+        <pre><code>name=血小板分布宽度, value=15.5, unit=fl, ref=9.3-18.1
+name=平均血小板体积, value=7.6, unit=fl, ref=7.4-12.5</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="report-footer">
+  <p><strong>日期：</strong>2026-05-07</p>
+  <p><strong>类型：</strong>Bug 修复 - OCR 解析器分类逻辑修复 & 单位继承 & 列顺序调整</p>
+  <p style="margin-top: 0.75rem; opacity: 0.6;">本文档由 AI 辅助生成，记录 OCR 解析器分类逻辑修复的完整过程</p>
+</div>
+
+</div>
+</body>
+</html>

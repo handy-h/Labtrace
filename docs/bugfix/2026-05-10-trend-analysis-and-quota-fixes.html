@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>趋势分析与配额设置修复 - 2026-05-10</title>
+<style>
+  :root {
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #1e293b;
+    --color-text-secondary: #64748b;
+    --color-border: #e2e8f0;
+    --color-primary: #3b82f6;
+    --color-success: #22c55e;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-info: #6366f1;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; background: var(--color-bg); color: var(--color-text); line-height: 1.6; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Header */
+  .report-header { background: linear-gradient(135deg, #1e3a8a, #6366f1); color: white; padding: 2.5rem; border-radius: var(--radius); margin-bottom: 2rem; box-shadow: var(--shadow-lg); }
+  .report-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .report-header .subtitle { opacity: 0.85; font-size: 0.95rem; }
+  .report-header .meta { display: flex; gap: 2rem; margin-top: 1.25rem; font-size: 0.85rem; opacity: 0.8; flex-wrap: wrap; }
+  .report-header .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--color-surface); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+  .stat-card .stat-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+  .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; }
+  .stat-card .stat-label { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem; }
+  .stat-card.danger .stat-value { color: var(--color-danger); }
+  .stat-card.warning .stat-value { color: var(--color-warning); }
+  .stat-card.success .stat-value { color: var(--color-success); }
+  .stat-card.info .stat-value { color: var(--color-info); }
+
+  /* Section */
+  .section { background: var(--color-surface); border-radius: var(--radius); margin-bottom: 1.5rem; box-shadow: var(--shadow); overflow: hidden; }
+  .section-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 0.75rem; }
+  .section-header h2 { font-size: 1.1rem; font-weight: 600; }
+  .section-header .badge { font-size: 0.75rem; padding: 0.15rem 0.6rem; border-radius: 999px; font-weight: 600; }
+  .badge-danger { background: #fef2f2; color: var(--color-danger); }
+  .badge-success { background: #f0fdf4; color: #16a34a; }
+  .badge-info { background: #eef2ff; color: var(--color-info); }
+  .badge-warning { background: #fffbeb; color: #b45309; }
+
+  /* Bug Card */
+  .bug { padding: 1.5rem; border-bottom: 1px solid var(--color-border); }
+  .bug:last-child { border-bottom: none; }
+  .bug-header { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem; }
+  .bug-number { background: var(--color-primary); color: white; font-size: 0.8rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 6px; flex-shrink: 0; }
+  .bug-title { font-weight: 600; font-size: 1rem; }
+  .bug-block { margin-bottom: 1rem; }
+  .bug-block:last-child { margin-bottom: 0; }
+  .bug-label { font-size: 0.8rem; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+  .bug-desc { font-size: 0.9rem; color: var(--color-text); }
+  .bug-desc code { background: #f1f5f9; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.85em; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+  /* Code Block */
+  pre { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; margin: 0.5rem 0; }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  /* Diff highlight */
+  .diff-add { background: #dcfce7; color: #166534; padding: 0.1rem 0.3rem; border-radius: 3px; }
+  .diff-del { background: #fee2e2; color: #991b1b; padding: 0.1rem 0.3rem; border-radius: 3px; text-decoration: line-through; }
+
+  /* Table */
+  .review-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .review-table th { background: #f1f5f9; padding: 0.75rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--color-border); }
+  .review-table td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .review-table tr:last-child td { border-bottom: none; }
+  .review-table .op-create { color: var(--color-success); font-weight: 600; }
+  .review-table .op-rewrite { color: var(--color-danger); font-weight: 600; }
+  .review-table .op-modify { color: var(--color-warning); font-weight: 600; }
+  .review-table .group-header { background: #f8fafc; font-weight: 600; color: var(--color-text-secondary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* Footer */
+  .report-footer { text-align: center; padding: 2rem; color: var(--color-text-secondary); font-size: 0.8rem; border-top: 1px solid var(--color-border); margin-top: 2rem; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .report-header .meta { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="report-header">
+  <h1>趋势分析与配额设置修复</h1>
+  <div class="subtitle">溯源健康 - 修复 OCR 配额校准、趋势分析数据展示及表格样式问题</div>
+  <div class="meta">
+    <span>日期: 2026-05-10</span>
+    <span>类型: Bug 修复 + 功能优化</span>
+    <span>涉及: 后端 + 前端 + 配置</span>
+    <span>变更文件: 10 个</span>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card info">
+    <div class="stat-icon">🔧</div>
+    <div class="stat-value">3</div>
+    <div class="stat-label">修复领域</div>
+  </div>
+  <div class="stat-card success">
+    <div class="stat-icon">📄</div>
+    <div class="stat-value">10</div>
+    <div class="stat-label">变更文件</div>
+  </div>
+  <div class="stat-card warning">
+    <div class="stat-icon">🔍</div>
+    <div class="stat-value">3</div>
+    <div class="stat-label">根本原因</div>
+  </div>
+  <div class="stat-card success">
+    <div class="stat-icon">✅</div>
+    <div class="stat-value">5</div>
+    <div class="stat-label">验证通过</div>
+  </div>
+</div>
+
+<!-- Bug 修复详情 -->
+<div class="section">
+  <div class="section-header">
+    <h2>修复详情</h2>
+    <span class="badge badge-info">3 项</span>
+  </div>
+
+  <!-- Bug 1 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#1</span>
+      <div class="bug-title">OCR 月度配额设置优化</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">问题</div>
+      <div class="bug-desc">
+        月配额校准界面允许用户修改总配额，但实际上总配额应在 <code>.env</code> 文件中配置。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li>新增 <code>OCR_QUOTA_MONTHLY</code> 环境变量，用于配置月度配额上限</li>
+          <li>设置页面改为允许用户校准当前用量（used_count）</li>
+          <li>配额信息从环境变量读取，不再从数据库读取</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 2 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#2</span>
+      <div class="bug-title">趋势分析明细列表修复</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">问题</div>
+      <div class="bug-desc">
+        数值列显示不正确、单位列为空、置信度列不需要、提示符未计算、参考区间错误、趋势图显示错误。
+      </div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><strong>数值显示</strong>：正确解析原始值，支持 <code>&lt;</code>、<code>&gt;</code> 等前缀（如 <code>&lt;220</code> 解析为 <code>220</code>）</li>
+          <li><strong>单位显示</strong>：使用 <code>COALESCE</code> 回退逻辑，优先使用 <code>normalized_unit</code>，其次 <code>original_unit</code>，最后 <code>test_items.default_unit</code>；去除尾部 <code>/</code> 字符</li>
+          <li><strong>移除置信度列</strong>：从表格中移除不需要的置信度列</li>
+          <li><strong>提示符计算</strong>：当没有 <code>ref_interval_id</code> 时，使用 <code>ref_interval_text</code> 解析参考区间并计算 H/L/normal</li>
+          <li><strong>参考区间显示</strong>：优先使用 OCR 提取的 <code>ref_interval_text</code>，而不是可能错误的 <code>ref_interval_id</code> 查询结果</li>
+          <li><strong>趋势图修复</strong>：按项目名称分组，单数据点显示为散点而非折线</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug 3 -->
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#3</span>
+      <div class="bug-title">表格样式优化</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-label">修复内容</div>
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li><strong>列顺序调整</strong>：采样日期 → 检验项目 → 数值 → 参考区间 → 提示符 → 单位 → 趋势 → 医院</li>
+          <li><strong>列对齐</strong>：所有列标题居中，数值/参考区间/提示符/单位居中，检验项目/趋势/医院靠左</li>
+          <li><strong>视觉效果</strong>：列间浅色虚线分隔，奇偶行交替底色</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 涉及文件清单 -->
+<div class="section">
+  <div class="section-header">
+    <h2>📋 变更文件清单</h2>
+    <span class="badge badge-info">10 项</span>
+  </div>
+  <div style="overflow-x: auto;">
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th style="width: 5%">#</th>
+          <th style="width: 45%">文件</th>
+          <th style="width: 12%">类型</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- 后端 -->
+        <tr class="group-header"><td colspan="4">后端 (5)</td></tr>
+        <tr><td>1</td><td><code>internal/config/config.go</code></td><td><span class="op-modify">修改</span></td><td>新增 <code>OCRQuotaMonthly</code> 配置项</td></tr>
+        <tr><td>2</td><td><code>internal/services/ocr_quota.go</code></td><td><span class="op-modify">修改</span></td><td>配额从环境变量读取，支持用量校准</td></tr>
+        <tr><td>3</td><td><code>internal/services/trend_service.go</code></td><td><span class="op-modify">修改</span></td><td>趋势数据查询优化，flag 计算改进</td></tr>
+        <tr><td>4</td><td><code>internal/handlers/ocr_quota.go</code></td><td><span class="op-modify">修改</span></td><td>更新配额 API 接口</td></tr>
+        <tr><td>5</td><td><code>main.go</code></td><td><span class="op-modify">修改</span></td><td>初始化配额配置</td></tr>
+
+        <!-- 前端 -->
+        <tr class="group-header"><td colspan="4">前端 (3)</td></tr>
+        <tr><td>6</td><td><code>web/js/views/trend.js</code></td><td><span class="op-modify">修改</span></td><td>表格列顺序、对齐、样式优化</td></tr>
+        <tr><td>7</td><td><code>web/js/views/settings.js</code></td><td><span class="op-modify">修改</span></td><td>配额校准界面改为用量校准</td></tr>
+        <tr><td>8</td><td><code>web/index.html</code></td><td><span class="op-modify">修改</span></td><td>JS 文件添加版本号防缓存</td></tr>
+
+        <!-- 配置 -->
+        <tr class="group-header"><td colspan="4">配置 (2)</td></tr>
+        <tr><td>9</td><td><code>.env</code></td><td><span class="op-modify">修改</span></td><td>新增 <code>OCR_QUOTA_MONTHLY=200</code></td></tr>
+        <tr><td>10</td><td><code>.env.example</code></td><td><span class="op-modify">修改</span></td><td>添加配额配置说明</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 根本原因分析 -->
+<div class="section">
+  <div class="section-header">
+    <h2>🔍 根本原因分析</h2>
+    <span class="badge badge-warning">3 项</span>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#1</span>
+      <div class="bug-title">参考区间错误</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-desc">
+        <code>test_item_id</code> 匹配逻辑导致多个项目被错误匹配到同一 ID（如中性粒细胞百分比和绝对值都匹配到 ID=9）。
+      </div>
+    </div>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#2</span>
+      <div class="bug-title">flag 未计算</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-desc">
+        当 <code>ref_interval_id</code> 为 NULL 时，无法计算 flag。
+      </div>
+    </div>
+  </div>
+
+  <div class="bug">
+    <div class="bug-header">
+      <span class="bug-number">#3</span>
+      <div class="bug-title">迷你趋势图分组错误</div>
+    </div>
+    <div class="bug-block">
+      <div class="bug-desc">
+        使用 <code>test_item_id</code> 分组导致多个不同项目被合并显示。
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 验证结果 -->
+<div class="section">
+  <div class="section-header">
+    <h2>✅ 验证结果</h2>
+    <span class="badge badge-success">5 项通过</span>
+  </div>
+
+  <div class="bug">
+    <div class="bug-block">
+      <div class="bug-desc">
+        <ul style="padding-left: 1.5rem; font-size: 0.9rem; color: var(--color-text-secondary);">
+          <li>嗜碱性粒细胞：0.11 > 0.10 → 正确显示 H</li>
+          <li>中性粒细胞：5.53 在 2.0-7.0 范围内 → 正确显示 normal</li>
+          <li>D-二聚体：<code>&lt;220</code> → 正确解析为 220</li>
+          <li>所有列标题居中显示</li>
+          <li>奇偶行交替底色</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="report-footer">
+  <p><strong>日期：</strong>2026-05-10</p>
+  <p><strong>类型：</strong>Bug 修复 + 功能优化</p>
+  <p style="margin-top: 0.75rem; opacity: 0.6;">本文档由 AI 辅助生成，记录趋势分析与配额设置的完整修复过程</p>
+</div>
+
+</div>
+</body>
+</html>
