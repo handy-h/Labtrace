@@ -22,6 +22,9 @@ func Seed(db *sql.DB) error {
 	if err := seedReportCategories(db); err != nil {
 		return err
 	}
+	if err := seedImagingReportTypes(db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -312,6 +315,41 @@ func seedReportCategories(db *sql.DB) error {
 
 	for _, name := range categories {
 		if _, err := stmt.Exec(name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func seedImagingReportTypes(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM imaging_report_types").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	types := []struct {
+		code, name, nameEn, desc string
+		sort                     int
+	}{
+		{"CT", "CT检查", "CT Scan", "计算机断层扫描，包含平扫、增强、血管造影", 1},
+		{"MRI", "MRI检查", "MRI", "磁共振成像，包含平扫、增强、MRA", 2},
+		{"XRAY", "X光检查", "X-Ray", "X光片检查", 3},
+		{"ULTRASOUND", "超声/彩超", "Ultrasound", "超声波检查", 4},
+		{"ECG", "心电图", "ECG/EKG", "心电图检查", 5},
+		{"OTHER", "其他影像", "Other", "其他类型影像检查", 6},
+	}
+
+	stmt, err := db.Prepare("INSERT INTO imaging_report_types (code, name, name_en, description, sort_order) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, t := range types {
+		if _, err := stmt.Exec(t.code, t.name, t.nameEn, t.desc, t.sort); err != nil {
 			return err
 		}
 	}

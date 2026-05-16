@@ -144,6 +144,39 @@ func migrate(db *sql.DB) error {
 		created_at TEXT NOT NULL DEFAULT (datetime('now')),
 		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 	);
+
+	CREATE TABLE IF NOT EXISTS imaging_report_types (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		code TEXT NOT NULL UNIQUE,
+		name TEXT NOT NULL,
+		name_en TEXT NOT NULL DEFAULT '',
+		description TEXT NOT NULL DEFAULT '',
+		sort_order INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL DEFAULT (datetime('now'))
+	);
+
+	CREATE TABLE IF NOT EXISTS imaging_reports (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+		hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+		report_type TEXT NOT NULL DEFAULT 'OTHER' CHECK(report_type IN ('CT','MRI','XRAY','ULTRASOUND','ECG','OTHER')),
+		exam_item_name TEXT NOT NULL DEFAULT '',
+		inspect_no TEXT NOT NULL DEFAULT '',
+		dept_name TEXT NOT NULL DEFAULT '',
+		doctor_name TEXT NOT NULL DEFAULT '',
+		sample_date TEXT NOT NULL,
+		exam_site TEXT NOT NULL DEFAULT '',
+		exam_description TEXT NOT NULL DEFAULT '',
+		diagnosis_result TEXT NOT NULL DEFAULT '',
+		file_path TEXT NOT NULL DEFAULT '',
+		file_md5 TEXT NOT NULL DEFAULT '',
+		ocr_raw_json TEXT NOT NULL DEFAULT '',
+		ocr_status TEXT NOT NULL DEFAULT 'pending' CHECK(ocr_status IN ('pending','processing','review','imported','failed')),
+		thumbnail_path TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_imaging_reports_md5 ON imaging_reports(file_md5) WHERE file_md5 != '';
 	`
 
 	_, err := db.Exec(ddl)

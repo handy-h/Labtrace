@@ -271,4 +271,34 @@ const api = {
     const q = new URLSearchParams(params).toString();
     return this.get("/audit-logs" + (q ? "?" + q : ""));
   },
+
+  // Imaging Reports
+  listImagingReportTypes() {
+    return this.get("/imaging-report-types");
+  },
+  uploadImagingReport(formData) {
+    return this.upload("/imaging/upload", formData);
+  },
+  listImagingReports(params) {
+    const q = new URLSearchParams(params).toString();
+    return this.get("/imaging-reports" + (q ? "?" + q : ""));
+  },
+  getImagingReport(id) {
+    return this.get("/imaging-reports/" + id);
+  },
+  updateImagingReport(id, d) {
+    return this.put("/imaging-reports/" + id, d);
+  },
+  deleteImagingReport(id) {
+    return this.del("/imaging-reports/" + id);
+  },
+  getImagingReportImage(id) {
+    return API_BASE + "/imaging-reports/" + id + "/image";
+  },
+  importImagingReport(id) {
+    return this.post("/imaging-reports/" + id + "/import");
+  },
+  reOCRImaging(id) {
+    return this.post("/imaging-reports/" + id + "/re-ocr");
+  },
 };

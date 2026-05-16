@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>影像检查报告功能产品需求文档 V2.0</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.8;
+        color: #333;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        background: #f8f9fa;
+      }
+      .container {
+        background: white;
+        padding: 50px 60px;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        font-size: 28px;
+        color: #1a1a1a;
+        margin-bottom: 8px;
+        border-bottom: 3px solid #059669;
+        padding-bottom: 12px;
+      }
+      .subtitle {
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 30px;
+      }
+      h2 {
+        font-size: 20px;
+        color: #047857;
+        margin-top: 35px;
+        margin-bottom: 15px;
+        padding-left: 12px;
+        border-left: 4px solid #059669;
+      }
+      h3 {
+        font-size: 16px;
+        color: #374151;
+        margin-top: 25px;
+        margin-bottom: 12px;
+        font-weight: 600;
+      }
+      h4 {
+        font-size: 15px;
+        color: #4b5563;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        font-weight: 600;
+      }
+      p {
+        margin-bottom: 12px;
+        text-align: justify;
+      }
+      ul, ol {
+        margin-left: 20px;
+        margin-bottom: 15px;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "SF Mono", Monaco, Consolas, monospace;
+        font-size: 14px;
+        color: #dc2626;
+      }
+      pre {
+        background: #1f2937;
+        color: #f9fafb;
+        padding: 20px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin-bottom: 15px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+      .highlight {
+        background: #ecfdf5;
+        border-left: 4px solid #059669;
+        padding: 15px 20px;
+        margin: 20px 0;
+        border-radius: 0 8px 8px 0;
+      }
+      .highlight-title {
+        font-weight: 600;
+        color: #065f46;
+        margin-bottom: 8px;
+      }
+      .warning {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 15px 20px;
+        margin: 20px 0;
+        border-radius: 0 8px 8px 0;
+      }
+      .warning-title {
+        font-weight: 600;
+        color: #92400e;
+        margin-bottom: 8px;
+      }
+      .info {
+        background: #eff6ff;
+        border-left: 4px solid #3b82f6;
+        padding: 15px 20px;
+        margin: 20px 0;
+        border-radius: 0 8px 8px 0;
+      }
+      .info-title {
+        font-weight: 600;
+        color: #1e40af;
+        margin-bottom: 8px;
+      }
+      .flow-box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+      }
+      .flow-step {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 15px;
+      }
+      .flow-step:last-child {
+        margin-bottom: 0;
+      }
+      .flow-step-num {
+        background: #059669;
+        color: white;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+        margin-right: 15px;
+        flex-shrink: 0;
+      }
+      .flow-step-content {
+        flex: 1;
+      }
+      .flow-step-title {
+        font-weight: 600;
+        color: #047857;
+        margin-bottom: 5px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+      th, td {
+        border: 1px solid #e5e7eb;
+        padding: 12px 15px;
+        text-align: left;
+      }
+      th {
+        background: #f9fafb;
+        font-weight: 600;
+        color: #374151;
+      }
+      tr:hover {
+        background: #f9fafb;
+      }
+      .status-tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .status-pending {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .status-new {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+      .status-done {
+        background: #d1fae5;
+        color: #065f46;
+      }
+      .diagram {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 20px 0;
+        font-family: monospace;
+        white-space: pre;
+        overflow-x: auto;
+      }
+      .compare-table {
+        margin: 20px 0;
+      }
+      .compare-table th {
+        background: #f0fdf4;
+      }
+      .compare-table td:first-child {
+        font-weight: 600;
+        color: #047857;
+      }
+      .phase-tag {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .phase-p1 {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+      .phase-p2 {
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .phase-p3 {
+        background: #e0e7ff;
+        color: #3730a3;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>影像检查报告功能产品需求文档 V2.0</h1>
+      <div class="subtitle">版本：V2.0 | 更新日期：2026-05-16 | 状态：规划中</div>
+
+      <h2>1. 背景与目标</h2>
+
+      <h3>1.1 项目背景</h3>
+      <p>LabTrace 目前的核心功能是处理实验室检验报告（如血常规、生化检查），通过 OCR 识别将纸质报告数字化。但用户在日常健康管理中还会产生大量影像检查报告，如 CT、MRI、X光、超声、心电图等，这些报告同样需要统一管理和历史追踪。</p>
+
+      <p><code>example/</code> 目录下已有部分影像报告的 JSON 格式数据样本，表明系统需要扩展以支持影像检查报告的导入、存储和查看。</p>
+
+      <h3>1.2 核心目标</h3>
+      <ul>
+        <li><strong>统一入口</strong>：在现有 OCR 上传页面增加报告类型选择（实验室/影像）</li>
+        <li><strong>分类处理</strong>：针对影像报告采用不同的 OCR 解析策略，提取关键字段</li>
+        <li><strong>影像查看</strong>：支持 PDF、图片格式的查看，主要以原始影像为主</li>
+        <li><strong>结构化存储</strong>：提取诊断结论、检查部位、影像表现等关键信息</li>
+      </ul>
+
+      <div class="highlight">
+        <div class="highlight-title">核心价值</div>
+        <p>扩展 LabTrace 从"检验报告管理"升级为"完整健康档案管理"，覆盖用户的主要医疗检查数据类型。</p>
+      </div>
+
+      <h2>2. 功能架构</h2>
+
+      <h3>2.1 整体架构</h3>
+      <div class="diagram">┌─────────────────────────────────────────────────────────────────────┐
+│                        报告类型选择                                   │
+│  ┌─────────────────┐    ┌─────────────────┐                        │
+│  │   实验室检查     │    │    影像检查      │                        │
+│  │  (Lab Report)   │    │ (Imaging Report)│                        │
+│  └────────┬────────┘    └────────┬────────┘                        │
+│           │                       │                                   │
+│           ▼                       ▼                                   │
+│  ┌─────────────────┐    ┌─────────────────┐                        │
+│  │  检验报告流程   │    │  影像报告流程   │                        │
+│  │                 │    │                 │                        │
+│  │ 1.上传+OCR识别 │    │ 1.上传+OCR识别 │                        │
+│  │ 2.表格化解析   │    │ 2.关键字段提取  │                        │
+│  │ 3.标准化映射   │    │ 3.诊断结论提取  │                        │
+│  │ 4.参考区间匹配 │    │ 4.影像关联      │                        │
+│  │ 5.入库+趋势分析│    │ 5.入库+查看    │                        │
+│  └─────────────────┘    └─────────────────┘                        │
+└─────────────────────────────────────────────────────────────────────┘</div>
+
+      <h3>2.2 两类报告对比</h3>
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th>实验室检查</th>
+            <th>影像检查</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>数据结构</td>
+            <td>表格化（检验项+数值+单位+参考区间）</td>
+            <td>文档化（描述性文本为主）</td>
+          </tr>
+          <tr>
+            <td>参考标准</td>
+            <td>有国际参考区间，支持趋势分析</td>
+            <td>无标准参考，靠医生判断</td>
+          </tr>
+          <tr>
+            <td>趋势分析</td>
+            <td>数值型折线图</td>
+            <td>描述变化（如"结节增大"）</td>
+          </tr>
+          <tr>
+            <td>历史对比</td>
+            <td>数值对比</td>
+            <td>主要看图像对比（需要DICOM）</td>
+          </tr>
+          <tr>
+            <td>OCR重点</td>
+            <td>提取表格数据</td>
+            <td>提取诊断结论+关键描述</td>
+          </tr>
+          <tr>
+            <td>查看方式</td>
+            <td>数据网格+数值表格</td>
+            <td>原始PDF/图片为主</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>3. 功能模块</h2>
+
+      <h3>3.1 模块总览</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>模块</th>
+            <th>优先级</th>
+            <th>说明</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>报告类型选择</td>
+            <td><span class="phase-tag phase-p1">P1</span></td>
+            <td>OCR上传页增加报告类型单选项</td>
+            <td>待实现</td>
+          </tr>
+          <tr>
+            <td>影像报告上传</td>
+            <td><span class="phase-tag phase-p1">P1</span></td>
+            <td>支持影像文件上传和OCR识别</td>
+            <td>待实现</td>
+          </tr>
+          <tr>
+            <td>影像OCR解析器</td>
+            <td><span class="phase-tag phase-p1">P1</span></td>
+            <td>提取诊断结论、检查部位等关键字段</td>
+            <td>待实现</td>
+          </tr>
+          <tr>
+            <td>影像报告列表</td>
+            <td><span class="phase-tag phase-p1">P1</span></td>
+            <td>影像报告的列表和筛选</td>
+            <td>待实现</td>
+          </tr>
+          <tr>
+            <td>影像报告详情</td>
+            <td><span class="phase-tag phase-p2">P2</span></td>
+            <td>PDF/图片查看器+结构化数据展示</td>
+            <td>待实现</td>
+          </tr>
+          <tr>
+            <td>影像类型字典</td>
+            <td><span class="phase-tag phase-p2">P2</span></td>
+            <td>CT/MRI/X光/超声等类型管理</td>
+            <td>待实现</td>
+          </tr>
+          <tr>
+            <td>危急值提醒</td>
+            <td><span class="phase-tag phase-p3">P3</span></td>
+            <td>自动识别危急发现并提醒</td>
+            <td>待规划</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.2 模块1：报告类型选择 <span class="phase-tag phase-p1">P1</span></h3>
+
+      <h4>3.2.1 功能描述</h4>
+      <p>在 OCR 上传页面增加报告类型单选项，用户在上传文件前需要选择"实验室检查"或"影像检查"。根据选择的不同，后续流程和字段会有所差异。</p>
+
+      <h4>3.2.2 UI设计</h4>
+      <div class="info">
+        <div class="info-title">表单字段调整</div>
+        <p>在现有 OCR 上传表单中，在"受检者"选择下方增加"报告类型"单选框：</p>
+        <ul>
+          <li><strong>报告类型</strong>：○ 实验室检查  ○ 影像检查</li>
+        </ul>
+        <p>默认选择"实验室检查"，保持向后兼容。</p>
+      </div>
+
+      <h4>3.2.3 字段差异</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>实验室检查</th>
+            <th>影像检查</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>检验项目分类</td>
+            <td>必填/选填</td>
+            <td>不显示（改为影像类型选择）</td>
+          </tr>
+          <tr>
+            <td>影像类型</td>
+            <td>不显示</td>
+            <td>必填（CT/MRI/X光/超声/心电图等）</td>
+          </tr>
+          <tr>
+            <td>检查部位</td>
+            <td>不显示</td>
+            <td>OCR自动提取</td>
+          </tr>
+          <tr>
+            <td>诊断结论</td>
+            <td>不显示</td>
+            <td>OCR自动提取</td>
+          </tr>
+          <tr>
+            <td>参考区间</td>
+            <td>有</td>
+            <td>无</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.3 模块2：影像报告上传 <span class="phase-tag phase-p1">P1</span></h3>
+
+      <h4>3.3.1 功能描述</h4>
+      <p>当用户选择"影像检查"后，显示影像类型选择器。上传流程与实验室检查类似，但会调用不同的解析逻辑。</p>
+
+      <h4>3.3.2 UI设计</h4>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">选择报告类型</div>
+            <p>用户点击"影像检查"单选项</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">选择影像类型</div>
+            <p>下拉选择：CT、MRI、X光、超声、心电图、其他</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">选择受检者和医院</div>
+            <p>与实验室检查流程相同</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">选择检查日期</div>
+            <p>与实验室检查流程相同</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">5</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">上传文件</div>
+            <p>支持 PDF、图片（JPG/PNG），触发 OCR 识别</p>
+          </div>
+        </div>
+      </div>
+
+      <h4>3.3.3 支持的影像类型</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>类型代码</th>
+            <th>显示名称</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>CT</code></td>
+            <td>CT检查</td>
+            <td>计算机断层扫描，包含平扫、增强、血管造影</td>
+          </tr>
+          <tr>
+            <td><code>MRI</code></td>
+            <td>MRI检查</td>
+            <td>磁共振成像，包含平扫、增强、MRA</td>
+          </tr>
+          <tr>
+            <td><code>XRAY</code></td>
+            <td>X光检查</td>
+            <td>胸部、腹部、骨骼等X光片</td>
+          </tr>
+          <tr>
+            <td><code>ULTRASOUND</code></td>
+            <td>超声/彩超</td>
+            <td>腹部、心脏、甲状腺等超声检查</td>
+          </tr>
+          <tr>
+            <td><code>ECG</code></td>
+            <td>心电图</td>
+            <td>常规心电图、动态心电图、心电向量图</td>
+          </tr>
+          <tr>
+            <td><code>OTHER</code></td>
+            <td>其他影像</td>
+            <td>PET-CT、消化道造影等</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.4 模块3：影像OCR解析器 <span class="phase-tag phase-p1">P1</span></h3>
+
+      <h4>3.4.1 功能描述</h4>
+      <p>影像报告的 OCR 解析重点不同于实验室检验报告。影像报告通常是文档格式，重点提取：</p>
+      <ul>
+        <li><strong>检查部位</strong>（如：胸部、腹部、头部）</li>
+        <li><strong>影像表现</strong>（如：肺纹理增粗、右肺结节）</li>
+        <li><strong>诊断结论</strong>（如：未见明显异常、右肺磨玻璃结节）</li>
+      </ul>
+
+      <h4>3.4.2 解析策略</h4>
+      <div class="diagram">OCR结果解析流程：
+
+1. 遍历所有OCR文本块
+2. 关键词匹配：
+   - "检查部位" / "检查部位：" → 提取部位
+   - "影像表现" / "所见" / "描述：" → 提取表现文本
+   - "诊断结论" / "印象" / "印象诊断" → 提取诊断结论
+3. 多行合并：将同一字段的多行文本合并
+4. 结构化输出</div>
+
+      <h4>3.4.3 解析字段</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>字段名</th>
+            <th>来源</th>
+            <th>说明</th>
+            <th>OCR提取关键词</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>exam_site</td>
+            <td>OCR提取</td>
+            <td>检查部位</td>
+            <td>检查部位、检查部位：</td>
+          </tr>
+          <tr>
+            <td>exam_description</td>
+            <td>OCR提取</td>
+            <td>影像表现/所见</td>
+            <td>影像表现、所见、描述：</td>
+          </tr>
+          <tr>
+            <td>diagnosis_result</td>
+            <td>OCR提取</td>
+            <td>诊断结论</td>
+            <td>诊断结论、印象、印象诊断：</td>
+          </tr>
+          <tr>
+            <td>report_type</td>
+            <td>用户选择</td>
+            <td>影像类型</td>
+            <td>-</td>
+          </tr>
+          <tr>
+            <td>exam_item_name</td>
+            <td>OCR提取/手动</td>
+            <td>检查项目名</td>
+            <td>（从文件名或报告标题提取）</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.5 模块4：影像报告列表 <span class="phase-tag phase-p1">P1</span></h3>
+
+      <h4>3.5.1 功能描述</h4>
+      <p>新增独立的影像报告列表视图，支持按类型、受检者、时间等条件筛选。</p>
+
+      <h4>3.5.2 列表字段</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>说明</th>
+            <th>可排序</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>缩略图</td>
+            <td>报告首页缩略图</td>
+            <td>否</td>
+          </tr>
+          <tr>
+            <td>检查日期</td>
+            <td>影像检查日期</td>
+            <td>是</td>
+          </tr>
+          <tr>
+            <td>检查类型</td>
+            <td>CT/MRI/X光等</td>
+            <td>是</td>
+          </tr>
+          <tr>
+            <td>检查项目</td>
+            <td>如"CT肺部平扫"</td>
+            <td>是</td>
+          </tr>
+          <tr>
+            <td>检查部位</td>
+            <td>如"胸部"</td>
+            <td>否</td>
+          </tr>
+          <tr>
+            <td>诊断结论摘要</td>
+            <td>诊断结论前50字</td>
+            <td>否</td>
+          </tr>
+          <tr>
+            <td>医院</td>
+            <td>检查医院</td>
+            <td>是</td>
+          </tr>
+          <tr>
+            <td>操作</td>
+            <td>查看、删除</td>
+            <td>否</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>3.6 模块5：影像报告详情 <span class="phase-tag phase-p2">P2</span></h3>
+
+      <h4>3.6.1 功能描述</h4>
+      <p>影像报告详情页以原始影像（PDF/图片）为主视图，右侧或下方展示结构化提取的数据。</p>
+
+      <h4>3.6.2 页面布局</h4>
+      <div class="diagram">┌─────────────────────────────────────────────────────────┐
+│  ← 返回列表    CT肺部平扫 - 2026-05-16            [删除] │
+├───────────────────────────────┬─────────────────────────┤
+│                               │  基本信息                │
+│                               │  ─────────               │
+│     PDF查看器 / 图片展示       │  检查日期：2026-05-16   │
+│                               │  医院：浙一医院          │
+│     (支持缩放、翻页)           │  科室：放射科            │
+│                               │  医生：陈医生            │
+│                               │                          │
+│                               │  检查信息                │
+│                               │  ─────────               │
+│                               │  影像类型：CT            │
+│                               │  检查项目：CT肺部平扫    │
+│                               │  检查部位：胸部          │
+│                               │                          │
+│                               │  诊断结论                │
+│                               │  ─────────               │
+│                               │  右肺磨玻璃结节，建议    │
+│                               │  3个月后复查。           │
+│                               │                          │
+│                               │  影像表现                │
+│                               │  ─────────               │
+│                               │  双肺纹理清晰，未见...   │
+├───────────────────────────────┴─────────────────────────┤
+│  [上一页] 页码: 1/3 [下一页] [全屏] [下载]              │
+└─────────────────────────────────────────────────────────┘</div>
+
+      <h4>3.6.3 查看器功能</h4>
+      <ul>
+        <li><strong>PDF查看</strong>：使用 PDF.js 渲染，支持翻页、缩放</li>
+        <li><strong>图片查看</strong>：支持 JPG/PNG，支持缩放</li>
+        <li><strong>缩略图导航</strong>：多页 PDF 显示页码导航</li>
+        <li><strong>全屏模式</strong>：点击全屏按钮进入沉浸式查看</li>
+        <li><strong>下载</strong>：下载原始文件</li>
+      </ul>
+
+      <h2>4. 数据模型</h2>
+
+      <h3>4.1 数据库表设计</h3>
+
+      <h4>4.1.1 新增表：imaging_reports</h4>
+      <pre><code>CREATE TABLE imaging_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+    report_type TEXT NOT NULL CHECK(report_type IN ('CT','MRI','XRAY','ULTRASOUND','ECG','OTHER')),
+    exam_item_name TEXT NOT NULL DEFAULT '',
+    inspect_no TEXT NOT NULL DEFAULT '',
+    dept_name TEXT NOT NULL DEFAULT '',
+    doctor_name TEXT NOT NULL DEFAULT '',
+    sample_date TEXT NOT NULL,
+    exam_site TEXT NOT NULL DEFAULT '',
+    exam_description TEXT NOT NULL DEFAULT '',
+    diagnosis_result TEXT NOT NULL DEFAULT '',
+    file_path TEXT NOT NULL DEFAULT '',
+    file_md5 TEXT NOT NULL DEFAULT '',
+    ocr_raw_json TEXT NOT NULL DEFAULT '',
+    ocr_status TEXT NOT NULL DEFAULT 'pending' CHECK(ocr_status IN ('pending','processing','review','imported','failed')),
+    thumbnail_path TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX idx_imaging_reports_md5 ON imaging_reports(file_md5) WHERE file_md5 != '';</code></pre>
+
+      <h4>4.1.2 新增表：imaging_report_types</h4>
+      <pre><code>CREATE TABLE imaging_report_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    name_en TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);</code></pre>
+
+      <h3>4.2 数据模型</h3>
+
+      <h4>4.2.1 ImagingReport 结构体</h4>
+      <pre><code>// ImagingReport 影像检查报告
+type ImagingReport struct {
+    ID                int64   `json:"id"`
+    SubjectID         int64   `json:"subject_id"`
+    HospitalID        *int64  `json:"hospital_id,omitempty"`
+    ReportType        string  `json:"report_type"`         // CT/MRI/XRAY/ULTRASOUND/ECG/OTHER
+    ExamItemName      string  `json:"exam_item_name"`      // 如"CT肺部平扫"
+    InspectNo         string  `json:"inspect_no"`         // 检查号
+    DeptName          string  `json:"dept_name"`          // 科室
+    DoctorName        string  `json:"doctor_name"`        // 报告医生
+    SampleDate        string  `json:"sample_date"`        // 检查日期
+    ExamSite          string  `json:"exam_site"`          // 检查部位
+    ExamDescription   string  `json:"exam_description"`   // 影像表现
+    DiagnosisResult   string  `json:"diagnosis_result"`   // 诊断结论
+    FilePath          string  `json:"file_path"`          // 原始文件路径
+    FileMD5           string  `json:"file_md5"`           // 文件MD5
+    OCRStatus         string  `json:"ocr_status"`         // pending/processing/review/imported/failed
+    OCRRawJSON        string  `json:"ocr_raw_json"`        // 原始OCR结果
+    ThumbnailPath     string  `json:"thumbnail_path"`     // 缩略图路径
+    CreatedAt         string  `json:"created_at"`
+    UpdatedAt         string  `json:"updated_at"`
+
+    // Joined fields
+    HospitalName      string  `json:"hospital_name,omitempty"`
+    SubjectName       string  `json:"subject_name,omitempty"`
+}</code></pre>
+
+      <h4>4.2.2 ImagingReportType 结构体</h4>
+      <pre><code>// ImagingReportType 影像检查类型字典
+type ImagingReportType struct {
+    ID          int64  `json:"id"`
+    Code        string `json:"code"`
+    Name        string `json:"name"`
+    NameEn      string `json:"name_en"`
+    Description string `json:"description"`
+    SortOrder   int    `json:"sort_order"`
+    CreatedAt   string `json:"created_at"`
+}</code></pre>
+
+      <h3>4.3 种子数据</h3>
+      <pre><code>-- 影像检查类型种子数据
+INSERT INTO imaging_report_types (code, name, name_en, description, sort_order) VALUES
+('CT', 'CT检查', 'CT Scan', '计算机断层扫描', 1),
+('MRI', 'MRI检查', 'MRI', '磁共振成像', 2),
+('XRAY', 'X光检查', 'X-Ray', 'X光片检查', 3),
+('ULTRASOUND', '超声/彩超', 'Ultrasound', '超声波检查', 4),
+('ECG', '心电图', 'ECG/EKG', '心电图检查', 5),
+('OTHER', '其他影像', 'Other', '其他类型影像检查', 6);</code></pre>
+
+      <h2>5. API接口</h2>
+
+      <h3>5.1 新增接口</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>接口</th>
+            <th>方法</th>
+            <th>说明</th>
+            <th>优先级</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/api/v1/imaging/upload</code></td>
+            <td>POST</td>
+            <td>上传影像报告文件并触发OCR</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-reports</code></td>
+            <td>GET</td>
+            <td>获取影像报告列表</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-reports/:id</code></td>
+            <td>GET</td>
+            <td>获取影像报告详情</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-reports/:id</code></td>
+            <td>PUT</td>
+            <td>更新影像报告</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-reports/:id</code></td>
+            <td>DELETE</td>
+            <td>删除影像报告</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-reports/:id/image</code></td>
+            <td>GET</td>
+            <td>获取影像报告原始文件</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-report-types</code></td>
+            <td>GET</td>
+            <td>获取影像类型字典</td>
+            <td>P2</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-reports/:id/confirm</code></td>
+            <td>POST</td>
+            <td>确认影像报告（核效）</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>/api/v1/imaging-reports/:id/import</code></td>
+            <td>POST</td>
+            <td>导入影像报告（入库）</td>
+            <td>P1</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>5.2 接口详细设计</h3>
+
+      <h4>5.2.1 POST /api/v1/imaging/upload</h4>
+      <p><strong>请求</strong></p>
+      <pre><code>Content-Type: multipart/form-data
+
+subject_id: 1                           // 必填，受检者ID
+hospital_id: 1                          // 选填，医院ID
+report_type: CT                         // 必填，影像类型
+sample_date: 2026-05-16                  // 必填，检查日期
+file: [PDF或图片文件]                    // 必填，原始文件</code></pre>
+
+      <p><strong>响应</strong></p>
+      <pre><code>{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "report_id": 1,
+    "file_md5": "abc123...",
+    "status": "processing"               // 处理中，OCR完成后变为review
+  }
+}</code></pre>
+
+      <h4>5.2.2 GET /api/v1/imaging-reports</h4>
+      <p><strong>请求参数</strong></p>
+      <pre><code>subject_id=1          // 选填，按受检者筛选
+hospital_id=1         // 选填，按医院筛选
+report_type=CT        // 选填，按类型筛选
+page=1                // 选填，页码，默认1
+page_size=20          // 选填，每页数量，默认20</code></pre>
+
+      <h4>5.2.3 GET /api/v1/imaging-reports/:id</h4>
+      <p><strong>响应</strong></p>
+      <pre><code>{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "id": 1,
+    "subject_id": 1,
+    "subject_name": "张三",
+    "hospital_id": 1,
+    "hospital_name": "浙一医院",
+    "report_type": "CT",
+    "exam_item_name": "CT肺部平扫",
+    "inspect_no": "YHCT00031626",
+    "dept_name": "放射科",
+    "doctor_name": "陈医生",
+    "sample_date": "2026-05-16",
+    "exam_site": "胸部",
+    "exam_description": "双肺纹理清晰，未见明显渗出...",
+    "diagnosis_result": "右肺磨玻璃结节，建议3个月后复查",
+    "ocr_status": "review",
+    "file_path": "data/uploads/xxx.pdf",
+    "created_at": "2026-05-16 10:00:00"
+  }
+}</code></pre>
+
+      <h3>5.3 已有接口修改</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>接口</th>
+            <th>修改内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GET /api/v1/reports</code></td>
+            <td>返回数据增加 <code>report_category</code> 字段（lab/imaging）</td>
+          </tr>
+          <tr>
+            <td><code>GET /api/v1/dashboard/summary</code></td>
+            <td>统计信息增加影像报告数量</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>6. 前端组件</h2>
+
+      <h3>6.1 修改的组件</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>文件</th>
+            <th>修改内容</th>
+            <th>优先级</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>web/js/views/ocr-import.js</code></td>
+            <td>增加报告类型单选，根据类型显示不同字段</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>web/js/views/dashboard.js</code></td>
+            <td>统计卡片增加影像报告入口</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>web/js/app.js</code></td>
+            <td>增加影像报告视图路由 #imaging</td>
+            <td>P1</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>6.2 新增的组件</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>文件</th>
+            <th>说明</th>
+            <th>优先级</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>web/js/views/imaging.js</code></td>
+            <td>影像报告列表视图</td>
+            <td>P1</td>
+          </tr>
+          <tr>
+            <td><code>web/js/views/imaging-detail.js</code></td>
+            <td>影像报告详情视图（PDF/图片查看器）</td>
+            <td>P2</td>
+          </tr>
+          <tr>
+            <td><code>web/js/components/pdf-viewer.js</code></td>
+            <td>PDF查看器组件（基于PDF.js）</td>
+            <td>P2</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>6.3 导航调整</h3>
+      <p>侧边栏导航调整为：</p>
+      <ul>
+        <li>仪表盘</li>
+        <li>OCR上传 ← 包含实验室/影像选择</li>
+        <li>检验报告 ← 仅显示实验室报告</li>
+        <li><strong>影像报告</strong> ← 新增</li>
+        <li>受检者</li>
+        <li>项目库</li>
+        <li>趋势分析</li>
+        <li>设置</li>
+      </ul>
+
+      <div class="info">
+        <div class="info-title">替代方案</div>
+        <p>也可以在 OCR 上传页面内通过 Tab 切换"检验报告"和"影像报告"，不单独增加导航入口。两种方案各有优劣，可根据实际用户体验反馈调整。</p>
+      </div>
+
+      <h2>7. 技术实现</h2>
+
+      <h3>7.1 后端实现</h3>
+
+      <h4>7.1.1 新增文件</h4>
+      <ul>
+        <li><code>internal/models/imaging.go</code> - 影像报告数据模型</li>
+        <li><code>internal/handlers/imaging.go</code> - 影像报告 HTTP 处理器</li>
+        <li><code>internal/services/imaging_ocr_service.go</code> - 影像 OCR 解析服务</li>
+      </ul>
+
+      <h4>7.1.2 数据库修改</h4>
+      <ul>
+        <li><code>internal/database/migrations.go</code> - 添加 imaging_reports 和 imaging_report_types 表</li>
+        <li><code>internal/database/seed.go</code> - 添加影像类型种子数据</li>
+      </ul>
+
+      <h4>7.1.3 路由注册</h4>
+      <ul>
+        <li><code>main.go</code> - 注册 /api/v1/imaging/* 和 /api/v1/imaging-reports/* 路由</li>
+      </ul>
+
+      <h3>7.2 OCR解析实现</h3>
+      <pre><code>// ParseImagingReport 解析影像报告OCR结果
+func ParseImagingReport(ocrResults []OCRResult) *ImagingParsedResult {
+    result := &ImagingParsedResult{}
+
+    for _, block := range ocrResults {
+        text := strings.TrimSpace(block.Text)
+        lowerText := strings.ToLower(text)
+
+        // 匹配检查部位
+        if strings.Contains(lowerText, "检查部位") {
+            result.ExamSite = extractAfterColon(text)
+            continue
+        }
+
+        // 匹配诊断结论（重点）
+        if strings.Contains(lowerText, "诊断结论") ||
+           strings.Contains(lowerText, "印象：") ||
+           strings.Contains(lowerText, "印象诊断") {
+            result.DiagnosisResult = extractAfterColon(text)
+            continue
+        }
+
+        // 匹配影像表现
+        if strings.Contains(lowerText, "影像表现") ||
+           strings.Contains(lowerText, "所见") {
+            result.ExamDescription = extractAfterColon(text)
+            continue
+        }
+    }
+
+    return result
+}</code></pre>
+
+      <h2>8. 用户交互流程</h2>
+
+      <h3>流程A：上传影像报告</h3>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">进入OCR上传页面</div>
+            <p>点击侧边栏"OCR上传"，默认选择"实验室检查"</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">切换报告类型</div>
+            <p>点击"影像检查"单选项，表单自动刷新显示影像类型选择</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">填写基本信息</div>
+            <p>选择影像类型、受检者、医院、检查日期</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">上传文件</div>
+            <p>拖拽或选择 PDF/图片文件，点击上传</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">5</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">OCR识别中</div>
+            <p>页面显示处理状态，OCR完成后自动跳转审核页面</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">6</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">审核并修正</div>
+            <p>查看OCR提取的字段，可手动修正，然后确认入库</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>流程B：查看影像报告</h3>
+      <div class="flow-box">
+        <div class="flow-step">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">进入影像报告列表</div>
+            <p>点击侧边栏"影像报告"或通过仪表盘入口进入</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">筛选报告</div>
+            <p>可按受检者、类型、时间范围筛选</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">点击查看详情</div>
+            <p>点击报告卡片或"查看"按钮，进入详情页</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">浏览原始影像</div>
+            <p>在左侧查看器浏览 PDF 或图片，可缩放、翻页</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">5</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">查看结构化数据</div>
+            <p>在右侧查看诊断结论、检查部位等提取的信息</p>
+          </div>
+        </div>
+      </div>
+
+      <h2>9. 测试验证</h2>
+
+      <h3>9.1 测试场景</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>场景</th>
+            <th>操作</th>
+            <th>预期结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>报告类型切换</td>
+            <td>在OCR上传页切换实验室/影像检查</td>
+            <td>表单字段正确切换</td>
+          </tr>
+          <tr>
+            <td>影像类型选择</td>
+            <td>选择"影像检查"后选择不同影像类型</td>
+            <td>所有类型可正常选择</td>
+          </tr>
+          <tr>
+            <td>影像文件上传</td>
+            <td>上传 PDF 和图片格式文件</td>
+            <td>文件上传成功，状态变为 processing</td>
+          </tr>
+          <tr>
+            <td>OCR提取验证</td>
+            <td>上传包含诊断结论的影像报告</td>
+            <td>诊断结论、检查部位被正确提取</td>
+          </tr>
+          <tr>
+            <td>影像报告列表</td>
+            <td>查看影像报告列表</td>
+            <td>列表显示正确的缩略图和信息</td>
+          </tr>
+          <tr>
+            <td>PDF查看</td>
+            <td>在详情页查看多页PDF</td>
+            <td>PDF正确渲染，支持翻页和缩放</td>
+          </tr>
+          <tr>
+            <td>图片查看</td>
+            <td>在详情页查看图片格式报告</td>
+            <td>图片正确显示，支持缩放</td>
+          </tr>
+          <tr>
+            <td>报告删除</td>
+            <td>删除一条影像报告</td>
+            <td>报告从列表移除，文件删除</td>
+          </tr>
+          <tr>
+            <td>重复上传检测</td>
+            <td>上传相同文件的MD5</td>
+            <td>系统拒绝重复上传</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>10. 后续规划</h2>
+
+      <h3>10.1 P3功能（后续迭代）</h3>
+
+      <h4>危急值提醒</h4>
+      <p>自动识别影像报告中的危急发现并提醒用户：</p>
+      <pre><code>// 危急关键词列表
+var CriticalFindings = []struct {
+    Keyword  string
+    Severity string  // high/medium
+    Message  string
+}{
+    {"气胸", "high", "发现气胸，请立即就医"},
+    {"肺栓塞", "high", "发现肺栓塞，请立即就医"},
+    {"脑出血", "high", "发现脑出血，请立即就医"},
+    {"主动脉夹层", "high", "发现主动脉夹层，请立即就医"},
+    {"心肌梗死", "high", "发现心肌梗死迹象，请立即就医"},
+    {"肺结节增大", "medium", "发现肺结节增大，建议尽快复查"},
+    {"肿瘤", "medium", "发现疑似肿瘤，建议进一步检查"},
+}</code></pre>
+
+      <h4>DICOM支持</h4>
+      <p>支持专业的 DICOM 医学影像格式，实现：</p>
+      <ul>
+        <li>DICOM 文件解析和渲染</li>
+        <li>窗宽窗位调整</li>
+        <li>测量工具（长度、角度）</li>
+        <li>历史影像对比</li>
+      </ul>
+
+      <h4>影像AI辅助</h4>
+      <p>接入 AI 模型进行辅助分析：</p>
+      <ul>
+        <li>肺结节自动检测和随访对比</li>
+        <li>骨折检测</li>
+        <li>异常区域标注</li>
+      </ul>
+
+      <h2>11. 总结</h2>
+
+      <p>本次需求将 LabTrace 从单一的"检验报告管理"扩展为"完整健康档案管理"，主要实现：</p>
+
+      <ol>
+        <li><strong>统一入口</strong>：在 OCR 上传页面支持报告类型选择</li>
+        <li><strong>分类处理</strong>：影像报告采用不同的 OCR 解析策略</li>
+        <li><strong>结构化存储</strong>：提取诊断结论、检查部位等关键信息</li>
+        <li><strong>专业查看</strong>：PDF/图片查看器支持翻页、缩放</li>
+        <li><strong>数据分离</strong>：独立的影像报告表，与检验报告分离管理</li>
+      </ol>
+
+      <div class="warning">
+        <div class="warning-title">注意事项</div>
+        <ul>
+          <li>影像报告的 OCR 识别准确度依赖于报告的格式规范程度</li>
+          <li>部分医院报告可能包含手写内容，OCR 识别困难</li>
+          <li>建议用户优先使用 PDF 格式报告，图片次之</li>
+        </ul>
+      </div>
+
+      <p>所有功能开发完成后需要进行完整的端到端测试，确保用户体验流畅。</p>
+    </div>
+  </body>
+</html>

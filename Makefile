@@ -5,7 +5,7 @@
 APP_NAME    := labtrace
 
 # 从 .env 读取端口，默认 8080
-PORT        := $(shell grep -Po '(?<=^PORT=)\S+' .env 2>/dev/null || echo 8080)
+PORT        := $(shell grep '^PORT=' .env 2>/dev/null | sed 's/^PORT=//' || echo 8080)
 
 # PID 文件，用于记录运行中的进程
 PID_FILE    := .labtrace.pid
@@ -25,7 +25,6 @@ RESET       := \033[0m
 
 # ---- 默认目标 ----
 help: ## 显示帮助信息
-	@printf ""
 	@printf "$(CYAN)LabTrace Makefile$(RESET)\n"
 	@printf "==================\n\n"
 	@printf "$(GREEN)Usage:$(RESET) make <target>\n\n"
@@ -35,8 +34,13 @@ help: ## 显示帮助信息
 
 build: ## 编译生成可执行二进制文件
 	@printf "$(CYAN)[build]$(RESET) 编译 $(APP_NAME)...\n"
+<<<<<<< Updated upstream
 	@$(GO) build -ldflags "$(LDFLAGS)" -o $(APP_NAME) .
 	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME)\n"
+=======
+	@CGO_ENABLED=1 $(GO) build -ldflags "$(LDFLAGS)" -o $(APP_NAME) .
+	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME) (version: $(VERSION))\n"
+>>>>>>> Stashed changes
 
 dev: ## 开发者模式运行（丰富日志）
 	@bash -c ' \
@@ -106,15 +110,24 @@ stop: ## 优雅关闭应用
 		else \
 			printf "$(YELLOW)[stop]$(RESET) 未找到 PID 文件\n"; \
 		fi; \
-		PID_ON_PORT=$$(lsof -ti :$(PORT) 2>/dev/null); \
+		PID_ON_PORT=$$(ss -tlnp "sport = :$(PORT)" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p'); \
+		if [ -z "$$PID_ON_PORT" ]; then \
+			PID_ON_PORT=$$(lsof -ti :$(PORT) 2>/dev/null); \
+		fi; \
 		if [ -n "$$PID_ON_PORT" ]; then \
 			printf "\n"; \
 			printf "$(RED)[stop]$(RESET) 端口 $(PORT) 仍被以下进程占用:\n"; \
+<<<<<<< Updated upstream
 			lsof -i :$(PORT) 2>/dev/null; \
 			printf "\n"; \
 			printf "$(YELLOW)[stop]$(RESET) 是否要强制结束占用端口的进程？[y/N] "; \
 			read answer; \
 			if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
+=======
+			PID_INFO=$$(ss -tlnp "sport = :$(PORT)" 2>/dev/null || lsof -i :$(PORT) 2>/dev/null); \
+			printf "$$PID_INFO\n"; \
+			if [ "$(FORCE)" = "1" ]; then \
+>>>>>>> Stashed changes
 				for p in $$PID_ON_PORT; do \
 					kill -9 $$p 2>/dev/null; \
 					printf "$(GREEN)[stop]$(RESET) 已强制终止进程 $$p\n"; \
@@ -125,6 +138,19 @@ stop: ## 优雅关闭应用
 		fi \
 	'
 
+<<<<<<< Updated upstream
+=======
+test: ## 运行单元测试
+	@printf "$(CYAN)[test]$(RESET) 运行测试...\n"
+	@$(GO) test -v ./...
+	@printf "$(GREEN)[test]$(RESET) 测试完成\n"
+
+lint: ## 代码静态检查
+	@printf "$(CYAN)[lint]$(RESET) 运行 go vet...\n"
+	@$(GO) vet ./...
+	@printf "$(GREEN)[lint]$(RESET) 检查完成\n"
+
+>>>>>>> Stashed changes
 clean: ## 清理临时文件、缓存及二进制文件（保留 ./data 目录）
 	@printf "$(CYAN)[clean]$(RESET) 清理编译产物...\n"
 	@rm -f $(APP_NAME)

@@ -142,6 +142,18 @@ func main() {
 
 		// Audit Logs
 		v1.GET("/audit-logs", handlers.ListAuditLogs)
+
+		// Imaging Reports
+		v1.GET("/imaging-report-types", handlers.ListImagingReportTypes)
+		v1.POST("/imaging/upload", handlers.UploadImagingReport)
+		v1.GET("/imaging-reports", handlers.ListImagingReports)
+		v1.GET("/imaging-reports/:id", handlers.GetImagingReport)
+		v1.PUT("/imaging-reports/:id", handlers.UpdateImagingReport)
+		v1.DELETE("/imaging-reports/:id", handlers.DeleteImagingReport)
+		v1.GET("/imaging-reports/:id/image", handlers.GetImagingReportImage)
+		v1.POST("/imaging-reports/:id/confirm", handlers.ConfirmImagingReport)
+		v1.POST("/imaging-reports/:id/import", handlers.ImportImagingReport)
+		v1.POST("/imaging-reports/:id/re-ocr", handlers.ReOCRImagingReport)
 	}
 
 	// Graceful shutdown
