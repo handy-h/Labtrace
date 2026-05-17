@@ -308,5 +308,14 @@ const api = {
   
   confirmBatchImport(data) {
     return this.post("/batch/confirm", data)
+  },
+
+  // Batch Import Imaging
+  uploadBatchImagingFiles(formData) {
+    return this.upload("/batch/imaging/upload", formData)
+  },
+
+  confirmBatchImagingImport(data) {
+    return this.post("/batch/imaging/confirm", data)
   }
 };

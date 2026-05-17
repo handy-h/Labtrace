@@ -1,8 +1,8 @@
-// batch_import.js - 批量导入视图
-const BatchImportView = Vue.defineComponent({
+// batch_import_imaging.js - 影像报告批量导入视图
+const BatchImportImagingView = Vue.defineComponent({
   template: `
   <div class="page">
-    <h1 class="page-title">批量导入报告</h1>
+    <h1 class="page-title">批量导入影像报告</h1>
     <div class="card">
       <!-- Step 1: 基本信息 -->
       <div v-if="step === 1">
@@ -23,14 +23,14 @@ const BatchImportView = Vue.defineComponent({
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">检验分类</label>
-            <select v-model="form.category_id" class="form-select" style="width: 200px">
-              <option value="">未分类</option>
-              <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+            <label class="form-label">影像报告类型</label>
+            <select v-model="form.report_type" class="form-select" style="width: 200px">
+              <option value="">请选择</option>
+              <option v-for="t in imagingTypes" :key="t.id" :value="t.code">{{ t.name }}</option>
             </select>
           </div>
         </div>
-        <button @click="step = 2" class="btn btn-primary" :disabled="!form.subject_id">下一步</button>
+        <button @click="step = 2" class="btn btn-primary" :disabled="!form.subject_id || !form.report_type">下一步</button>
       </div>
 
       <!-- Step 2: 上传文件 -->
@@ -86,7 +86,7 @@ const BatchImportView = Vue.defineComponent({
               </div>
             </div>
             <div class="overflow-y-auto overflow-x-auto bg-gray-50 rounded flex-1">
-              <pre class="text-xs p-2">{{ formatJSON(previewData[selectedFileIndex]?.data) }}</pre>
+              <pre class="text-xs p-2">{{ formatJSON(selectedReport?.data) }}</pre>
             </div>
           </div>
           <div class="flex-1 p-3 border rounded">
@@ -97,63 +97,57 @@ const BatchImportView = Vue.defineComponent({
                 <input v-model="mappings.sample_date" class="form-input" placeholder="如: sample_date" />
               </div>
               <div class="form-group">
-                <label class="form-label">检验项目数组路径 <span class="text-gray-400 text-xs">(选填)</span></label>
-                <input v-model="mappings.items_path" class="form-input" placeholder="如: 留空自动查找·report.items" />
+                <label class="form-label">检查项目名称</label>
+                <input v-model="mappings.exam_item_name" class="form-input" placeholder="如: exam_item_name · checkItem" />
               </div>
               <div class="form-group">
-                <label class="form-label">检验项目名称</label>
-                <input v-model="mappings.item_name" class="form-input" placeholder="如: name" />
+                <label class="form-label">检查部位</label>
+                <input v-model="mappings.exam_site" class="form-input" placeholder="如: exam_site · bodyPart" />
               </div>
               <div class="form-group">
-                <label class="form-label">结果值</label>
-                <input v-model="mappings.item_value" class="form-input" placeholder="如: value.result" />
+                <label class="form-label">检查所见 <span class="text-gray-400 text-xs">(长文本)</span></label>
+                <input v-model="mappings.exam_description" class="form-input" placeholder="如: exam_description · findings" />
               </div>
               <div class="form-group">
-                <label class="form-label">单位</label>
-                <input v-model="mappings.item_unit" class="form-input" placeholder="如: value.unit" />
+                <label class="form-label">诊断结果 <span class="text-gray-400 text-xs">(长文本)</span></label>
+                <input v-model="mappings.diagnosis_result" class="form-input" placeholder="如: diagnosis_result · impression" />
               </div>
               <div class="form-group">
-                <label class="form-label">检验项目分类 <span class="text-gray-400 text-xs">(选填)</span></label>
-                <input v-model="mappings.item_category" class="form-input" placeholder="如: category" />
+                <label class="form-label">检查号</label>
+                <input v-model="mappings.inspect_no" class="form-input" placeholder="如: inspect_no · accessionNumber" />
               </div>
               <div class="form-group">
-                <label class="form-label">参考区间(整体) <span class="text-gray-400 text-xs">(选填·含整体值)</span></label>
-                <input v-model="mappings.ref_range" class="form-input" placeholder="如: 留空使用分段·refRange" />
+                <label class="form-label">科室</label>
+                <input v-model="mappings.dept_name" class="form-input" placeholder="如: dept_name · department" />
               </div>
               <div class="form-group">
-                <label class="form-label">参考值下限 <span class="text-gray-400 text-xs">(分段)</span></label>
-                <input v-model="mappings.ref_min" class="form-input" placeholder="如: value.min" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">参考值上限 <span class="text-gray-400 text-xs">(分段)</span></label>
-                <input v-model="mappings.ref_max" class="form-input" placeholder="如: value.max" />
+                <label class="form-label">医生</label>
+                <input v-model="mappings.doctor_name" class="form-input" placeholder="如: doctor_name · physician" />
               </div>
             </div>
           </div>
         </div>
         <div class="mb-4">
           <h4 class="font-medium mb-2">预览</h4>
-          <div class="max-h-40 overflow-y-auto border rounded p-2">
+          <div class="border rounded p-3">
             <table class="w-full text-sm">
-              <thead class="bg-gray-50 sticky top-0">
-                <tr>
-                  <th class="px-3 py-2 text-left">项目</th>
-                  <th class="px-3 py-2 text-left">分类</th>
-                  <th class="px-3 py-2 text-left">结果</th>
-                  <th class="px-3 py-2 text-left">单位</th>
-                  <th class="px-3 py-2 text-left">参考区间</th>
-                </tr>
-              </thead>
               <tbody>
-                <tr v-for="(item, i) in previewItems" :key="i" class="border-t hover:bg-gray-50">
-                  <td class="px-3 py-2">{{ item.name }}</td>
-                  <td class="px-3 py-2 text-gray-500">{{ item.category || '-' }}</td>
-                  <td class="px-3 py-2">{{ item.value }}</td>
-                  <td class="px-3 py-2">{{ item.unit }}</td>
-                  <td class="px-3 py-2">{{ item.ref }}</td>
-                </tr>
+                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500 w-28">检查项目</td><td class="py-1.5 font-medium">{{ previewValues.exam_item_name || '-' }}</td></tr>
+                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">检查部位</td><td class="py-1.5">{{ previewValues.exam_site || '-' }}</td></tr>
+                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">检查号</td><td class="py-1.5">{{ previewValues.inspect_no || '-' }}</td></tr>
+                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">科室</td><td class="py-1.5">{{ previewValues.dept_name || '-' }}</td></tr>
+                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">医生</td><td class="py-1.5">{{ previewValues.doctor_name || '-' }}</td></tr>
+                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">采样日期</td><td class="py-1.5">{{ previewValues.sample_date || '-' }}</td></tr>
               </tbody>
             </table>
+            <div class="mt-3 pt-3 border-t">
+              <div class="text-xs text-gray-500 mb-1">检查所见</div>
+              <div class="text-sm bg-gray-50 p-2 rounded max-h-24 overflow-y-auto whitespace-pre-wrap">{{ previewValues.exam_description || '-' }}</div>
+            </div>
+            <div class="mt-3">
+              <div class="text-xs text-gray-500 mb-1">诊断结果</div>
+              <div class="text-sm bg-gray-50 p-2 rounded max-h-24 overflow-y-auto whitespace-pre-wrap">{{ previewValues.diagnosis_result || '-' }}</div>
+            </div>
           </div>
         </div>
         <div class="flex gap-2">
@@ -176,7 +170,6 @@ const BatchImportView = Vue.defineComponent({
                 <tr>
                   <th class="px-3 py-2 text-left">文件名</th>
                   <th class="px-3 py-2 text-left">采样日期</th>
-                  <th class="px-3 py-2 text-center">项目数</th>
                   <th class="px-3 py-2 text-center">操作</th>
                 </tr>
               </thead>
@@ -187,7 +180,6 @@ const BatchImportView = Vue.defineComponent({
                     <input type="date" v-model="r.sample_date" class="form-input" style="width:130px"
                       :class="!r.sample_date ? 'border-red-400 bg-red-50' : ''" />
                   </td>
-                  <td class="px-3 py-2 text-center">{{ r.items?.length || 0 }}</td>
                   <td class="px-3 py-2 text-center">
                     <div class="flex gap-1 justify-center">
                       <button @click="showJsonModal(r)" class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-200">JSON</button>
@@ -245,8 +237,8 @@ const BatchImportView = Vue.defineComponent({
     const step = Vue.ref(1);
     const subjects = Vue.ref([]);
     const hospitals = Vue.ref([]);
-    const categories = Vue.ref([]);
-    const form = Vue.ref({ subject_id: '', hospital_id: '', category_id: '' });
+    const imagingTypes = Vue.ref([]);
+    const form = Vue.ref({ subject_id: '', hospital_id: '', report_type: '' });
 
     const jsonFiles = Vue.ref([]);
     const pdfFiles = Vue.ref([]);
@@ -263,30 +255,32 @@ const BatchImportView = Vue.defineComponent({
 
     const mappings = Vue.ref({
       sample_date: '',
-      items_path: '',
-      item_name: 'name',
-      item_value: 'value',
-      item_unit: 'unit',
-      item_category: '',
-      ref_range: '',
-      ref_min: 'min',
-      ref_max: 'max'
+      exam_item_name: '',
+      exam_site: '',
+      exam_description: '',
+      diagnosis_result: '',
+      inspect_no: '',
+      dept_name: '',
+      doctor_name: ''
     });
 
-    const previewItems = Vue.computed(() => {
-      const report = previewData.value[selectedFileIndex.value];
-      if (!report || !report.items) return [];
-      return report.items.slice(0, 5).map(item => {
-        return {
-          name: getNestedValue(item, mappings.value.item_name),
-          value: getNestedValue(item, mappings.value.item_value),
-          unit: getNestedValue(item, mappings.value.item_unit),
-          category: getNestedValue(report.data, mappings.value.item_category),
-          ref: mappings.value.ref_range
-            ? getNestedValue(item, mappings.value.ref_range)
-            : `${getNestedValue(item, mappings.value.ref_min)}-${getNestedValue(item, mappings.value.ref_max)}`
-        };
-      });
+    const selectedReport = Vue.computed(() => {
+      return previewData.value[selectedFileIndex.value] || null;
+    });
+
+    const previewValues = Vue.computed(() => {
+      const r = selectedReport.value;
+      if (!r || !r.data) return {};
+      return {
+        sample_date: parseDateForInput(getNestedValue(r.data, mappings.value.sample_date)),
+        exam_item_name: getNestedValue(r.data, mappings.value.exam_item_name),
+        exam_site: getNestedValue(r.data, mappings.value.exam_site),
+        exam_description: getNestedValue(r.data, mappings.value.exam_description),
+        diagnosis_result: getNestedValue(r.data, mappings.value.diagnosis_result),
+        inspect_no: getNestedValue(r.data, mappings.value.inspect_no),
+        dept_name: getNestedValue(r.data, mappings.value.dept_name),
+        doctor_name: getNestedValue(r.data, mappings.value.doctor_name),
+      };
     });
 
     // 检查是否有报告缺少采样日期
@@ -294,7 +288,7 @@ const BatchImportView = Vue.defineComponent({
       return previewData.value.some(r => !r.sample_date);
     });
 
-    // 监听 mappings 变化，同步更新 previewData 中每条报告的 sample_date
+    // 监听采样日期映射变化，同步更新所有报告的 sample_date
     Vue.watch(
       () => mappings.value.sample_date,
       (newPath) => {
@@ -305,21 +299,10 @@ const BatchImportView = Vue.defineComponent({
       { deep: true }
     );
 
-    // 监听 items_path 变化，重新提取检验项目
-    Vue.watch(
-      () => mappings.value.items_path,
-      (newPath) => {
-        for (const report of previewData.value) {
-          report.items = extractItemsClient(report.data, newPath);
-        }
-      },
-      { deep: true }
-    );
-
     Vue.onMounted(() => {
       api.listSubjects().then(r => subjects.value = r.data || []);
       api.listHospitals().then(r => hospitals.value = r.data || []);
-      api.listCategories().then(r => categories.value = r.data || []);
+      api.listImagingReportTypes().then(r => imagingTypes.value = r.data || []);
     });
 
     function onJsonFileChange(e) {
@@ -360,12 +343,9 @@ const BatchImportView = Vue.defineComponent({
       return idx > 0 ? n.substring(0, idx) : n;
     }
 
-    // 将各种日期字符串转为 input[type=date] 可接受的 YYYY-MM-DD 格式
     function parseDateForInput(raw) {
       if (!raw) return '';
-      // 提取日期部分（去掉时间）
       const datePart = String(raw).split(/\s+/)[0];
-      // 统一分隔符为 -
       return datePart.replace(/[\/.]/g, '-');
     }
 
@@ -377,7 +357,7 @@ const BatchImportView = Vue.defineComponent({
           fd.append('json_files', p.json);
           fd.append('pdf_files', p.pdf);
         }
-        const r = await api.uploadBatchFiles(fd);
+        const r = await api.uploadBatchImagingFiles(fd);
         if (r.code !== 0) { alert(r.message); return; }
         previewData.value = r.data.results;
         uploadErrors.value = r.data.errors;
@@ -417,27 +397,8 @@ const BatchImportView = Vue.defineComponent({
       return curr !== undefined ? String(curr) : '';
     }
 
-    function extractItemsClient(data, itemsPath) {
-      if (!itemsPath) {
-        // Auto-detect: find first array of objects among top-level values
-        for (const v of Object.values(data || {})) {
-          if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && v[0] !== null) {
-            return v;
-          }
-        }
-        return [data];
-      }
-      const parts = itemsPath.split('.');
-      let curr = data;
-      for (const p of parts) {
-        if (curr && typeof curr === 'object' && p in curr) curr = curr[p];
-        else return [data];
-      }
-      return Array.isArray(curr) ? curr : [curr];
-    }
-
     async function confirmImport() {
-      if (!confirm(`确认导入 ${previewData.value.length} 份报告?`)) return;
+      if (!confirm(`确认导入 ${previewData.value.length} 份影像报告?`)) return;
       importing.value = true;
       try {
         const reports = previewData.value.map(r => ({
@@ -447,10 +408,10 @@ const BatchImportView = Vue.defineComponent({
           sample_date: r.sample_date || ''
         }));
 
-        const r = await api.confirmBatchImport({
+        const r = await api.confirmBatchImagingImport({
           subject_id: parseInt(form.value.subject_id),
           hospital_id: form.value.hospital_id ? parseInt(form.value.hospital_id) : null,
-          category_id: form.value.category_id ? parseInt(form.value.category_id) : null,
+          report_type: form.value.report_type,
           mappings: mappings.value,
           reports
         });
@@ -464,7 +425,7 @@ const BatchImportView = Vue.defineComponent({
 
     function reset() {
       step.value = 1;
-      form.value = { subject_id: '', hospital_id: '', category_id: '' };
+      form.value = { subject_id: '', hospital_id: '', report_type: '' };
       jsonFiles.value = [];
       pdfFiles.value = [];
       filePairs.value = [];
@@ -472,6 +433,7 @@ const BatchImportView = Vue.defineComponent({
       previewData.value = [];
       pdfDataMap.value = {};
       importResult.value = { success_count: 0, fail_count: 0 };
+      selectedFileIndex.value = 0;
     }
 
     function goToReports() {
@@ -486,7 +448,6 @@ const BatchImportView = Vue.defineComponent({
     function viewPdf(report) {
       const base64 = pdfDataMap.value[report.file_name];
       if (!base64) { alert('PDF数据未找到'); return; }
-      // 去掉 data:application/pdf;base64, 前缀
       const raw = base64.includes(',') ? base64.split(',')[1] : base64;
       const blob = new Blob([Uint8Array.from(atob(raw), c => c.charCodeAt(0))], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -494,8 +455,8 @@ const BatchImportView = Vue.defineComponent({
     }
 
     return {
-      step, subjects, hospitals, categories, form,
-      filePairs, uploadErrors, previewData, previewItems,
+      step, subjects, hospitals, imagingTypes, form,
+      filePairs, uploadErrors, previewData, previewValues, selectedReport,
       uploading, importing, importResult, mappings,
       selectedFileIndex, jsonModalVisible, jsonModalData, hasEmptyDates,
       onJsonFileChange, onPdfFileChange, uploadFiles,

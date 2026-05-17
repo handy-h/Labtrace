@@ -22,16 +22,18 @@ import (
 )
 
 type BatchMappingConfig struct {
-	SubjectID  int64  `json:"subject_id"`
-	HospitalID *int64 `json:"hospital_id"`
-	CategoryID *int64 `json:"category_id"`
-	SampleDate string `json:"sample_date"`
-	ItemsPath   string `json:"items_path"`
-	ItemName    string `json:"item_name"`
-	ItemValue   string `json:"item_value"`
-	ItemUnit    string `json:"item_unit"`
-	RefMin      string `json:"ref_min"`
-	RefMax      string `json:"ref_max"`
+	SubjectID    int64  `json:"subject_id"`
+	HospitalID   *int64 `json:"hospital_id"`
+	CategoryID   *int64 `json:"category_id"`
+	SampleDate   string `json:"sample_date"`
+	ItemsPath    string `json:"items_path"`
+	ItemName     string `json:"item_name"`
+	ItemValue    string `json:"item_value"`
+	ItemUnit     string `json:"item_unit"`
+	ItemCategory string `json:"item_category"`
+	RefRange     string `json:"ref_range"`
+	RefMin       string `json:"ref_min"`
+	RefMax       string `json:"ref_max"`
 }
 
 type BatchUploadResponse struct {
@@ -113,7 +115,7 @@ func UploadBatchFiles(c *gin.Context) {
 			continue
 		}
 
-		items := extractItemsFromJSON(jsonData)
+		items := extractItemsFromJSON(jsonData, "") // auto-detect during upload phase
 		results = append(results, BatchUploadResponse{
 			FileName: baseName,
 			Data:    jsonData,
@@ -127,7 +129,14 @@ func UploadBatchFiles(c *gin.Context) {
 	}))
 }
 
-func extractItemsFromJSON(data map[string]interface{}) []interface{} {
+func extractItemsFromJSON(data map[string]interface{}, itemsPath string) []interface{} {
+	if itemsPath != "" {
+		raw := getNestedRaw(data, itemsPath)
+		if arr, ok := raw.([]interface{}); ok {
+			return arr
+		}
+	}
+	// Auto-detect: find first array of objects among top-level values
 	for _, v := range data {
 		if arr, ok := v.([]interface{}); ok && len(arr) > 0 {
 			if _, isObj := arr[0].(map[string]interface{}); isObj {
@@ -145,9 +154,10 @@ func ConfirmBatchImport(c *gin.Context) {
 		CategoryID *int64             `json:"category_id"`
 		Mappings   BatchMappingConfig `json:"mappings"`
 		Reports    []struct {
-			FileName string                 `json:"file_name"`
-			Data    map[string]interface{} `json:"data"`
-			PDFData  string                 `json:"pdf_data"`
+			FileName   string                 `json:"file_name"`
+			Data       map[string]interface{} `json:"data"`
+			PDFData    string                 `json:"pdf_data"`
+			SampleDate string                 `json:"sample_date"`
 		} `json:"reports"`
 	}
 
@@ -210,7 +220,10 @@ func ConfirmBatchImport(c *gin.Context) {
 			continue
 		}
 
-		sampleDate := getNestedValue(report.Data, req.Mappings.SampleDate)
+		sampleDate := report.SampleDate
+		if sampleDate == "" {
+			sampleDate = getNestedValue(report.Data, req.Mappings.SampleDate)
+		}
 		var hospID interface{}
 		if req.HospitalID != nil && *req.HospitalID > 0 {
 			hospID = *req.HospitalID
@@ -233,31 +246,66 @@ func ConfirmBatchImport(c *gin.Context) {
 		}
 
 		reportID, _ := res.LastInsertId()
-		items := extractItemsFromJSON(report.Data)
+		items := extractItemsFromJSON(report.Data, req.Mappings.ItemsPath)
 
 		for _, itemData := range items {
 			if itemMap, ok := itemData.(map[string]interface{}); ok {
 				name := getNestedValue(itemMap, req.Mappings.ItemName)
 				value := getNestedValue(itemMap, req.Mappings.ItemValue)
 				unit := getNestedValue(itemMap, req.Mappings.ItemUnit)
+				category := getNestedValue(report.Data, req.Mappings.ItemCategory)
 				minVal := getNestedValue(itemMap, req.Mappings.RefMin)
 				maxVal := getNestedValue(itemMap, req.Mappings.RefMax)
 
 				refText := ""
-				if minVal != "" && maxVal != "" {
-					refText = fmt.Sprintf("%s-%s", minVal, maxVal)
-				} else if minVal != "" {
-					refText = fmt.Sprintf(">=%s", minVal)
-				} else if maxVal != "" {
-					refText = fmt.Sprintf("<=%s", maxVal)
+				if req.Mappings.RefRange != "" {
+					refText = getNestedValue(itemMap, req.Mappings.RefRange)
+				} else {
+					if minVal != "" && maxVal != "" {
+						refText = fmt.Sprintf("%s-%s", minVal, maxVal)
+					} else if minVal != "" {
+						refText = fmt.Sprintf(">=%s", minVal)
+					} else if maxVal != "" {
+						refText = fmt.Sprintf("<=%s", maxVal)
+					}
+				}
+
+				// Match or create test_item for proper categorization
+				var testItemID interface{}
+				if name != "" {
+					matchID := services.MatchTestItemByName(name)
+					if matchID > 0 {
+						testItemID = matchID
+						// Always update category when user maps it
+						if category != "" {
+							database.DB.Exec(
+								`UPDATE test_items SET category = ? WHERE id = ?`,
+								category, matchID,
+							)
+						}
+					} else {
+						// Create new test_item entry
+						code := strings.ReplaceAll(strings.ToUpper(name), " ", "_")
+						res, err := database.DB.Exec(
+							`INSERT INTO test_items (code, standard_name, category, default_unit, value_type) VALUES (?, ?, ?, ?, 'numeric')`,
+							code, name, category, unit,
+						)
+						if err == nil {
+							newID, _ := res.LastInsertId()
+							testItemID = newID
+						}
+					}
 				}
 
 				database.DB.Exec(
-					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ref_interval_text) VALUES (?, ?, ?, ?, ?, ?)`,
-					reportID, name, value, unit, 100, refText,
+					`INSERT INTO report_items (report_id, test_item_id, test_item_name, original_value, original_unit, confidence, ref_interval_text) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+					reportID, testItemID, name, value, unit, 100, refText,
 				)
 			}
 		}
+
+		// Auto-match reference intervals and compute flags
+		matchRefAndCalcFlag(fmt.Sprintf("%d", reportID))
 
 		result.SuccessCount++
 		result.ReportIDs = append(result.ReportIDs, reportID)
@@ -292,6 +340,26 @@ func getNestedValue(data map[string]interface{}, path string) string {
 		return v
 	}
 	return fmt.Sprintf("%v", current)
+}
+
+func getNestedRaw(data map[string]interface{}, path string) interface{} {
+	if path == "" {
+		return nil
+	}
+	parts := strings.Split(path, ".")
+	current := interface{}(data)
+	for _, part := range parts {
+		if m, ok := current.(map[string]interface{}); ok {
+			if v, ok := m[part]; ok {
+				current = v
+			} else {
+				return nil
+			}
+		} else {
+			return nil
+		}
+	}
+	return current
 }
 
 func getBaseName(filename string) string {

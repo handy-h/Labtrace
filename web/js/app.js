@@ -20,6 +20,7 @@ const app = createApp({
         { hash: "dashboard", label: "仪表盘", icon: "📊" },
         { hash: "ocr", label: "上传 OCR", icon: "📷" },
         { hash: "batch-import", label: "批量导入", icon: "📦" },
+        { hash: "batch-import-imaging", label: "批量导入影像", icon: "🩻" },
         { hash: "reports", label: "报告单", icon: "📄" },
         { hash: "subjects", label: "受检者", icon: "👤" },
         { hash: "test-items", label: "项目库", icon: "🧪" },
@@ -39,6 +40,7 @@ const app = createApp({
         dashboard: "DashboardView",
         ocr: "OCRImportView",
         "batch-import": "BatchImportView",
+        "batch-import-imaging": "BatchImportImagingView",
         reports: "ReportsView",
         subjects: "SubjectsView",
         "test-items": "TestItemsView",
@@ -80,6 +82,7 @@ const app = createApp({
 app.component("DashboardView", DashboardView);
 app.component("OCRImportView", OCRImportView);
 app.component("BatchImportView", BatchImportView);
+app.component("BatchImportImagingView", BatchImportImagingView);
 app.component("ReportsView", ReportsView);
 app.component("SubjectsView", SubjectsView);
 app.component("TestItemsView", TestItemsView);

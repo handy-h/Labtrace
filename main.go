@@ -158,6 +158,10 @@ func main() {
 		// Batch Import
 		v1.POST("/batch/upload", handlers.UploadBatchFiles)
 		v1.POST("/batch/confirm", handlers.ConfirmBatchImport)
+
+		// Batch Import (Imaging)
+		v1.POST("/batch/imaging/upload", handlers.UploadBatchImagingFiles)
+		v1.POST("/batch/imaging/confirm", handlers.ConfirmBatchImagingImport)
 	}
 
 	// Graceful shutdown
