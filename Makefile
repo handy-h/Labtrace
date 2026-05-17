@@ -21,7 +21,7 @@ RED         := \033[0;31m
 CYAN        := \033[0;36m
 RESET       := \033[0m
 
-.PHONY: build dev run stop clean help rebuild restart
+.PHONY: build dev run stop clean help rebuild restart test lint
 
 # ---- 默认目标 ----
 help: ## 显示帮助信息
@@ -34,13 +34,8 @@ help: ## 显示帮助信息
 
 build: ## 编译生成可执行二进制文件
 	@printf "$(CYAN)[build]$(RESET) 编译 $(APP_NAME)...\n"
-<<<<<<< Updated upstream
-	@$(GO) build -ldflags "$(LDFLAGS)" -o $(APP_NAME) .
-	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME)\n"
-=======
 	@CGO_ENABLED=1 $(GO) build -ldflags "$(LDFLAGS)" -o $(APP_NAME) .
-	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME) (version: $(VERSION))\n"
->>>>>>> Stashed changes
+	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME)\n"
 
 dev: ## 开发者模式运行（丰富日志）
 	@bash -c ' \
@@ -117,17 +112,9 @@ stop: ## 优雅关闭应用
 		if [ -n "$$PID_ON_PORT" ]; then \
 			printf "\n"; \
 			printf "$(RED)[stop]$(RESET) 端口 $(PORT) 仍被以下进程占用:\n"; \
-<<<<<<< Updated upstream
-			lsof -i :$(PORT) 2>/dev/null; \
-			printf "\n"; \
-			printf "$(YELLOW)[stop]$(RESET) 是否要强制结束占用端口的进程？[y/N] "; \
-			read answer; \
-			if [ "$$answer" = "y" ] || [ "$$answer" = "Y" ]; then \
-=======
 			PID_INFO=$$(ss -tlnp "sport = :$(PORT)" 2>/dev/null || lsof -i :$(PORT) 2>/dev/null); \
 			printf "$$PID_INFO\n"; \
 			if [ "$(FORCE)" = "1" ]; then \
->>>>>>> Stashed changes
 				for p in $$PID_ON_PORT; do \
 					kill -9 $$p 2>/dev/null; \
 					printf "$(GREEN)[stop]$(RESET) 已强制终止进程 $$p\n"; \
@@ -138,8 +125,7 @@ stop: ## 优雅关闭应用
 		fi \
 	'
 
-<<<<<<< Updated upstream
-=======
+
 test: ## 运行单元测试
 	@printf "$(CYAN)[test]$(RESET) 运行测试...\n"
 	@$(GO) test -v ./...
@@ -150,7 +136,6 @@ lint: ## 代码静态检查
 	@$(GO) vet ./...
 	@printf "$(GREEN)[lint]$(RESET) 检查完成\n"
 
->>>>>>> Stashed changes
 clean: ## 清理临时文件、缓存及二进制文件（保留 ./data 目录）
 	@printf "$(CYAN)[clean]$(RESET) 清理编译产物...\n"
 	@rm -f $(APP_NAME)
