@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"labtrace/internal/config"
@@ -321,25 +322,14 @@ func getNestedValue(data map[string]interface{}, path string) string {
 		return ""
 	}
 
-	parts := strings.Split(path, ".")
-	current := interface{}(data)
-
-	for _, part := range parts {
-		if m, ok := current.(map[string]interface{}); ok {
-			if v, ok := m[part]; ok {
-				current = v
-			} else {
-				return ""
-			}
-		} else {
-			return ""
-		}
+	raw := getNestedRaw(data, path)
+	if raw == nil {
+		return ""
 	}
-
-	if v, ok := current.(string); ok {
+	if v, ok := raw.(string); ok {
 		return v
 	}
-	return fmt.Sprintf("%v", current)
+	return fmt.Sprintf("%v", raw)
 }
 
 func getNestedRaw(data map[string]interface{}, path string) interface{} {
@@ -349,6 +339,25 @@ func getNestedRaw(data map[string]interface{}, path string) interface{} {
 	parts := strings.Split(path, ".")
 	current := interface{}(data)
 	for _, part := range parts {
+		// 支持数组索引: key[N]
+		if idx := strings.Index(part, "["); idx > 0 && strings.HasSuffix(part, "]") {
+			key := part[:idx]
+			indexStr := part[idx+1 : len(part)-1]
+			index, err := strconv.Atoi(indexStr)
+			if err != nil {
+				return nil
+			}
+			if m, ok := current.(map[string]interface{}); ok {
+				if arr, ok := m[key]; ok {
+					if a, ok := arr.([]interface{}); ok && index >= 0 && index < len(a) {
+						current = a[index]
+						continue
+					}
+				}
+			}
+			return nil
+		}
+
 		if m, ok := current.(map[string]interface{}); ok {
 			if v, ok := m[part]; ok {
 				current = v

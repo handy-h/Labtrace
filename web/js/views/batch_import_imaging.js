@@ -30,7 +30,7 @@ const BatchImportImagingView = Vue.defineComponent({
             </select>
           </div>
         </div>
-        <button @click="step = 2" class="btn btn-primary" :disabled="!form.subject_id || !form.report_type">下一步</button>
+        <button @click="step = 2" class="btn btn-primary" :disabled="!form.subject_id">下一步</button>
       </div>
 
       <!-- Step 2: 上传文件 -->
@@ -85,8 +85,8 @@ const BatchImportImagingView = Vue.defineComponent({
                 </button>
               </div>
             </div>
-            <div class="overflow-y-auto overflow-x-auto bg-gray-50 rounded flex-1">
-              <pre class="text-xs p-2">{{ formatJSON(selectedReport?.data) }}</pre>
+            <div class="overflow-y-auto bg-gray-50 rounded flex-1">
+              <pre class="text-xs p-2" style="white-space: pre-wrap; word-break: break-word; max-width: 100%;">{{ formatJSON(selectedReport?.data) }}</pre>
             </div>
           </div>
           <div class="flex-1 p-3 border rounded">
@@ -102,11 +102,11 @@ const BatchImportImagingView = Vue.defineComponent({
               </div>
               <div class="form-group">
                 <label class="form-label">检查部位</label>
-                <input v-model="mappings.exam_site" class="form-input" placeholder="如: exam_site · bodyPart" />
+                <input v-model="mappings.exam_site" class="form-input" placeholder="如: items[0].bodyPart · exam_site" />
               </div>
               <div class="form-group">
                 <label class="form-label">检查所见 <span class="text-gray-400 text-xs">(长文本)</span></label>
-                <input v-model="mappings.exam_description" class="form-input" placeholder="如: exam_description · findings" />
+                <input v-model="mappings.exam_description" class="form-input" placeholder="如: items[0].findings · exam_description" />
               </div>
               <div class="form-group">
                 <label class="form-label">诊断结果 <span class="text-gray-400 text-xs">(长文本)</span></label>
@@ -115,14 +115,6 @@ const BatchImportImagingView = Vue.defineComponent({
               <div class="form-group">
                 <label class="form-label">检查号</label>
                 <input v-model="mappings.inspect_no" class="form-input" placeholder="如: inspect_no · accessionNumber" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">科室</label>
-                <input v-model="mappings.dept_name" class="form-input" placeholder="如: dept_name · department" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">医生</label>
-                <input v-model="mappings.doctor_name" class="form-input" placeholder="如: doctor_name · physician" />
               </div>
             </div>
           </div>
@@ -135,8 +127,6 @@ const BatchImportImagingView = Vue.defineComponent({
                 <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500 w-28">检查项目</td><td class="py-1.5 font-medium">{{ previewValues.exam_item_name || '-' }}</td></tr>
                 <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">检查部位</td><td class="py-1.5">{{ previewValues.exam_site || '-' }}</td></tr>
                 <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">检查号</td><td class="py-1.5">{{ previewValues.inspect_no || '-' }}</td></tr>
-                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">科室</td><td class="py-1.5">{{ previewValues.dept_name || '-' }}</td></tr>
-                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">医生</td><td class="py-1.5">{{ previewValues.doctor_name || '-' }}</td></tr>
                 <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">采样日期</td><td class="py-1.5">{{ previewValues.sample_date || '-' }}</td></tr>
               </tbody>
             </table>
@@ -259,9 +249,7 @@ const BatchImportImagingView = Vue.defineComponent({
       exam_site: '',
       exam_description: '',
       diagnosis_result: '',
-      inspect_no: '',
-      dept_name: '',
-      doctor_name: ''
+      inspect_no: ''
     });
 
     const selectedReport = Vue.computed(() => {
@@ -278,8 +266,6 @@ const BatchImportImagingView = Vue.defineComponent({
         exam_description: getNestedValue(r.data, mappings.value.exam_description),
         diagnosis_result: getNestedValue(r.data, mappings.value.diagnosis_result),
         inspect_no: getNestedValue(r.data, mappings.value.inspect_no),
-        dept_name: getNestedValue(r.data, mappings.value.dept_name),
-        doctor_name: getNestedValue(r.data, mappings.value.doctor_name),
       };
     });
 
@@ -391,6 +377,20 @@ const BatchImportImagingView = Vue.defineComponent({
       const parts = path.split('.');
       let curr = data;
       for (const p of parts) {
+        // 支持数组索引: key[N]
+        const m = p.match(/^(\w+)\[(\d+)\]$/);
+        if (m) {
+          const key = m[1];
+          const index = parseInt(m[2], 10);
+          if (curr && typeof curr === 'object' && key in curr) {
+            const arr = curr[key];
+            if (Array.isArray(arr) && index >= 0 && index < arr.length) {
+              curr = arr[index];
+              continue;
+            }
+          }
+          return '';
+        }
         if (curr && typeof curr === 'object' && p in curr) curr = curr[p];
         else return '';
       }

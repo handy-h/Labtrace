@@ -411,6 +411,20 @@ const BatchImportView = Vue.defineComponent({
       const parts = path.split('.');
       let curr = data;
       for (const p of parts) {
+        // 支持数组索引: key[N]
+        const m = p.match(/^(\w+)\[(\d+)\]$/);
+        if (m) {
+          const key = m[1];
+          const index = parseInt(m[2], 10);
+          if (curr && typeof curr === 'object' && key in curr) {
+            const arr = curr[key];
+            if (Array.isArray(arr) && index >= 0 && index < arr.length) {
+              curr = arr[index];
+              continue;
+            }
+          }
+          return '';
+        }
         if (curr && typeof curr === 'object' && p in curr) curr = curr[p];
         else return '';
       }

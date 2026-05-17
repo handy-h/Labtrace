@@ -105,7 +105,7 @@ stop: ## 优雅关闭应用
 		else \
 			printf "$(YELLOW)[stop]$(RESET) 未找到 PID 文件\n"; \
 		fi; \
-		PID_ON_PORT=$$(ss -tlnp "sport = :$(PORT)" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p'); \
+		PID_ON_PORT=$$(ss -tlnp "sport = :$(PORT)" 2>/dev/null | sed -n "s/.*pid=\([0-9]\+\).*/\1/p"); \
 		if [ -z "$$PID_ON_PORT" ]; then \
 			PID_ON_PORT=$$(lsof -ti :$(PORT) 2>/dev/null); \
 		fi; \

@@ -147,8 +147,7 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 		return
 	}
 	if req.ReportType == "" {
-		c.JSON(http.StatusBadRequest, models.Error("请选择影像报告类型"))
-		return
+		req.ReportType = "OTHER"
 	}
 
 	if len(req.Reports) == 0 {
