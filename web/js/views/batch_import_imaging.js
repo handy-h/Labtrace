@@ -72,74 +72,81 @@ const BatchImportImagingView = Vue.defineComponent({
 
       <!-- Step 3: 字段映射 -->
       <div v-if="step === 3">
-        <h3 class="text-lg font-medium mb-4">步骤 3: 配置字段映射</h3>
-        <div class="flex gap-4 mb-4">
-          <div class="flex-1 p-3 border rounded flex flex-col">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="font-medium">示例JSON数据</h4>
-              <div v-if="previewData.length > 1" class="flex gap-1">
-                <button v-for="(r, i) in previewData" :key="i"
-                  @click="selectedFileIndex = i"
-                  :class="['px-2 py-0.5 text-xs rounded border', selectedFileIndex === i ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50']">
-                  {{ r.file_name }}
-                </button>
-              </div>
-            </div>
-            <div class="overflow-y-auto bg-gray-50 rounded flex-1">
-              <pre class="text-xs p-2" style="white-space: pre-wrap; word-break: break-word; max-width: 100%;">{{ formatJSON(selectedReport?.data) }}</pre>
+        <h3 class="text-lg font-medium mb-3">步骤 3: 配置字段映射</h3>
+
+        <!-- 文件切换标签（独立一行，在上方选择要查看的 JSON） -->
+        <div v-if="previewData.length > 1" class="mb-3">
+          <div class="flex gap-1 flex-wrap">
+            <button v-for="(r, i) in previewData" :key="i"
+              @click="selectedFileIndex = i"
+              :class="['px-2 py-1 text-xs rounded border', selectedFileIndex === i ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50']">
+              {{ r.file_name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- JSON预览 + 字段映射 -->
+        <div class="flex gap-4 mb-3">
+          <!-- 左侧：JSON 内容（文件标签已移出） -->
+          <div class="flex-1 p-3 border rounded flex flex-col" style="min-width: 0; height: 380px; overflow: hidden;">
+            <h4 class="font-medium text-sm mb-2 flex-shrink-0">示例JSON数据</h4>
+            <div class="overflow-y-auto bg-gray-50 rounded" style="flex: 1 1 0; min-width: 0;">
+              <pre class="text-xs p-2" style="white-space: pre-wrap; word-break: break-word;">{{ formatJSON(selectedReport?.data) }}</pre>
             </div>
           </div>
-          <div class="flex-1 p-3 border rounded">
-            <h4 class="font-medium mb-2">字段映射</h4>
-            <div class="space-y-2">
-              <div class="form-group">
-                <label class="form-label">采样日期</label>
-                <input v-model="mappings.sample_date" class="form-input" placeholder="如: sample_date" />
+          <!-- 右侧：字段映射 -->
+          <div class="flex-1 p-3 border rounded" style="min-width: 0; height: 380px; overflow-y: auto;">
+            <h4 class="font-medium text-sm mb-2">字段映射</h4>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2 text-sm">
+                <label class="form-label flex-shrink-0 w-20">采样日期</label>
+                <input v-model="mappings.sample_date" class="form-input flex-1" placeholder="如: sample_date" />
               </div>
-              <div class="form-group">
-                <label class="form-label">检查项目名称</label>
-                <input v-model="mappings.exam_item_name" class="form-input" placeholder="如: exam_item_name · checkItem" />
+              <div class="flex items-center gap-2 text-sm">
+                <label class="form-label flex-shrink-0 w-20">检查项目</label>
+                <input v-model="mappings.exam_item_name" class="form-input flex-1" placeholder="如: exam_item_name" />
               </div>
-              <div class="form-group">
-                <label class="form-label">检查部位</label>
-                <input v-model="mappings.exam_site" class="form-input" placeholder="如: items[0].bodyPart · exam_site" />
+              <div class="flex items-center gap-2 text-sm">
+                <label class="form-label flex-shrink-0 w-20">检查部位</label>
+                <input v-model="mappings.exam_site" class="form-input flex-1" placeholder="如: items[0].bodyPart" />
               </div>
-              <div class="form-group">
-                <label class="form-label">检查所见 <span class="text-gray-400 text-xs">(长文本)</span></label>
-                <input v-model="mappings.exam_description" class="form-input" placeholder="如: items[0].findings · exam_description" />
+              <div class="flex items-center gap-2 text-sm">
+                <label class="form-label flex-shrink-0 w-20">检查所见</label>
+                <input v-model="mappings.exam_description" class="form-input flex-1" placeholder="如: items[0].findings" />
               </div>
-              <div class="form-group">
-                <label class="form-label">诊断结果 <span class="text-gray-400 text-xs">(长文本)</span></label>
-                <input v-model="mappings.diagnosis_result" class="form-input" placeholder="如: diagnosis_result · impression" />
+              <div class="flex items-center gap-2 text-sm">
+                <label class="form-label flex-shrink-0 w-20">诊断结果</label>
+                <input v-model="mappings.diagnosis_result" class="form-input flex-1" placeholder="如: diagnosis_result" />
               </div>
-              <div class="form-group">
-                <label class="form-label">检查号</label>
-                <input v-model="mappings.inspect_no" class="form-input" placeholder="如: inspect_no · accessionNumber" />
+              <div class="flex items-center gap-2 text-sm">
+                <label class="form-label flex-shrink-0 w-20">检查号</label>
+                <input v-model="mappings.inspect_no" class="form-input flex-1" placeholder="如: inspect_no" />
               </div>
             </div>
           </div>
         </div>
-        <div class="mb-4">
-          <h4 class="font-medium mb-2">预览</h4>
-          <div class="border rounded p-3">
-            <table class="w-full text-sm">
-              <tbody>
-                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500 w-28">检查项目</td><td class="py-1.5 font-medium">{{ previewValues.exam_item_name || '-' }}</td></tr>
-                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">检查部位</td><td class="py-1.5">{{ previewValues.exam_site || '-' }}</td></tr>
-                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">检查号</td><td class="py-1.5">{{ previewValues.inspect_no || '-' }}</td></tr>
-                <tr class="border-b"><td class="py-1.5 pr-3 text-gray-500">采样日期</td><td class="py-1.5">{{ previewValues.sample_date || '-' }}</td></tr>
-              </tbody>
-            </table>
-            <div class="mt-3 pt-3 border-t">
-              <div class="text-xs text-gray-500 mb-1">检查所见</div>
-              <div class="text-sm bg-gray-50 p-2 rounded max-h-24 overflow-y-auto whitespace-pre-wrap">{{ previewValues.exam_description || '-' }}</div>
+
+        <!-- 化验单预览（放回下方，检查所见和诊断结果各占一行） -->
+        <div class="mb-3">
+          <h4 class="font-medium text-sm mb-1">预览</h4>
+          <div class="border rounded p-3 bg-gray-50">
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <span><span class="text-gray-500">检查项目:</span> <strong>{{ previewValues.exam_item_name || '-' }}</strong></span>
+              <span><span class="text-gray-500">检查部位:</span> {{ previewValues.exam_site || '-' }}</span>
+              <span><span class="text-gray-500">检查号:</span> {{ previewValues.inspect_no || '-' }}</span>
+              <span><span class="text-gray-500">采样日期:</span> {{ previewValues.sample_date || '-' }}</span>
             </div>
-            <div class="mt-3">
-              <div class="text-xs text-gray-500 mb-1">诊断结果</div>
-              <div class="text-sm bg-gray-50 p-2 rounded max-h-24 overflow-y-auto whitespace-pre-wrap">{{ previewValues.diagnosis_result || '-' }}</div>
+            <div class="mt-2 pt-2 border-t border-gray-200">
+              <div class="text-xs text-gray-500 mb-0.5">检查所见</div>
+              <div class="text-sm whitespace-pre-wrap max-h-20 overflow-y-auto">{{ previewValues.exam_description || '-' }}</div>
+            </div>
+            <div class="mt-2">
+              <div class="text-xs text-gray-500 mb-0.5">诊断结果</div>
+              <div class="text-sm whitespace-pre-wrap max-h-20 overflow-y-auto">{{ previewValues.diagnosis_result || '-' }}</div>
             </div>
           </div>
         </div>
+
         <div class="flex gap-2">
           <button @click="step = 2" class="btn btn-secondary">上一步</button>
           <button @click="step = 4" class="btn btn-primary">下一步</button>

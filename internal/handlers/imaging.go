@@ -161,13 +161,38 @@ func UploadImagingReport(c *gin.Context) {
 	}))
 }
 
+func ListImagingExamItems(c *gin.Context) {
+	rows, err := database.DB.Query(`SELECT DISTINCT exam_item_name FROM imaging_reports WHERE exam_item_name != '' ORDER BY exam_item_name`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	defer rows.Close()
+
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			continue
+		}
+		items = append(items, name)
+	}
+	if items == nil {
+		items = []string{}
+	}
+	c.JSON(http.StatusOK, models.Success(items))
+}
+
 func ListImagingReports(c *gin.Context) {
 	subjectID := c.Query("subject_id")
 	hospitalID := c.Query("hospital_id")
 	reportType := c.Query("report_type")
+	examItemName := c.Query("exam_item_name")
 	ocrStatus := c.Query("ocr_status")
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
+	sortBy := c.Query("sort_by")
+	sortOrder := c.Query("sort_order")
 
 	query := `SELECT ir.id, ir.subject_id, ir.hospital_id, ir.report_type, ir.exam_item_name, ir.inspect_no,
 		ir.dept_name, ir.doctor_name, ir.sample_date, ir.exam_site, ir.exam_description, ir.diagnosis_result,
@@ -192,6 +217,10 @@ func ListImagingReports(c *gin.Context) {
 		conditions = append(conditions, "ir.report_type = ?")
 		args = append(args, reportType)
 	}
+	if examItemName != "" {
+		conditions = append(conditions, "ir.exam_item_name = ?")
+		args = append(args, examItemName)
+	}
 	if ocrStatus != "" {
 		conditions = append(conditions, "ir.ocr_status = ?")
 		args = append(args, ocrStatus)
@@ -211,7 +240,22 @@ func ListImagingReports(c *gin.Context) {
 			query += " AND " + conditions[i]
 		}
 	}
-	query += " ORDER BY ir.sample_date DESC, ir.created_at DESC"
+
+	// 排序：白名单校验，防止 SQL 注入
+	allowedSort := map[string]bool{
+		"sample_date": true,
+		"exam_item_name": true,
+		"exam_site": true,
+		"ocr_status": true,
+	}
+	if sortBy != "" && allowedSort[sortBy] {
+		if sortOrder != "asc" && sortOrder != "ASC" {
+			sortOrder = "desc"
+		}
+		query += " ORDER BY ir." + sortBy + " " + sortOrder
+	} else {
+		query += " ORDER BY ir.sample_date DESC, ir.created_at DESC"
+	}
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {

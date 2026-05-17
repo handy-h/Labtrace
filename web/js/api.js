@@ -276,6 +276,9 @@ const api = {
   listImagingReportTypes() {
     return this.get("/imaging-report-types");
   },
+  listImagingExamItems() {
+    return this.get("/imaging-exam-items");
+  },
   uploadImagingReport(formData) {
     return this.upload("/imaging/upload", formData);
   },

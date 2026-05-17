@@ -35,9 +35,9 @@ const ReportsView = Vue.defineComponent({
           <option value="">全部分类</option>
           <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
-        <select v-if="reportType === 'imaging'" v-model="filters.report_type" class="form-select" style="width: 10rem">
+        <select v-if="reportType === 'imaging'" v-model="filters.exam_item_name" class="form-select" style="width: 10rem">
           <option value="">全部类型</option>
-          <option v-for="t in imagingTypes" :key="t.code" :value="t.code">{{ t.name }}</option>
+          <option v-for="item in examItemTypes" :key="item" :value="item">{{ item }}</option>
         </select>
         <select v-model="filters.ocr_status" class="form-select" style="width: 10rem">
           <option value="">全部状态</option>
@@ -74,17 +74,21 @@ const ReportsView = Vue.defineComponent({
     <!-- 影像报告列表 -->
     <div v-if="reportType === 'imaging'" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">影像报告列表</h2>
-      <data-table :columns="imagingReportColumns" :data="imagingReports" empty-text="暂无影像报告">
-        <template #cell-report_type="{ row }">
-          <span class="px-2 py-0.5 rounded text-xs" style="background: var(--color-primary); color: white">{{ getImagingTypeName(row.report_type) }}</span>
+      <data-table :columns="imagingReportColumns" :data="imagingReports" empty-text="暂无影像报告"
+        :sort-field="imagingSort.field" :sort-order="imagingSort.order"
+        @update:sort-field="imagingSort.field = $event; loadImagingReports()"
+        @update:sort-order="imagingSort.order = $event; loadImagingReports()">
+        <template #cell-exam_item_name="{ row }">
+          <span v-if="row.exam_item_name" class="px-2 py-0.5 rounded text-xs" style="background: var(--color-primary); color: white">{{ row.exam_item_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
         </template>
         <template #cell-exam_site="{ row }">
           <span v-if="row.exam_site">{{ row.exam_site }}</span>
           <span v-else style="color: var(--color-text-muted)">—</span>
         </template>
         <template #cell-diagnosis_result="{ row }">
-          <span v-if="row.diagnosis_result" class="truncate" style="max-width: 20rem; display: block" :title="row.diagnosis_result">{{ row.diagnosis_result.substring(0, 50) }}{{ row.diagnosis_result.length > 50 ? '...' : '' }}</span>
-          <span v-else style="color: var(--color-text-muted)">—</span>
+          <span v-if="row.diagnosis_result && row.diagnosis_result !== 'null'" class="truncate" style="max-width: 20rem; display: block" :title="row.diagnosis_result">{{ row.diagnosis_result.substring(0, 50) }}{{ row.diagnosis_result.length > 50 ? '...' : '' }}</span>
+          <span v-else></span>
         </template>
         <template #cell-ocr_status="{ row }">
           <span :class="statusClass(row.ocr_status)">{{ statusText(row.ocr_status) }}</span>
@@ -159,7 +163,7 @@ const ReportsView = Vue.defineComponent({
         <div class="flex items-center justify-between px-6 py-3 shrink-0" style="border-bottom: 1px solid var(--table-border)">
           <h2 class="modal-title" style="margin-bottom: 0">
             影像报告详情 #{{ selectedImagingReport.id }}
-            <span class="px-2 py-0.5 rounded text-xs ml-2" style="background: var(--color-primary); color: white">{{ getImagingTypeName(selectedImagingReport.report_type) }}</span>
+            <span class="px-2 py-0.5 rounded text-xs ml-2" style="background: var(--color-primary); color: white">{{ selectedImagingReport.exam_item_name || selectedImagingReport.report_type }}</span>
             <span :class="statusClass(selectedImagingReport.ocr_status)">({{ statusText(selectedImagingReport.ocr_status) }})</span>
           </h2>
           <div class="flex gap-2">
@@ -188,18 +192,16 @@ const ReportsView = Vue.defineComponent({
             <div style="padding: 1.5rem">
               <h3 class="text-lg font-medium mb-4" style="color: var(--color-text)">基本信息</h3>
               <div class="info-grid mb-6">
-                <div class="info-item"><span class="info-label">受检者</span><span class="info-value">{{ selectedImagingReport.subject_name || '-' }}</span></div>
-                <div class="info-item"><span class="info-label">检查日期</span><span class="info-value">{{ selectedImagingReport.sample_date || '-' }}</span></div>
-                <div class="info-item"><span class="info-label">医院</span><span class="info-value">{{ selectedImagingReport.hospital_name || '-' }}</span></div>
-                <div class="info-item"><span class="info-label">检查项目</span><span class="info-value">{{ selectedImagingReport.exam_item_name || '-' }}</span></div>
-                <div class="info-item"><span class="info-label">检查号</span><span class="info-value">{{ selectedImagingReport.inspect_no || '-' }}</span></div>
-                <div class="info-item"><span class="info-label">科室</span><span class="info-value">{{ selectedImagingReport.dept_name || '-' }}</span></div>
-                <div class="info-item"><span class="info-label">报告医生</span><span class="info-value">{{ selectedImagingReport.doctor_name || '-' }}</span></div>
-                <div class="info-item"><span class="info-label">检查部位</span><span class="info-value">{{ selectedImagingReport.exam_site || '-' }}</span></div>
+                <div class="info-item"><span class="info-label">受检者: </span><span class="info-value">{{ selectedImagingReport.subject_name || '-' }}</span></div>
+                <div class="info-item"><span class="info-label">检查日期: </span><span class="info-value">{{ selectedImagingReport.sample_date || '-' }}</span></div>
+                <div class="info-item"><span class="info-label">医院: </span><span class="info-value">{{ selectedImagingReport.hospital_name || '-' }}</span></div>
+                <div class="info-item"><span class="info-label">检查项目: </span><span class="info-value">{{ selectedImagingReport.exam_item_name || '-' }}</span></div>
+                <div class="info-item"><span class="info-label">检查号: </span><span class="info-value">{{ selectedImagingReport.inspect_no || '-' }}</span></div>
+                <div class="info-item"><span class="info-label">检查部位: </span><span class="info-value">{{ selectedImagingReport.exam_site || '-' }}</span></div>
               </div>
 
               <h3 class="text-lg font-medium mb-4" style="color: var(--color-text)">诊断结论</h3>
-              <p class="text-sm" style="color: var(--color-text); white-space: pre-wrap">{{ selectedImagingReport.diagnosis_result || '暂无' }}</p>
+              <p class="text-sm" style="color: var(--color-text); white-space: pre-wrap">{{ selectedImagingReport.diagnosis_result && selectedImagingReport.diagnosis_result !== 'null' ? selectedImagingReport.diagnosis_result : '' }}</p>
 
               <h3 class="text-lg font-medium mb-4 mt-6" style="color: var(--color-text)">影像表现</h3>
               <p class="text-sm" style="color: var(--color-text); white-space: pre-wrap">{{ selectedImagingReport.exam_description || '暂无' }}</p>
@@ -215,13 +217,16 @@ const ReportsView = Vue.defineComponent({
     const hospitals = Vue.ref([]);
     const categories = Vue.ref([]);
     const imagingTypes = Vue.ref([]);
+    const examItemTypes = Vue.ref([]);
     const labReports = Vue.ref([]);
     const imagingReports = Vue.ref([]);
+    const imagingSort = Vue.ref({ field: '', order: '' });
     const filters = Vue.ref({
       subject_id: '',
       hospital_id: '',
       category_id: '',
       report_type: '',
+      exam_item_name: '',
       ocr_status: '',
       start_date: '',
       end_date: ''
@@ -253,11 +258,11 @@ const ReportsView = Vue.defineComponent({
 
     const imagingReportColumns = [
       { key: 'id', label: 'ID', align: 'center' },
-      { key: 'sample_date', label: '检查日期', align: 'center' },
-      { key: 'report_type', label: '类型', align: 'center' },
-      { key: 'exam_site', label: '部位', align: 'center' },
+      { key: 'sample_date', label: '检查日期', align: 'center', sortable: true },
+      { key: 'exam_item_name', label: '类型', align: 'center', sortable: true },
+      { key: 'exam_site', label: '部位', align: 'center', sortable: true },
       { key: 'diagnosis_result', label: '诊断结论', align: 'left' },
-      { key: 'ocr_status', label: '状态', align: 'center' },
+      { key: 'ocr_status', label: '状态', align: 'center', sortable: true },
       { key: 'actions', label: '操作', align: 'center', width: '8rem' }
     ];
 
@@ -331,10 +336,12 @@ const ReportsView = Vue.defineComponent({
       const params = {};
       if (filters.value.subject_id) params.subject_id = filters.value.subject_id;
       if (filters.value.hospital_id) params.hospital_id = filters.value.hospital_id;
-      if (filters.value.report_type) params.report_type = filters.value.report_type;
+      if (filters.value.exam_item_name) params.exam_item_name = filters.value.exam_item_name;
       if (filters.value.ocr_status) params.ocr_status = filters.value.ocr_status;
       if (filters.value.start_date) params.start_date = filters.value.start_date;
       if (filters.value.end_date) params.end_date = filters.value.end_date;
+      if (imagingSort.value.field) params.sort_by = imagingSort.value.field;
+      if (imagingSort.value.order) params.sort_order = imagingSort.value.order;
       
       api.listImagingReports(params).then(r => {
         if (r.data) imagingReports.value = r.data;
@@ -347,10 +354,12 @@ const ReportsView = Vue.defineComponent({
         hospital_id: '',
         category_id: '',
         report_type: '',
+        exam_item_name: '',
         ocr_status: '',
         start_date: '',
         end_date: ''
       };
+      imagingSort.value = { field: '', order: '' };
       loadReports();
     }
 
@@ -385,6 +394,7 @@ const ReportsView = Vue.defineComponent({
       api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; });
       api.listCategories().then(r => { if (r.data) categories.value = r.data; });
       api.listImagingReportTypes().then(r => { if (r.data) imagingTypes.value = r.data; });
+      api.listImagingExamItems().then(r => { if (r.data) examItemTypes.value = r.data; });
       loadReports();
     });
 
@@ -398,8 +408,10 @@ const ReportsView = Vue.defineComponent({
       hospitals,
       categories,
       imagingTypes,
+      examItemTypes,
       labReports,
       imagingReports,
+      imagingSort,
       filters,
       selectedLabReport,
       selectedImagingReport,

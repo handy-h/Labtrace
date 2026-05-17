@@ -145,6 +145,7 @@ func main() {
 
 		// Imaging Reports
 		v1.GET("/imaging-report-types", handlers.ListImagingReportTypes)
+		v1.GET("/imaging-exam-items", handlers.ListImagingExamItems)
 		v1.POST("/imaging/upload", handlers.UploadImagingReport)
 		v1.GET("/imaging-reports", handlers.ListImagingReports)
 		v1.GET("/imaging-reports/:id", handlers.GetImagingReport)
