@@ -154,6 +154,10 @@ func main() {
 		v1.POST("/imaging-reports/:id/confirm", handlers.ConfirmImagingReport)
 		v1.POST("/imaging-reports/:id/import", handlers.ImportImagingReport)
 		v1.POST("/imaging-reports/:id/re-ocr", handlers.ReOCRImagingReport)
+
+		// Batch Import
+		v1.POST("/batch/upload", handlers.UploadBatchFiles)
+		v1.POST("/batch/confirm", handlers.ConfirmBatchImport)
 	}
 
 	// Graceful shutdown

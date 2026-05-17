@@ -165,8 +165,11 @@ func ListImagingReports(c *gin.Context) {
 	subjectID := c.Query("subject_id")
 	hospitalID := c.Query("hospital_id")
 	reportType := c.Query("report_type")
+	ocrStatus := c.Query("ocr_status")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
 
-	query := `SELECT ir.id, ir.subject_id, ir.hospital_id, ir.report_type, ir.exam_item_name, ir.inspect_no, 
+	query := `SELECT ir.id, ir.subject_id, ir.hospital_id, ir.report_type, ir.exam_item_name, ir.inspect_no,
 		ir.dept_name, ir.doctor_name, ir.sample_date, ir.exam_site, ir.exam_description, ir.diagnosis_result,
 		ir.file_path, ir.file_md5, ir.ocr_status, ir.thumbnail_path, ir.created_at,
 		COALESCE(h.name, '') as hospital_name,
@@ -188,6 +191,18 @@ func ListImagingReports(c *gin.Context) {
 	if reportType != "" {
 		conditions = append(conditions, "ir.report_type = ?")
 		args = append(args, reportType)
+	}
+	if ocrStatus != "" {
+		conditions = append(conditions, "ir.ocr_status = ?")
+		args = append(args, ocrStatus)
+	}
+	if startDate != "" {
+		conditions = append(conditions, "ir.sample_date >= ?")
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		conditions = append(conditions, "ir.sample_date <= ?")
+		args = append(args, endDate)
 	}
 
 	if len(conditions) > 0 {

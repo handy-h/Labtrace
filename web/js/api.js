@@ -299,6 +299,14 @@ const api = {
     return this.post("/imaging-reports/" + id + "/import");
   },
   reOCRImaging(id) {
-    return this.post("/imaging-reports/" + id + "/re-ocr");
+    return this.post("/imaging-reports/" + id + "/re-ocr")
   },
+  
+  uploadBatchFiles(formData) {
+    return this.upload("/batch/upload", formData)
+  },
+  
+  confirmBatchImport(data) {
+    return this.post("/batch/confirm", data)
+  }
 };

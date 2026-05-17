@@ -18,6 +18,9 @@ func ListReports(c *gin.Context) {
 	subjectID := c.Query("subject_id")
 	hospitalID := c.Query("hospital_id")
 	ocrStatus := c.Query("ocr_status")
+	categoryID := c.Query("category_id")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
 
 	query := `SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.category_id, lr.created_at,
 		h.name as hospital_name,
@@ -39,6 +42,18 @@ func ListReports(c *gin.Context) {
 	if ocrStatus != "" {
 		conditions = append(conditions, "lr.ocr_status = ?")
 		args = append(args, ocrStatus)
+	}
+	if categoryID != "" {
+		conditions = append(conditions, "lr.category_id = ?")
+		args = append(args, categoryID)
+	}
+	if startDate != "" {
+		conditions = append(conditions, "lr.sample_date >= ?")
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		conditions = append(conditions, "lr.sample_date <= ?")
+		args = append(args, endDate)
 	}
 
 	if len(conditions) > 0 {

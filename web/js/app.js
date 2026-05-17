@@ -19,6 +19,8 @@ const app = createApp({
       navItems: [
         { hash: "dashboard", label: "仪表盘", icon: "📊" },
         { hash: "ocr", label: "上传 OCR", icon: "📷" },
+        { hash: "batch-import", label: "批量导入", icon: "📦" },
+        { hash: "reports", label: "报告单", icon: "📄" },
         { hash: "subjects", label: "受检者", icon: "👤" },
         { hash: "test-items", label: "项目库", icon: "🧪" },
         { hash: "trend", label: "趋势分析", icon: "📈" },
@@ -36,6 +38,8 @@ const app = createApp({
       const map = {
         dashboard: "DashboardView",
         ocr: "OCRImportView",
+        "batch-import": "BatchImportView",
+        reports: "ReportsView",
         subjects: "SubjectsView",
         "test-items": "TestItemsView",
         trend: "TrendView",
@@ -75,6 +79,8 @@ const app = createApp({
 // 注册视图组件
 app.component("DashboardView", DashboardView);
 app.component("OCRImportView", OCRImportView);
+app.component("BatchImportView", BatchImportView);
+app.component("ReportsView", ReportsView);
 app.component("SubjectsView", SubjectsView);
 app.component("TestItemsView", TestItemsView);
 app.component("TrendView", TrendView);
