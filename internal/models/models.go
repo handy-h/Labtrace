@@ -129,6 +129,7 @@ type ReportItem struct {
 	// Joined fields
 	TestItemName   string `json:"test_item_name,omitempty"`
 	RefIntervalText string `json:"ref_interval_text,omitempty"`
+	Category       string `json:"category,omitempty"`
 }
 
 // HospitalRule — 医院解析规则

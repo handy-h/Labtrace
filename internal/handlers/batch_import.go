@@ -254,7 +254,10 @@ func ConfirmBatchImport(c *gin.Context) {
 				name := getNestedValue(itemMap, req.Mappings.ItemName)
 				value := getNestedValue(itemMap, req.Mappings.ItemValue)
 				unit := getNestedValue(itemMap, req.Mappings.ItemUnit)
-				category := getNestedValue(report.Data, req.Mappings.ItemCategory)
+				category := getNestedValue(itemMap, req.Mappings.ItemCategory)
+				if category == "" {
+					category = getNestedValue(report.Data, req.Mappings.ItemCategory)
+				}
 				minVal := getNestedValue(itemMap, req.Mappings.RefMin)
 				maxVal := getNestedValue(itemMap, req.Mappings.RefMax)
 

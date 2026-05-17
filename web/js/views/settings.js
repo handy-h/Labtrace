@@ -99,6 +99,34 @@ const SettingsView = Vue.defineComponent({
       <input v-model="catForm.name" placeholder="分类名称" class="form-input">
     </crud-modal>
 
+    <!-- 检验项目分类（标准项目库） -->
+    <div class="card" style="margin-top: var(--card-gap)">
+      <div class="toolbar">
+        <h2 class="page-subtitle" style="margin-bottom: 0">检验项目分类（标准项目库）</h2>
+      </div>
+      <div class="mb-3">
+        <p class="text-xs" style="color: var(--color-text-muted)">导入时若检验项目不存在，会自动创建并记录分类。以下为所有已入库的检验项目。</p>
+      </div>
+      <div class="mb-2 flex gap-2 flex-wrap" v-if="testItemCategories.length">
+        <button v-for="cat in testItemCategories" :key="cat"
+          @click="testItemCategoryFilter = (testItemCategoryFilter === cat ? '' : cat)"
+          :class="['px-2 py-0.5 text-xs rounded border', testItemCategoryFilter === cat ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50']">
+          {{ cat }} ({{ testItemsByCategory(cat).length }})
+        </button>
+      </div>
+      <data-table :columns="testItemColumns" :data="filteredTestItems" empty-text="暂无检验项目">
+        <template #cell-standard_name="{ row }">
+          <span class="cell-medium">{{ row.standard_name }}</span>
+        </template>
+        <template #cell-category="{ row }">
+          <span class="px-1.5 py-0.5 rounded text-xs" style="background: var(--color-primary); color: white">{{ row.category || '-' }}</span>
+        </template>
+        <template #cell-default_unit="{ row }">
+          <span class="cell-muted">{{ row.default_unit || '-' }}</span>
+        </template>
+      </data-table>
+    </div>
+
     <!-- 审计日志 -->
     <div class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">审计日志</h2>
@@ -120,6 +148,30 @@ const SettingsView = Vue.defineComponent({
     const editingHospId = Vue.ref(null);
     const quota = Vue.ref(null);
     const editUsed = Vue.ref('');
+
+    // 检验项目分类
+    const testItems = Vue.ref([]);
+    const testItemCategoryFilter = Vue.ref('');
+
+    const filteredTestItems = Vue.computed(() => {
+      if (!testItemCategoryFilter.value) return testItems.value;
+      return testItems.value.filter(it => it.category === testItemCategoryFilter.value);
+    });
+    const testItemCategories = Vue.computed(() => {
+      const cats = [...new Set(testItems.value.map(it => it.category).filter(Boolean))];
+      cats.sort();
+      return cats;
+    });
+    function testItemsByCategory(cat) {
+      return testItems.value.filter(it => it.category === cat);
+    }
+
+    const testItemColumns = [
+      { key: 'code', label: '编码', align: 'center', mono: true },
+      { key: 'standard_name', label: '标准名称', medium: true },
+      { key: 'category', label: '分类', align: 'center' },
+      { key: 'default_unit', label: '默认单位', align: 'center', muted: true },
+    ];
 
     const hospitalColumns = [
       { key: 'name', label: '名称', medium: true },
@@ -183,6 +235,7 @@ const SettingsView = Vue.defineComponent({
     function loadAudit() { api.listAuditLogs().then(r => { if (r.data) auditLogs.value = r.data; }); }
     function loadHospitals() { api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; }); }
     function loadCategories() { api.listCategories().then(r => { if (r.data) categories.value = r.data; }); }
+    function loadTestItems() { api.listTestItems().then(r => { if (r.data) testItems.value = r.data; }); }
     function doExport() {
       api.exportBackup(backupDesc.value).then(r => {
         if (r.code === 0) { alert('备份成功: ' + r.data.filename); backupDesc.value = ''; loadBackups(); }
@@ -255,12 +308,13 @@ const SettingsView = Vue.defineComponent({
       });
     }
 
-    Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); loadCategories(); });
+    Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); loadCategories(); loadTestItems(); });
     return {
       backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId,
       quota, editUsed, quotaPct, quotaTextClass, quotaBarClass,
-      hospitalColumns, backupColumns, auditColumns, categoryColumns,
+      hospitalColumns, backupColumns, auditColumns, categoryColumns, testItemColumns,
       categories, showCatModal, catForm, editingCatId,
+      testItems, filteredTestItems, testItemCategories, testItemCategoryFilter, testItemsByCategory,
       openCatModal, saveCategory, deleteCategory,
       doExport, doImport, deleteBackup, openHospModal, saveHospital, deleteHospital, saveQuota
     };

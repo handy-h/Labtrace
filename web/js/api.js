@@ -249,6 +249,21 @@ const api = {
     return this.put("/reports/" + id, d);
   },
 
+  // Test Items (检验项目库)
+  listTestItems(category) {
+    const q = category ? "?category=" + encodeURIComponent(category) : "";
+    return this.get("/test-items" + q);
+  },
+  createTestItem(d) {
+    return this.post("/test-items", d);
+  },
+  updateTestItem(id, d) {
+    return this.put("/test-items/" + id, d);
+  },
+  deleteTestItem(id) {
+    return this.del("/test-items/" + id);
+  },
+
   // Report Categories
   listCategories() {
     return this.get("/categories");

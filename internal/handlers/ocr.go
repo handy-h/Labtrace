@@ -122,8 +122,8 @@ func Upload(c *gin.Context) {
 			for _, item := range parsedItems {
 				normalizedValue := services.NormalizeQualitative(item.Value)
 				database.DB.Exec(
-					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range,
+					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range, item.Category,
 				)
 			}
 		} else {
@@ -266,8 +266,8 @@ func ApplyColumnMapping(c *gin.Context) {
 	for _, item := range parsedItems {
 		rowNotes := item.RowText
 		database.DB.Exec(
-			`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, item.Name, item.Value, item.Unit, item.Confidence, item.BBox, item.Range, rowNotes,
+			`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, item.Name, item.Value, item.Unit, item.Confidence, item.BBox, item.Range, rowNotes, item.Category,
 		)
 	}
 

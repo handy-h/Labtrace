@@ -1,16 +1,17 @@
 package handlers
 
-import (
-	"database/sql"
-	"net/http"
-	"time"
+	import (
+		"database/sql"
+		"net/http"
+		"strings"
+		"time"
 
-	"labtrace/internal/database"
-	"labtrace/internal/models"
-	"labtrace/internal/services"
+		"labtrace/internal/database"
+		"labtrace/internal/models"
+		"labtrace/internal/services"
 
-	"github.com/gin-gonic/gin"
-)
+		"github.com/gin-gonic/gin"
+	)
 
 // --- LabReport CRUD ---
 
@@ -152,7 +153,8 @@ func loadReportItems(reportID string) []models.ReportItem {
 				(SELECT CAST(value_min AS TEXT) || '-' || CAST(value_max AS TEXT) FROM reference_intervals WHERE id = ri.ref_interval_id)
 			ELSE ''
 			END, ''
-		) as ref_interval_text
+		) as ref_interval_text,
+		COALESCE(ti.category, '') as category
 		FROM report_items ri
 		LEFT JOIN test_items ti ON ti.id = ri.test_item_id
 		WHERE ri.report_id = ? ORDER BY ri.id`, reportID,
@@ -170,7 +172,7 @@ func loadReportItems(reportID string) []models.ReportItem {
 		var normValue sql.NullFloat64
 		if err := rows.Scan(&item.ID, &item.ReportID, &testItemID, &item.OriginalValue, &normValue, &item.OriginalUnit, &item.NormalizedUnit,
 			&item.Confidence, &refID, &item.Flag, &item.RowNotes, &item.OCRBBox, &item.CreatedAt,
-			&item.TestItemName, &item.RefIntervalText); err != nil {
+			&item.TestItemName, &item.RefIntervalText, &item.Category); err != nil {
 			continue
 		}
 		if testItemID.Valid {
@@ -293,7 +295,7 @@ func matchRefAndCalcFlag(reportID string) {
 
 	// Get all report items
 	rows, err := database.DB.Query(
-		`SELECT ri.id, ri.test_item_id, ri.test_item_name, ri.original_value, ri.original_unit
+		`SELECT ri.id, ri.test_item_id, ri.test_item_name, ri.original_value, ri.original_unit, ri.category
 		FROM report_items ri WHERE ri.report_id = ?`, reportID,
 	)
 	if err != nil {
@@ -306,24 +308,42 @@ func matchRefAndCalcFlag(reportID string) {
 		TestItemName string
 		OrigValue    string
 		OrigUnit     string
+		Category     string
 	}
 	var items []itemInfo
 	for rows.Next() {
 		var it itemInfo
-		if err := rows.Scan(&it.ID, &it.TestItemID, &it.TestItemName, &it.OrigValue, &it.OrigUnit); err != nil {
+		if err := rows.Scan(&it.ID, &it.TestItemID, &it.TestItemName, &it.OrigValue, &it.OrigUnit, &it.Category); err != nil {
 			continue
 		}
 		items = append(items, it)
 	}
 	rows.Close()
 
-	// Auto-match test_item_name → test_item_id
+	// Auto-match test_item_name → test_item_id, create if not exists
 	for i := range items {
 		if items[i].TestItemID == nil && items[i].TestItemName != "" {
 			matchID := services.MatchTestItemByName(items[i].TestItemName)
 			if matchID > 0 {
 				items[i].TestItemID = &matchID
 				database.DB.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, matchID, items[i].ID)
+				// Update test_item category if the item has one
+				if items[i].Category != "" {
+					database.DB.Exec(`UPDATE test_items SET category = ? WHERE id = ?`, items[i].Category, matchID)
+				}
+			} else {
+				// Create new test_item
+				name := items[i].TestItemName
+				code := strings.ReplaceAll(strings.ToUpper(name), " ", "_")
+				res, err := database.DB.Exec(
+					`INSERT INTO test_items (code, standard_name, category, default_unit, value_type) VALUES (?, ?, ?, ?, 'numeric')`,
+					code, name, items[i].Category, items[i].OrigUnit,
+				)
+				if err == nil {
+					newID, _ := res.LastInsertId()
+					items[i].TestItemID = &newID
+					database.DB.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, newID, items[i].ID)
+				}
 			}
 		}
 	}

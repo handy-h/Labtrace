@@ -38,17 +38,6 @@ const OCRImportView = Vue.defineComponent({
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">采样日期</label>
-          <input v-model="form.sample_date" type="date" class="form-input" style="width: auto">
-        </div>
-        <div class="form-group">
-          <label class="form-label">检验项目分类</label>
-          <select v-model="form.category_id" class="form-select" style="width: 12rem">
-            <option value="">未分类</option>
-            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-          </select>
-        </div>
-        <div class="form-group">
           <label class="form-label">文件</label>
           <input type="file" @change="onFileChange" accept="image/*,.pdf" multiple class="text-sm">
           <div v-if="selectedFiles.length > 1" class="flex flex-col gap-1 mt-1" style="max-height: 6rem; overflow-y: auto; font-size: 0.75rem">
@@ -72,21 +61,10 @@ const OCRImportView = Vue.defineComponent({
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">影像类型</label>
-          <select v-model="form.report_type" class="form-select" style="width: 12rem">
-            <option value="">请选择</option>
-            <option v-for="t in imagingTypes" :key="t.code" :value="t.code">{{ t.name }}</option>
-          </select>
-        </div>
-        <div class="form-group">
           <label class="form-label">医院</label>
           <select v-model="form.hospital_id" class="form-select" style="width: 16rem">
             <option value="">请选择</option><option v-for="h in hospitals" :key="h.id" :value="h.id">{{h.name}}</option>
           </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">检查日期</label>
-          <input v-model="form.sample_date" type="date" class="form-input" style="width: auto">
         </div>
         <div class="form-group">
           <label class="form-label">文件</label>

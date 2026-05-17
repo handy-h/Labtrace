@@ -22,13 +22,7 @@ const BatchImportImagingView = Vue.defineComponent({
               <option v-for="h in hospitals" :key="h.id" :value="h.id">{{ h.name }}</option>
             </select>
           </div>
-          <div class="form-group">
-            <label class="form-label">影像报告类型</label>
-            <select v-model="form.report_type" class="form-select" style="width: 200px">
-              <option value="">请选择</option>
-              <option v-for="t in imagingTypes" :key="t.id" :value="t.code">{{ t.name }}</option>
-            </select>
-          </div>
+
         </div>
         <button @click="step = 2" class="btn btn-primary" :disabled="!form.subject_id">下一步</button>
       </div>
