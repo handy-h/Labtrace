@@ -63,7 +63,6 @@ func Upload(c *gin.Context) {
 	subjectID, _ := strconv.ParseInt(c.PostForm("subject_id"), 10, 64)
 	hospitalID, _ := strconv.ParseInt(c.PostForm("hospital_id"), 10, 64)
 	sampleDate := c.PostForm("sample_date")
-	categoryID, _ := strconv.ParseInt(c.PostForm("category_id"), 10, 64)
 
 	// Create lab_reports record
 	var hospID interface{} = nil
@@ -71,14 +70,9 @@ func Upload(c *gin.Context) {
 		hospID = hospitalID
 	}
 
-	var catID interface{} = nil
-	if categoryID > 0 {
-		catID = categoryID
-	}
-
 	result, err := database.DB.Exec(
-		`INSERT INTO lab_reports (subject_id, hospital_id, sample_date, category_id, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, ?, 'processing')`,
-		subjectID, hospID, sampleDate, catID, filePath, fileMD5,
+		`INSERT INTO lab_reports (subject_id, hospital_id, sample_date, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, 'processing')`,
+		subjectID, hospID, sampleDate, filePath, fileMD5,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
@@ -239,26 +233,6 @@ func ApplyColumnMapping(c *gin.Context) {
 		database.DB.Exec(`UPDATE lab_reports SET sample_date = ? WHERE id = ?`, cfg.SampleDate, id)
 	}
 
-	// 处理分类：从映射结果中提取分类名称，匹配 report_categories
-	var mismatchCategory string
-	for _, item := range parsedItems {
-		if item.Category != "" {
-			// 尝试精确匹配分类名
-			var catID int64
-			err := database.DB.QueryRow(`SELECT id FROM report_categories WHERE name = ?`, item.Category).Scan(&catID)
-			if err == nil {
-				// 匹配成功，设置 category_id
-				database.DB.Exec(`UPDATE lab_reports SET category_id = ? WHERE id = ?`, catID, id)
-				database.DB.Exec(`UPDATE lab_reports SET mismatch_category = '' WHERE id = ?`, id)
-			} else {
-				// 未匹配，记录原始名称供前端归一化
-				mismatchCategory = item.Category
-				database.DB.Exec(`UPDATE lab_reports SET mismatch_category = ? WHERE id = ?`, mismatchCategory, id)
-			}
-			break // 只取第一个有效分类
-		}
-	}
-
 	mappingJSON, _ := services.MarshalColumnMappingConfig(cfg)
 	database.DB.Exec(`UPDATE lab_reports SET column_mapping_json = ? WHERE id = ?`, mappingJSON, id)
 
@@ -302,9 +276,8 @@ func ApplyColumnMapping(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
-		"items":               items,
-		"item_count":          len(items),
-		"mismatch_category":   mismatchCategory,
+		"items":      items,
+		"item_count": len(items),
 	}))
 }
 

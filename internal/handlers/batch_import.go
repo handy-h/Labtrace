@@ -25,7 +25,6 @@ import (
 type BatchMappingConfig struct {
 	SubjectID    int64  `json:"subject_id"`
 	HospitalID   *int64 `json:"hospital_id"`
-	CategoryID   *int64 `json:"category_id"`
 	SampleDate   string `json:"sample_date"`
 	ItemsPath    string `json:"items_path"`
 	ItemName     string `json:"item_name"`
@@ -152,7 +151,6 @@ func ConfirmBatchImport(c *gin.Context) {
 	var req struct {
 		SubjectID  int64              `json:"subject_id"`
 		HospitalID *int64             `json:"hospital_id"`
-		CategoryID *int64             `json:"category_id"`
 		Mappings   BatchMappingConfig `json:"mappings"`
 		Reports    []struct {
 			FileName   string                 `json:"file_name"`
@@ -230,14 +228,9 @@ func ConfirmBatchImport(c *gin.Context) {
 			hospID = *req.HospitalID
 		}
 
-		var catID interface{}
-		if req.CategoryID != nil && *req.CategoryID > 0 {
-			catID = *req.CategoryID
-		}
-
 		res, err := database.DB.Exec(
-			`INSERT INTO lab_reports (subject_id, hospital_id, sample_date, category_id, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, ?, 'review')`,
-			req.SubjectID, hospID, sampleDate, catID, filePath, fileMD5,
+			`INSERT INTO lab_reports (subject_id, hospital_id, sample_date, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, 'review')`,
+			req.SubjectID, hospID, sampleDate, filePath, fileMD5,
 		)
 		if err != nil {
 			result.FailCount++

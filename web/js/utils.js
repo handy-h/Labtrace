@@ -94,7 +94,10 @@ function confClass(c) {
  * @returns {string} HTML字符串
  */
 function flagBadge(f) {
-  if (!f || f === 'normal') return '';
-  const cls = (f === 'H' || f === '阳性') ? 'text-red-600 font-bold' : (f === 'L' || f === '阴性') ? 'text-blue-600 font-bold' : '';
-  return `<span class="${cls}">${f}</span>`;
+  if (!f || f === 'normal') return '<span style="color: #16a34a; font-weight: bold">正常</span>';
+  if (f === 'H' || f === 'h') return '<span style="color: #dc2626; font-weight: bold">偏高</span>';
+  if (f === 'L' || f === 'l') return '<span style="color: #2563eb; font-weight: bold">偏低</span>';
+  if (f === '阳性') return '<span style="color: #dc2626; font-weight: bold">阳性</span>';
+  if (f === '阴性') return '<span style="color: #2563eb; font-weight: bold">阴性</span>';
+  return `<span style="font-weight: bold">${f}</span>`;
 }

@@ -86,8 +86,8 @@ const OCRImportView = Vue.defineComponent({
     <div v-if="labReports.length && form.report_category === 'lab'" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">实验室检查报告列表</h2>
       <data-table :columns="reportListColumns" :data="labReports" empty-text="暂无报告">
-        <template #cell-category_name="{ row }">
-          <span v-if="row.category_name">{{ row.category_name }}</span>
+        <template #cell-categories="{ row }">
+          <span v-if="row.categories">{{ row.categories }}</span>
           <span v-else style="color: var(--color-text-muted)">—</span>
         </template>
         <template #cell-ocr_status="{ row }">
@@ -134,24 +134,6 @@ const OCRImportView = Vue.defineComponent({
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-3 shrink-0" style="border-bottom: 1px solid var(--table-border)">
           <h2 class="modal-title" style="margin-bottom: 0">报告详情 #{{selectedReport.id}} <span :class="statusClass(selectedReport.ocr_status)">({{statusText(selectedReport.ocr_status)}})</span></h2>
-          <div class="flex items-center gap-2">
-            <label class="text-xs" style="color: var(--color-text-secondary)">分类：</label>
-            <div class="flex items-center gap-1">
-              <input v-model="categoryInput"
-                     list="category-list"
-                     @change="onCategoryInputChange"
-                     class="form-select"
-                     style="width: 10rem; padding: 2px 6px; font-size: 0.8rem"
-                     placeholder="输入或选择分类">
-              <datalist id="category-list">
-                <option v-for="cat in categories" :key="cat.id" :value="cat.name" :data-id="cat.id"></option>
-              </datalist>
-            </div>
-            <span v-if="selectedReport._mismatchCategory" class="flex items-center gap-1">
-              <span class="text-xs text-orange-600">{{ selectedReport._mismatchCategory }}</span>
-              <button @click="showNormalizeModal = true" class="btn-ghost" style="font-size: 0.75rem; color: var(--color-warning); border: 1px solid var(--color-warning); padding: 0 6px; border-radius: 4px">归一</button>
-            </span>
-          </div>
           <span class="text-xs" style="color: var(--color-text-muted)">点击单元格即可编辑</span>
           <div class="flex gap-2">
             <button v-if="selectedReport.ocr_status === 'review'" @click="doConfirm(selectedReport.id)"
@@ -408,28 +390,6 @@ const OCRImportView = Vue.defineComponent({
       </div>
     </div>
 
-    <!-- 分类归一化模态框 -->
-    <div v-if="showNormalizeModal" class="modal-overlay" @click.self="showNormalizeModal=false">
-      <div class="modal-content w-[400px]">
-        <h2 class="modal-title">分类归一化</h2>
-        <div class="card" style="background: var(--color-bg); margin-bottom: 0.75rem">
-          <span class="text-sm" style="color: var(--color-text-secondary)">OCR 识别分类：</span>
-          <span class="font-medium text-orange-600">{{ selectedReport._mismatchCategory }}</span>
-        </div>
-        <div style="margin-bottom: 0.75rem">
-          <label class="form-label">选择目标分类</label>
-          <select v-model="normalizeTargetId" class="form-select" style="width: 100%">
-            <option :value="null">请选择分类...</option>
-            <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
-          </select>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button @click="showNormalizeModal=false" class="btn btn-secondary">取消</button>
-          <button @click="doNormalize" :disabled="!normalizeTargetId"
-                  class="btn btn-primary">确认归一</button>
-        </div>
-      </div>
-    </div>
   </div>`,
   setup() {
     const subjects = Vue.ref([]);
@@ -437,7 +397,7 @@ const OCRImportView = Vue.defineComponent({
     const labReports = Vue.ref([]);
     const imagingReports = Vue.ref([]);
     const imagingTypes = Vue.ref([]);
-    const form = Vue.ref({ subject_id: "", hospital_id: "", sample_date: "", category_id: "", report_category: "lab", report_type: "" });
+    const form = Vue.ref({ subject_id: "", hospital_id: "", sample_date: "", report_category: "lab", report_type: "" });
     const uploading = Vue.ref(false);
     const selectedReport = Vue.ref(null);
     const selectedImagingReport = Vue.ref(null);
@@ -471,7 +431,7 @@ const OCRImportView = Vue.defineComponent({
     const reportListColumns = [
       { key: 'id', label: 'ID', align: 'center' },
       { key: 'sample_date', label: '采样日期', align: 'center' },
-      { key: 'category_name', label: '检验项目分类', align: 'center' },
+      { key: 'categories', label: '分类', align: 'center' },
       { key: 'ocr_status', label: '状态', align: 'center' },
       { key: 'actions', label: '操作', align: 'center', width: '16rem' },
     ];
@@ -498,16 +458,9 @@ const OCRImportView = Vue.defineComponent({
 
     const currentSubjectId = Vue.inject("currentSubjectId", null);
 
-    // 检验项目分类
-    const categories = Vue.ref([]);
-    const showNormalizeModal = Vue.ref(false);
-    const normalizeTargetId = Vue.ref(null);
-    const categoryInput = Vue.ref("");
-
     Vue.onMounted(() => {
       api.listSubjects().then((r) => { if (r.data) subjects.value = r.data; });
       api.listHospitals().then((r) => { if (r.data) hospitals.value = r.data; });
-      api.listCategories().then((r) => { if (r.data) categories.value = r.data; });
       api.listImagingReportTypes().then((r) => { if (r.data) imagingTypes.value = r.data; });
       loadLabReports();
       loadImagingReports();
@@ -558,7 +511,6 @@ const OCRImportView = Vue.defineComponent({
         fd.append("sample_date", formSnapshot.sample_date);
         
         if (formSnapshot.report_category === 'lab') {
-          fd.append("category_id", formSnapshot.category_id);
           const r = await api.ocrUpload(fd);
           uploading.value = false;
           if (r.code === 0) { alert("上传成功，OCR识别中"); loadLabReports(); } else alert(r.message);
@@ -586,7 +538,6 @@ const OCRImportView = Vue.defineComponent({
         
         let uploadApi;
         if (formSnapshot.report_category === 'lab') {
-          fd.append("category_id", formSnapshot.category_id);
           uploadApi = api.ocrUpload(fd);
         } else {
           fd.append("report_type", formSnapshot.report_type);
@@ -609,15 +560,10 @@ const OCRImportView = Vue.defineComponent({
       clearFileInput(); selectedFiles = [];
     }
     
-    function viewReport(id, mismatchCategory) {
+    function viewReport(id) {
       api.getReport(id).then((r) => {
         if (r.data) {
           selectedReport.value = r.data;
-          if (mismatchCategory) {
-            selectedReport.value._mismatchCategory = mismatchCategory;
-          } else if (r.data.mismatch_category) {
-            selectedReport.value._mismatchCategory = r.data.mismatch_category;
-          }
           reportImageUrl.value = api.getReportImage(r.data.id) + '?t=' + Date.now();
           selectedRowIndex.value = -1;
           editingItemId.value = null;
@@ -698,7 +644,23 @@ const OCRImportView = Vue.defineComponent({
     }
     function doConfirmApi(id) {
       api.confirmReport(id).then((r) => {
-        if (r.code === 0) { alert("核效成功"); loadLabReports(); if (selectedReport.value) viewReport(selectedReport.value.id); }
+        if (r.code === 0) {
+          loadLabReports();
+          // 查找下一条待核效报告
+          const currentIdx = labReports.value.findIndex(rep => rep.id === id);
+          let nextReport = null;
+          for (let i = currentIdx + 1; i < labReports.value.length; i++) {
+            if (labReports.value[i].ocr_status === 'review') {
+              nextReport = labReports.value[i];
+              break;
+            }
+          }
+          if (nextReport) {
+            viewReport(nextReport.id);
+          } else {
+            closeReport();
+          }
+        }
         else alert(r.message);
       });
     }
@@ -868,7 +830,7 @@ const OCRImportView = Vue.defineComponent({
       wizardImageUrl.value = api.getReportImage(report.id); wizardFilePath.value = report.file_path || "";
       wizardVisible.value = true;
     }
-    function onWizardDone({ reportId, mismatchCategory }) { wizardVisible.value = false; loadLabReports(); loadQuota(); viewReport(reportId, mismatchCategory); }
+    function onWizardDone({ reportId }) { wizardVisible.value = false; loadLabReports(); loadQuota(); viewReport(reportId); }
 
     // 关联项目
     function openLinkModal(item) {
@@ -893,75 +855,6 @@ const OCRImportView = Vue.defineComponent({
       showLinkModal.value = false;
     }
 
-    function onCategoryChange() {
-      if (!selectedReport.value) return;
-      const catId = selectedReport.value.category_id;
-      api.updateReport(selectedReport.value.id, { category_id: catId || 0 }).then((r) => {
-        if (r.code === 0) {
-          const cat = categories.value.find(c => c.id === catId);
-          const rep = labReports.value.find(r => r.id === selectedReport.value.id);
-          if (rep) rep.category_name = cat ? cat.name : '';
-          selectedReport.value.category_name = cat ? cat.name : '';
-        }
-      });
-    }
-
-    async function doNormalize() {
-      if (!normalizeTargetId.value || !selectedReport.value) return;
-      const r = await api.normalizeCategory({
-        report_id: selectedReport.value.id,
-        category_id: normalizeTargetId.value,
-      });
-      if (r.code === 0) {
-        selectedReport.value.category_id = normalizeTargetId.value;
-        const cat = categories.value.find(c => c.id === normalizeTargetId.value);
-        selectedReport.value.category_name = cat ? cat.name : '';
-        selectedReport.value._mismatchCategory = "";
-        const rep = labReports.value.find(r => r.id === selectedReport.value.id);
-        if (rep) rep.category_name = cat ? cat.name : '';
-        showNormalizeModal.value = false;
-        normalizeTargetId.value = null;
-      } else {
-        alert(r.message || "归一化失败");
-      }
-    }
-
-    Vue.watch(selectedReport, (r) => {
-      if (r && r.category_name) {
-        categoryInput.value = r.category_name;
-      } else {
-        categoryInput.value = "";
-      }
-    }, { immediate: true });
-
-    async function onCategoryInputChange() {
-      if (!selectedReport.value) return;
-      const inputName = categoryInput.value.trim();
-      if (!inputName) {
-        onCategoryChange(null);
-        return;
-      }
-      const existing = categories.value.find(c => c.name === inputName);
-      if (existing) {
-        selectedReport.value.category_id = existing.id;
-        onCategoryChange();
-      } else {
-        if (confirm(`分类 "${inputName}" 不存在，是否创建新分类？`)) {
-          const r = await api.createCategory({ name: inputName });
-          if (r.code === 0) {
-            const listR = await api.listCategories();
-            if (listR.data) categories.value = listR.data;
-            selectedReport.value.category_id = r.data.id;
-            onCategoryChange();
-          } else {
-            alert(r.message || "创建分类失败");
-          }
-        } else {
-          categoryInput.value = selectedReport.value.category_name || "";
-        }
-      }
-    }
-
     function statusClass(s) {
       return { pending: "text-slate-500", processing: "text-yellow-600", review: "text-orange-600", imported: "text-green-600", failed: "text-red-600" }[s] || "";
     }
@@ -982,7 +875,6 @@ const OCRImportView = Vue.defineComponent({
       loadQuota, startEdit, saveEdit, onEditBlur, flushEditFormToLocal, cancelEdit, selectRow,
       onImageLoad, onImagingImageLoad, statusClass, statusText, confClass, flagBadge, isPdf, isImagingPdf,
       wizardVisible, wizardReportId, wizardHospitalId, wizardImageUrl, wizardFilePath, openMappingWizard, onWizardDone,
-      categories, showNormalizeModal, normalizeTargetId, doNormalize, categoryInput, onCategoryInputChange, onCategoryChange,
       showLinkModal, linkingItem, linkSearch, filteredLinkItems, linkSelectedId, linkCreateAlias,
       openLinkModal, filterLinkItems, doLinkItem,
       selectedFiles, batchQueue, batchUploading, batchCurrent, batchDoneCount, batchPct, removeFile,

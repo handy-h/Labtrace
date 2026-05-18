@@ -22,7 +22,6 @@ const BatchImportView = Vue.defineComponent({
               <option v-for="h in hospitals" :key="h.id" :value="h.id">{{ h.name }}</option>
             </select>
           </div>
-
         </div>
         <button @click="step = 2" class="btn btn-primary" :disabled="!form.subject_id">下一步</button>
       </div>
@@ -253,8 +252,7 @@ const BatchImportView = Vue.defineComponent({
     const step = Vue.ref(1);
     const subjects = Vue.ref([]);
     const hospitals = Vue.ref([]);
-    const categories = Vue.ref([]);
-    const form = Vue.ref({ subject_id: '', hospital_id: '', category_id: '' });
+    const form = Vue.ref({ subject_id: '', hospital_id: '' });
 
     const jsonFiles = Vue.ref([]);
     const pdfFiles = Vue.ref([]);
@@ -346,7 +344,6 @@ const BatchImportView = Vue.defineComponent({
     Vue.onMounted(() => {
       api.listSubjects().then(r => subjects.value = r.data || []);
       api.listHospitals().then(r => hospitals.value = r.data || []);
-      api.listCategories().then(r => categories.value = r.data || []);
     });
 
     function onJsonFileChange(e) {
@@ -505,7 +502,6 @@ const BatchImportView = Vue.defineComponent({
         const r = await api.confirmBatchImport({
           subject_id: parseInt(form.value.subject_id),
           hospital_id: form.value.hospital_id ? parseInt(form.value.hospital_id) : null,
-          category_id: form.value.category_id ? parseInt(form.value.category_id) : null,
           mappings: mappings.value,
           reports
         });
@@ -519,7 +515,7 @@ const BatchImportView = Vue.defineComponent({
 
     function reset() {
       step.value = 1;
-      form.value = { subject_id: '', hospital_id: '', category_id: '' };
+      form.value = { subject_id: '', hospital_id: '' };
       jsonFiles.value = [];
       pdfFiles.value = [];
       filePairs.value = [];
@@ -549,7 +545,7 @@ const BatchImportView = Vue.defineComponent({
     }
 
     return {
-      step, subjects, hospitals, categories, form,
+      step, subjects, hospitals, form,
       filePairs, uploadErrors, previewData, previewItems,
       uploading, importing, importResult, mappings,
       selectedFileIndex, jsonModalVisible, jsonModalData, hasEmptyDates,

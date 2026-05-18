@@ -264,23 +264,6 @@ const api = {
     return this.del("/test-items/" + id);
   },
 
-  // Report Categories
-  listCategories() {
-    return this.get("/categories");
-  },
-  createCategory(data) {
-    return this.post("/categories", data);
-  },
-  updateCategory(id, d) {
-    return this.put("/categories/" + id, d);
-  },
-  deleteCategory(id) {
-    return this.del("/categories/" + id);
-  },
-  normalizeCategory(d) {
-    return this.post("/categories/normalize", d);
-  },
-
   // Audit Logs
   listAuditLogs(params) {
     const q = new URLSearchParams(params).toString();

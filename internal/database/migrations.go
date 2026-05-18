@@ -118,12 +118,6 @@ func migrate(db *sql.DB) error {
 		created_at TEXT NOT NULL DEFAULT (datetime('now'))
 	);
 
-	CREATE TABLE IF NOT EXISTS report_categories (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL UNIQUE,
-		created_at TEXT NOT NULL DEFAULT (datetime('now'))
-	);
-
 	CREATE TABLE IF NOT EXISTS audit_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		action TEXT NOT NULL,
@@ -191,8 +185,6 @@ func migrate(db *sql.DB) error {
 		`ALTER TABLE lab_reports ADD COLUMN column_mapping_json TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE lab_reports ADD COLUMN ocr_table_json TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE hospitals ADD COLUMN level TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE lab_reports ADD COLUMN category_id INTEGER REFERENCES report_categories(id) ON DELETE SET NULL`,
-		`ALTER TABLE lab_reports ADD COLUMN mismatch_category TEXT DEFAULT ''`,
 		`ALTER TABLE report_items ADD COLUMN category TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE audit_logs ADD COLUMN action_label TEXT NOT NULL DEFAULT ''`,
 	}

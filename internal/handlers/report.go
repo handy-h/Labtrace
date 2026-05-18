@@ -19,16 +19,14 @@ func ListReports(c *gin.Context) {
 	subjectID := c.Query("subject_id")
 	hospitalID := c.Query("hospital_id")
 	ocrStatus := c.Query("ocr_status")
-	categoryID := c.Query("category_id")
 	startDate := c.Query("start_date")
 	endDate := c.Query("end_date")
 
-	query := `SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.category_id, lr.created_at,
+	query := `SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
 		h.name as hospital_name,
-		COALESCE(rc.name, '') as category_name
+		COALESCE((SELECT GROUP_CONCAT(cat, ', ') FROM (SELECT DISTINCT ti.category as cat FROM report_items ri LEFT JOIN test_items ti ON ti.id = ri.test_item_id WHERE ri.report_id = lr.id AND ti.category != '')), '') as categories
 		FROM lab_reports lr
-		LEFT JOIN hospitals h ON h.id = lr.hospital_id
-		LEFT JOIN report_categories rc ON rc.id = lr.category_id`
+		LEFT JOIN hospitals h ON h.id = lr.hospital_id`
 	args := []interface{}{}
 	conditions := []string{}
 
@@ -43,10 +41,6 @@ func ListReports(c *gin.Context) {
 	if ocrStatus != "" {
 		conditions = append(conditions, "lr.ocr_status = ?")
 		args = append(args, ocrStatus)
-	}
-	if categoryID != "" {
-		conditions = append(conditions, "lr.category_id = ?")
-		args = append(args, categoryID)
 	}
 	if startDate != "" {
 		conditions = append(conditions, "lr.sample_date >= ?")
@@ -77,8 +71,7 @@ func ListReports(c *gin.Context) {
 		var r models.LabReport
 		var hospID sql.NullInt64
 		var hospName sql.NullString
-		var catID sql.NullInt64
-		if err := rows.Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &catID, &r.CreatedAt, &hospName, &r.CategoryName); err != nil {
+		if err := rows.Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &hospName, &r.Categories); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 			return
 		}
@@ -87,9 +80,6 @@ func ListReports(c *gin.Context) {
 		}
 		if hospName.Valid {
 			r.HospitalName = hospName.String
-		}
-		if catID.Valid {
-			r.CategoryID = &catID.Int64
 		}
 		reports = append(reports, r)
 	}
@@ -102,17 +92,14 @@ func GetReport(c *gin.Context) {
 	var r models.LabReport
 	var hospID sql.NullInt64
 	var hospName sql.NullString
-	var catID sql.NullInt64
 	err := database.DB.QueryRow(
-		`SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.category_id, lr.created_at,
+		`SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
 		h.name as hospital_name,
-		COALESCE(rc.name, '') as category_name,
-		COALESCE(lr.mismatch_category, '') as mismatch_category
+		COALESCE((SELECT GROUP_CONCAT(cat, ', ') FROM (SELECT DISTINCT ti.category as cat FROM report_items ri LEFT JOIN test_items ti ON ti.id = ri.test_item_id WHERE ri.report_id = lr.id AND ti.category != '')), '') as categories
 		FROM lab_reports lr
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
-		LEFT JOIN report_categories rc ON rc.id = lr.category_id
 		WHERE lr.id = ?`, id,
-	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &catID, &r.CreatedAt, &hospName, &r.CategoryName, &r.MismatchCategory)
+	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &hospName, &r.Categories)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
 		return
@@ -126,9 +113,6 @@ func GetReport(c *gin.Context) {
 	}
 	if hospName.Valid {
 		r.HospitalName = hospName.String
-	}
-	if catID.Valid {
-		r.CategoryID = &catID.Int64
 	}
 
 	// review状态时自动匹配参考区间和计算提示符，让核效阶段就能看到flag
@@ -189,30 +173,6 @@ func loadReportItems(reportID string) []models.ReportItem {
 	return items
 }
 
-// UpdateReport updates report-level fields (e.g. category_id).
-func UpdateReport(c *gin.Context) {
-	id := c.Param("id")
-
-	var req struct {
-		CategoryID *int64 `json:"category_id"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.Error("参数错误"))
-		return
-	}
-
-	if req.CategoryID != nil {
-		if *req.CategoryID == 0 {
-			database.DB.Exec(`UPDATE lab_reports SET category_id = NULL WHERE id = ?`, id)
-		} else {
-			database.DB.Exec(`UPDATE lab_reports SET category_id = ? WHERE id = ?`, *req.CategoryID, id)
-			database.DB.Exec(`UPDATE lab_reports SET mismatch_category = '' WHERE id = ?`, id)
-		}
-	}
-
-	c.JSON(http.StatusOK, models.Success(nil))
-}
-
 // UpdateReportItem updates a single report item (for manual correction during review).
 func UpdateReportItem(c *gin.Context) {
 	reportID := c.Param("id")
@@ -266,6 +226,10 @@ func ConfirmReport(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
 	}
+
+	// 更新报告状态为已入库
+	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'imported' WHERE id = ?`, id)
+
 	c.JSON(http.StatusOK, models.Success(nil))
 }
 
