@@ -121,6 +121,8 @@ const TrendView = Vue.defineComponent({
     function buildRefBands(data) {
       const bands = [];
       let currentBand = null;
+      const refColor = 'rgba(42, 157, 143, 0.12)';  /* 与主色呼应的青绿 */
+      const refBorderColor = 'rgba(42, 157, 143, 0.3)';
       data.forEach((point, index) => {
         const refMin = point.ref_min;
         const refMax = point.ref_max;
@@ -138,7 +140,7 @@ const TrendView = Vue.defineComponent({
       });
       if (currentBand) bands.push(currentBand);
       return bands.map(band => ([
-        { xAxis: band.startIndex, yAxis: band.refMin, itemStyle: { color: 'rgba(76,175,80,0.1)' } },
+        { xAxis: band.startIndex, yAxis: band.refMin, itemStyle: { color: refColor } },
         { xAxis: band.endIndex, yAxis: band.refMax }
       ]));
     }
@@ -162,7 +164,7 @@ const TrendView = Vue.defineComponent({
           if (!groups[key]) groups[key] = {};
           groups[key][d.sample_date] = d.converted_value;
         });
-        const colors = ['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#5ab1ef'];
+        const colors = ['#0F766E','#4A7EBB','#C27A3C','#C25151','#2A9D8F','#8B5CF6','#64748B','#D97706','#0D9488','#5B21B6'];
         let ci = 0;
         Object.keys(groups).forEach(name => {
           const data = allDates.map(dt => groups[name][dt] ?? null);
@@ -186,7 +188,7 @@ const TrendView = Vue.defineComponent({
         if (refBands.length) {
           series.push({
             name: '参考区间', type: 'line', data: [],
-            markArea: { silent: true, data: refBands, itemStyle: { borderWidth: 1, borderColor: 'rgba(76,175,80,0.3)', borderType: 'dashed' } }
+            markArea: { silent: true, data: refBands, itemStyle: { borderWidth: 1, borderColor: refBorderColor, borderType: 'dashed' } }
           });
           legendData.push('参考区间');
         }

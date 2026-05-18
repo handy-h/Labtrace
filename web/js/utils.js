@@ -89,15 +89,15 @@ function confClass(c) {
 }
 
 /**
- * 提示符徽章HTML
+ * 提示符徽章 HTML
  * @param {string} f - 提示符
- * @returns {string} HTML字符串
+ * @returns {string} HTML 字符串
  */
 function flagBadge(f) {
-  if (!f || f === 'normal') return '<span style="color: #16a34a; font-weight: bold">正常</span>';
-  if (f === 'H' || f === 'h') return '<span style="color: #dc2626; font-weight: bold">偏高</span>';
-  if (f === 'L' || f === 'l') return '<span style="color: #2563eb; font-weight: bold">偏低</span>';
-  if (f === '阳性') return '<span style="color: #dc2626; font-weight: bold">阳性</span>';
-  if (f === '阴性') return '<span style="color: #2563eb; font-weight: bold">阴性</span>';
-  return `<span style="font-weight: bold">${f}</span>`;
+  if (!f || f === 'normal') return '<span style="color: #2A9D8F; font-weight: 600">正常</span>';
+  if (f === 'H' || f === 'h') return '<span style="color: #C25151; font-weight: 600">偏高</span>';
+  if (f === 'L' || f === 'l') return '<span style="color: #4A7EBB; font-weight: 600">偏低</span>';
+  if (f === '阳性') return '<span style="color: #C25151; font-weight: 600">阳性</span>';
+  if (f === '阴性') return '<span style="color: #4A7EBB; font-weight: 600">阴性</span>';
+  return `<span style="font-weight: 600">${f}</span>`;
 }

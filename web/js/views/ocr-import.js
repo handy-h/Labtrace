@@ -45,7 +45,7 @@ const OCRImportView = Vue.defineComponent({
               <span style="color: var(--color-text-muted)">#{{i + 1}}</span>
               <span class="truncate" style="max-width: 14rem">{{ f.name }}</span>
               <span style="color: var(--color-text-muted)">{{ (f.size / 1024).toFixed(0) }}KB</span>
-              <button @click="removeFile(i)" class="text-red-400 hover:text-red-600" style="font-size: 0.65rem">x</button>
+              <button @click="removeFile(i)" style="color: var(--color-danger); font-size: 0.65rem; background: none; border: none; cursor: pointer" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">x</button>
             </div>
           </div>
         </div>
@@ -74,7 +74,7 @@ const OCRImportView = Vue.defineComponent({
               <span style="color: var(--color-text-muted)">#{{i + 1}}</span>
               <span class="truncate" style="max-width: 14rem">{{ f.name }}</span>
               <span style="color: var(--color-text-muted)">{{ (f.size / 1024).toFixed(0) }}KB</span>
-              <button @click="removeFile(i)" class="text-red-400 hover:text-red-600" style="font-size: 0.65rem">x</button>
+              <button @click="removeFile(i)" style="color: var(--color-danger); font-size: 0.65rem; background: none; border: none; cursor: pointer" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">x</button>
             </div>
           </div>
         </div>
