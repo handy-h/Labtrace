@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -62,7 +63,7 @@ func Recognize(fileBytes []byte, cfg *config.Config) ([]OCRResult, error) {
 	// OutputTable=true returns structured TableInfo with CellDetails (column/row indices)
 	// OutputRow=true returns RowInfo for row-level grouping validation
 	request := &ocr_api.RecognizeAllTextRequest{
-		Body:             strings.NewReader(string(fileBytes)),
+		Body:             bytes.NewReader(fileBytes),
 		Type:             tea.String("Advanced"),
 		OutputCoordinate: tea.String("rectangle"),
 		OutputOricoord:   tea.Bool(true),

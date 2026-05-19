@@ -98,6 +98,7 @@ func main() {
 		v1.POST("/ocr/upload", handlers.Upload)
 		v1.GET("/reports", handlers.ListReports)
 		v1.GET("/reports/:id", handlers.GetReport)
+		v1.PUT("/reports/:id", handlers.UpdateReport)
 		v1.PUT("/reports/:id/items/:itemId", handlers.UpdateReportItem)
 		v1.DELETE("/reports/:id/items/:itemId", handlers.DeleteReportItem)
 		v1.POST("/reports/:id/confirm", handlers.ConfirmReport)
@@ -144,9 +145,13 @@ func main() {
 		v1.PUT("/imaging-reports/:id", handlers.UpdateImagingReport)
 		v1.DELETE("/imaging-reports/:id", handlers.DeleteImagingReport)
 		v1.GET("/imaging-reports/:id/image", handlers.GetImagingReportImage)
+		v1.GET("/imaging-reports/:id/ocr-blocks", handlers.GetImagingOCRBlocks)
+		v1.POST("/imaging-reports/:id/apply-mapping", handlers.ApplyImagingMapping)
 		v1.POST("/imaging-reports/:id/confirm", handlers.ConfirmImagingReport)
 		v1.POST("/imaging-reports/:id/import", handlers.ImportImagingReport)
 		v1.POST("/imaging-reports/:id/re-ocr", handlers.ReOCRImagingReport)
+		v1.GET("/hospitals/:id/imaging-mapping-template", handlers.GetImagingMappingTemplate)
+		v1.POST("/hospitals/:id/imaging-mapping-template", handlers.SaveImagingMappingTemplate)
 
 		// Batch Import
 		v1.POST("/batch/upload", handlers.UploadBatchFiles)

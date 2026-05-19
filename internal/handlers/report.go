@@ -24,7 +24,7 @@ func ListReports(c *gin.Context) {
 
 	query := `SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
 		h.name as hospital_name,
-		COALESCE((SELECT GROUP_CONCAT(cat, ', ') FROM (SELECT DISTINCT ti.category as cat FROM report_items ri LEFT JOIN test_items ti ON ti.id = ri.test_item_id WHERE ri.report_id = lr.id AND ti.category != '')), '') as categories
+		COALESCE(lr.categories, '') as categories
 		FROM lab_reports lr
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id`
 	args := []interface{}{}
@@ -95,7 +95,7 @@ func GetReport(c *gin.Context) {
 	err := database.DB.QueryRow(
 		`SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
 		h.name as hospital_name,
-		COALESCE((SELECT GROUP_CONCAT(cat, ', ') FROM (SELECT DISTINCT ti.category as cat FROM report_items ri LEFT JOIN test_items ti ON ti.id = ri.test_item_id WHERE ri.report_id = lr.id AND ti.category != '')), '') as categories
+		COALESCE(lr.categories, '') as categories
 		FROM lab_reports lr
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
 		WHERE lr.id = ?`, id,
@@ -198,6 +198,27 @@ func UpdateReportItem(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
 	}
+	c.JSON(http.StatusOK, models.Success(nil))
+}
+
+// UpdateReport updates a report's fields (e.g. categories).
+func UpdateReport(c *gin.Context) {
+	id := c.Param("id")
+
+	var body struct {
+		Categories string `json:"categories"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, models.Error(err.Error()))
+		return
+	}
+
+	_, err := database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, body.Categories, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+
 	c.JSON(http.StatusOK, models.Success(nil))
 }
 

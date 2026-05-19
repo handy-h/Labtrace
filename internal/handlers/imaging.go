@@ -331,6 +331,162 @@ func GetImagingReport(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Success(r))
 }
 
+// GetImagingOCRBlocks returns the raw OCR block data for an imaging report.
+func GetImagingOCRBlocks(c *gin.Context) {
+	id := c.Param("id")
+
+	var rawJSON string
+	err := database.DB.QueryRow(`SELECT ocr_raw_json FROM imaging_reports WHERE id = ?`, id).Scan(&rawJSON)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
+		return
+	}
+	if rawJSON == "" {
+		c.JSON(http.StatusOK, models.Success(gin.H{
+			"blocks": []interface{}{},
+		}))
+		return
+	}
+
+	var blocks []services.OCRResult
+	if err := json.Unmarshal([]byte(rawJSON), &blocks); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("解析OCR数据失败"))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.Success(gin.H{
+		"blocks": blocks,
+	}))
+}
+
+// ApplyImagingMapping applies a user-defined field mapping to an imaging report.
+func ApplyImagingMapping(c *gin.Context) {
+	id := c.Param("id")
+
+	var cfg models.ImagingMappingConfig
+	if err := c.ShouldBindJSON(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, models.Error("请求参数错误: "+err.Error()))
+		return
+	}
+
+	// 获取 OCR 原始数据
+	var rawJSON string
+	err := database.DB.QueryRow(`SELECT ocr_raw_json FROM imaging_reports WHERE id = ?`, id).Scan(&rawJSON)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
+		return
+	}
+	if rawJSON == "" {
+		c.JSON(http.StatusBadRequest, models.Error("报告暂无OCR数据"))
+		return
+	}
+
+	// 解析 OCR 块
+	var blocks []services.OCRResult
+	if err := json.Unmarshal([]byte(rawJSON), &blocks); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("解析OCR数据失败"))
+		return
+	}
+
+	// 应用映射配置
+	parsed := services.ParseImagingReportWithMapping(blocks, cfg)
+
+	// 更新报告字段
+	cfgJSON, _ := json.Marshal(cfg)
+	_, err = database.DB.Exec(
+		`UPDATE imaging_reports SET 
+            exam_item_name = ?, inspect_no = ?, dept_name = ?, doctor_name = ?,
+            exam_site = ?, exam_description = ?, diagnosis_result = ?,
+            mapping_config_json = ?, ocr_status = 'review'
+        WHERE id = ?`,
+		parsed.ExamItemName, parsed.InspectNo, parsed.DeptName, parsed.DoctorName,
+		parsed.ExamSite, parsed.ExamDescription, parsed.DiagnosisResult,
+		string(cfgJSON),
+		id,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("更新报告失败"))
+		return
+	}
+
+	// 返回解析结果
+	c.JSON(http.StatusOK, models.Success(parsed))
+}
+
+// GetImagingMappingTemplate returns the imaging mapping template for a hospital.
+func GetImagingMappingTemplate(c *gin.Context) {
+	hospitalID := c.Param("id")
+
+	var cfgJSON string
+	err := database.DB.QueryRow(
+		`SELECT column_mappings FROM hospital_rules WHERE hospital_id = ? AND rule_type = 'imaging_mapping' ORDER BY updated_at DESC LIMIT 1`,
+		hospitalID,
+	).Scan(&cfgJSON)
+	if err != nil || cfgJSON == "" || cfgJSON == "{}" {
+		c.JSON(http.StatusOK, models.Success(nil))
+		return
+	}
+
+	var cfg models.ImagingMappingConfig
+	if err := json.Unmarshal([]byte(cfgJSON), &cfg); err != nil {
+		c.JSON(http.StatusOK, models.Success(nil))
+		return
+	}
+	c.JSON(http.StatusOK, models.Success(cfg))
+}
+
+// SaveImagingMappingTemplate saves an imaging mapping as a reusable hospital-level template.
+func SaveImagingMappingTemplate(c *gin.Context) {
+	hospitalID := c.Param("id")
+
+	var body struct {
+		Name   string                      `json:"name"`
+		Config models.ImagingMappingConfig `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, models.Error("请求参数错误"))
+		return
+	}
+
+	cfgJSON, err := json.Marshal(body.Config)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("序列化配置失败"))
+		return
+	}
+	ruleName := body.Name
+	if ruleName == "" {
+		ruleName = "default"
+	}
+
+	var existingID int64
+	queryErr := database.DB.QueryRow(
+		`SELECT id FROM hospital_rules WHERE hospital_id = ? AND rule_type = 'imaging_mapping' LIMIT 1`, hospitalID,
+	).Scan(&existingID)
+
+	if queryErr != nil {
+		res, err := database.DB.Exec(
+			`INSERT INTO hospital_rules (hospital_id, rule_name, rule_type, column_mappings) VALUES (?, ?, 'imaging_mapping', ?)`,
+			hospitalID, ruleName, string(cfgJSON),
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			return
+		}
+		newID, _ := res.LastInsertId()
+		c.JSON(http.StatusOK, models.Success(gin.H{"id": newID}))
+	} else {
+		_, err := database.DB.Exec(
+			`UPDATE hospital_rules SET rule_name = ?, column_mappings = ?, updated_at = datetime('now') WHERE id = ?`,
+			ruleName, string(cfgJSON), existingID,
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			return
+		}
+		c.JSON(http.StatusOK, models.Success(gin.H{"id": existingID}))
+	}
+}
+
 func UpdateImagingReport(c *gin.Context) {
 	id := c.Param("id")
 

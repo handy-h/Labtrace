@@ -1,6 +1,7 @@
 package services
 
 import (
+	"sort"
 	"strings"
 
 	"labtrace/internal/models"
@@ -141,4 +142,55 @@ func extractAfterColon(text string) string {
 		return text
 	}
 	return strings.TrimSpace(text[idx+1:])
+}
+
+// ParseImagingReportWithMapping 根据用户定义的映射配置解析影像报告。
+// cfg.FieldMappings 的 key 是字段名（如 exam_item_name），value 是 OCR 块索引列表。
+func ParseImagingReportWithMapping(blocks []OCRResult, cfg models.ImagingMappingConfig) *models.ImagingParsedResult {
+	result := &models.ImagingParsedResult{}
+
+	// 定义字段名到结构体字段的映射
+	fieldSetters := map[string]func(string){
+		"exam_item_name":   func(v string) { result.ExamItemName = v },
+		"inspect_no":       func(v string) { result.InspectNo = v },
+		"dept_name":        func(v string) { result.DeptName = v },
+		"doctor_name":      func(v string) { result.DoctorName = v },
+		"exam_site":        func(v string) { result.ExamSite = v },
+		"exam_description": func(v string) { result.ExamDescription = v },
+		"diagnosis_result": func(v string) { result.DiagnosisResult = v },
+	}
+
+	for fieldName, indices := range cfg.FieldMappings {
+		setter, ok := fieldSetters[fieldName]
+		if !ok {
+			continue // 跳过无效字段名
+		}
+
+		// 收集并排序 OCR 块
+		var fieldBlocks []OCRResult
+		for _, idx := range indices {
+			if idx >= 0 && idx < len(blocks) {
+				fieldBlocks = append(fieldBlocks, blocks[idx])
+			}
+		}
+
+		// 按 Y 坐标（Top）排序，保持阅读顺序
+		sort.Slice(fieldBlocks, func(i, j int) bool {
+			return fieldBlocks[i].Top < fieldBlocks[j].Top
+		})
+
+		// 合并文本
+		var texts []string
+		for _, block := range fieldBlocks {
+			if block.Text != "" {
+				texts = append(texts, block.Text)
+			}
+		}
+
+		if len(texts) > 0 {
+			setter(strings.Join(texts, "\n"))
+		}
+	}
+
+	return result
 }

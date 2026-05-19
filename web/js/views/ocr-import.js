@@ -86,12 +86,12 @@ const OCRImportView = Vue.defineComponent({
     <div v-if="labReports.length && form.report_category === 'lab'" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">实验室检查报告列表</h2>
       <data-table :columns="reportListColumns" :data="labReports" empty-text="暂无报告">
-        <template #cell-categories="{ row }">
-          <span v-if="row.categories">{{ row.categories }}</span>
-          <span v-else style="color: var(--color-text-muted)">—</span>
-        </template>
         <template #cell-ocr_status="{ row }">
           <span :class="statusClass(row.ocr_status)">{{statusText(row.ocr_status)}}</span>
+        </template>
+        <template #cell-categories="{ row }">
+          <span v-if="row.categories" style="max-width: 8rem; display: inline-block; white-space: normal;">{{ row.categories }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
         </template>
         <template #cell-actions="{ row }">
           <button @click="viewReport(row.id)" class="btn-ghost" style="font-size: 0.875rem">查看</button>
@@ -122,6 +122,7 @@ const OCRImportView = Vue.defineComponent({
         </template>
         <template #cell-actions="{ row }">
           <button @click="viewImagingReport(row.id)" class="btn-ghost" style="font-size: 0.875rem">查看</button>
+          <button v-if="row.ocr_status==='review'" @click="openImagingMappingWizard(row)" class="btn-ghost" style="font-size: 0.875rem; color: #9333ea">自定义映射</button>
           <button v-if="row.ocr_status==='review'" @click="doImportImaging(row.id)" class="btn-ghost" style="font-size: 0.875rem; color: var(--color-success)">入库</button>
           <button v-if="row.ocr_status!=='processing'" @click="doReOCRImaging(row.id)" class="btn-ghost" style="font-size: 0.875rem; color: var(--color-warning)">重新识别</button>
         </template>
@@ -160,6 +161,15 @@ const OCRImportView = Vue.defineComponent({
 
           <!-- Right: data table -->
           <div class="overflow-auto" style="width: 55%; border-left: 1px solid var(--table-border)">
+            <div class="px-4 py-2 flex items-center gap-2" style="border-bottom: 1px solid var(--table-border); background: var(--color-bg-secondary)">
+              <label class="text-sm font-medium" style="color: var(--color-text-secondary); white-space: nowrap">检验项目分类：</label>
+              <input v-model="selectedReport.categories"
+                     class="form-input"
+                     style="flex: 1; max-width: 200px"
+                     placeholder="如：血常规、生化、免疫等"
+                     @blur="saveReportCategory">
+              <span v-if="!selectedReport.categories" class="text-xs" style="color: var(--color-danger)">*</span>
+            </div>
             <table class="lt-table">
               <thead><tr>
                 <th>项目</th><th>结果</th><th>参考区间</th><th>单位</th><th>提示符</th>
@@ -390,6 +400,17 @@ const OCRImportView = Vue.defineComponent({
       </div>
     </div>
 
+    <!-- 影像自定义列映射向导 -->
+    <imaging-mapping-wizard
+      :visible="imagingWizardVisible"
+      :report-id="imagingWizardReportId"
+      :hospital-id="imagingWizardHospitalId"
+      :report-image-url="imagingWizardImageUrl"
+      :file-path="imagingWizardFilePath"
+      @close="imagingWizardVisible=false"
+      @done="onImagingWizardDone">
+    </imaging-mapping-wizard>
+
   </div>`,
   setup() {
     const subjects = Vue.ref([]);
@@ -499,7 +520,7 @@ const OCRImportView = Vue.defineComponent({
     function clearFileInput() { const input = document.querySelector('input[type="file"]'); if (input) input.value = ''; }
     async function upload() {
       if (!selectedFiles.length || !form.value.subject_id) return alert("请选择文件和受检者");
-      if (form.value.report_category === 'imaging' && !form.value.report_type) return alert("请选择影像类型");
+      // 影像类型为可选，不强制校验
       
       const formSnapshot = { ...form.value };
       if (selectedFiles.length === 1) {
@@ -594,6 +615,11 @@ const OCRImportView = Vue.defineComponent({
     function closeReport() { selectedReport.value = null; editingItemId.value = null; selectedRowIndex.value = -1; }
     function closeImagingReport() { selectedImagingReport.value = null; }
     
+    function saveReportCategory() {
+      if (!selectedReport.value) return;
+      api.updateReport(selectedReport.value.id, { categories: selectedReport.value.categories }).catch(() => {});
+    }
+    
     function saveImagingReport() {
       if (!selectedImagingReport.value) return;
       api.updateImagingReport(selectedImagingReport.value.id, imagingEditForm.value).then((r) => {
@@ -603,6 +629,10 @@ const OCRImportView = Vue.defineComponent({
     
     function doImport(id) {
       if (!confirm("确认入库？")) return;
+      if (!selectedReport.value.categories || !selectedReport.value.categories.trim()) {
+        alert("请填写检验项目分类后再入库");
+        return;
+      }
       flushEditFormToLocal();
       const pendingSave = editingItemId.value && selectedReport.value;
       if (pendingSave) {
@@ -631,6 +661,10 @@ const OCRImportView = Vue.defineComponent({
     
     function doConfirm(id) {
       if (!confirm("确认核效？")) return;
+      if (!selectedReport.value.categories || !selectedReport.value.categories.trim()) {
+        alert("请填写检验项目分类后再入库");
+        return;
+      }
       flushEditFormToLocal();
       const pendingSave = editingItemId.value && selectedReport.value;
       if (pendingSave) {
@@ -832,6 +866,26 @@ const OCRImportView = Vue.defineComponent({
     }
     function onWizardDone({ reportId }) { wizardVisible.value = false; loadLabReports(); loadQuota(); viewReport(reportId); }
 
+    // 影像映射向导
+    const imagingWizardVisible = Vue.ref(false);
+    const imagingWizardReportId = Vue.ref(null);
+    const imagingWizardHospitalId = Vue.ref(null);
+    const imagingWizardImageUrl = Vue.ref("");
+    const imagingWizardFilePath = Vue.ref("");
+
+    function openImagingMappingWizard(row) {
+      imagingWizardReportId.value = row.id;
+      imagingWizardHospitalId.value = row.hospital_id;
+      imagingWizardImageUrl.value = api.getImagingReportImage(row.id) + '?t=' + Date.now();
+      imagingWizardFilePath.value = row.file_path || "";
+      imagingWizardVisible.value = true;
+    }
+
+    function onImagingWizardDone() {
+      imagingWizardVisible.value = false;
+      loadImagingReports(); // 刷新列表
+    }
+
     // 关联项目
     function openLinkModal(item) {
       linkingItem.value = item; linkSearch.value = ''; linkSelectedId.value = null; linkCreateAlias.value = true;
@@ -871,12 +925,14 @@ const OCRImportView = Vue.defineComponent({
       editingItemId, editForm, imagingEditForm, zoomLevel, quota, quotaPct, quotaClass, quotaBarClass,
       highlightRect, highlightStyle, magnifierReady, magnifierStyle, imageEl, imagingEl, magnifier, editInput,
       reportListColumns, imagingReportListColumns, onFileChange, upload, viewReport, viewImagingReport, closeReport, closeImagingReport, 
-      doImport, doImportImaging, doConfirm, doReOCR, doReOCRImaging, saveImagingReport,
+      doImport, doImportImaging, doConfirm, doReOCR, doReOCRImaging, saveReportCategory, saveImagingReport,
       loadQuota, startEdit, saveEdit, onEditBlur, flushEditFormToLocal, cancelEdit, selectRow,
       onImageLoad, onImagingImageLoad, statusClass, statusText, confClass, flagBadge, isPdf, isImagingPdf,
       wizardVisible, wizardReportId, wizardHospitalId, wizardImageUrl, wizardFilePath, openMappingWizard, onWizardDone,
       showLinkModal, linkingItem, linkSearch, filteredLinkItems, linkSelectedId, linkCreateAlias,
       openLinkModal, filterLinkItems, doLinkItem,
+      imagingWizardVisible, imagingWizardReportId, imagingWizardHospitalId, imagingWizardImageUrl, imagingWizardFilePath,
+      openImagingMappingWizard, onImagingWizardDone,
       selectedFiles, batchQueue, batchUploading, batchCurrent, batchDoneCount, batchPct, removeFile,
       onReportCategoryChange, getImagingTypeName,
     };

@@ -302,7 +302,22 @@ const api = {
   reOCRImaging(id) {
     return this.post("/imaging-reports/" + id + "/re-ocr")
   },
-  
+
+  // Imaging Mapping
+  getImagingOCRBlocks(id) {
+    return this.get("/imaging-reports/" + id + "/ocr-blocks");
+  },
+  applyImagingMapping(id, config) {
+    return this.post("/imaging-reports/" + id + "/apply-mapping", config);
+  },
+  getImagingMappingTemplate(hospitalId) {
+    return this.get("/hospitals/" + hospitalId + "/imaging-mapping-template");
+  },
+  saveImagingMappingTemplate(hospitalId, data) {
+    return this.post("/hospitals/" + hospitalId + "/imaging-mapping-template", data);
+  },
+
+  // Batch Upload
   uploadBatchFiles(formData) {
     return this.upload("/batch/upload", formData)
   },

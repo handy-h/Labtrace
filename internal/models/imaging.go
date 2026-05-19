@@ -50,3 +50,14 @@ type ImagingParsedResult struct {
 	ExamDescription string `json:"exam_description"`
 	DiagnosisResult string `json:"diagnosis_result"`
 }
+
+// ImagingMappingConfig stores the user-defined field mapping for imaging reports.
+type ImagingMappingConfig struct {
+	// FieldMappings maps field names to lists of OCR block indices.
+	// Valid field names: exam_item_name, inspect_no, dept_name, doctor_name,
+	//                    exam_site, exam_description, diagnosis_result
+	FieldMappings map[string][]int `json:"field_mappings"`
+
+	// HospitalID is optional, used for template matching.
+	HospitalID *int64 `json:"hospital_id,omitempty"`
+}
