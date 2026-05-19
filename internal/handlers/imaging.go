@@ -136,12 +136,10 @@ func UploadImagingReport(c *gin.Context) {
 		diagnosis := parsed.DiagnosisResult
 		examItemName := parsed.ExamItemName
 		inspectNo := parsed.InspectNo
-		deptName := parsed.DeptName
-		doctorName := parsed.DoctorName
 
 		if _, dbErr := database.DB.Exec(
-			`UPDATE imaging_reports SET exam_item_name=?, inspect_no=?, dept_name=?, doctor_name=?, exam_site=?, exam_description=?, diagnosis_result=?, ocr_status='review' WHERE id = ?`,
-			examItemName, inspectNo, deptName, doctorName, examSite, examDesc, diagnosis, reportID,
+			`UPDATE imaging_reports SET exam_item_name=?, inspect_no=?, exam_site=?, exam_description=?, diagnosis_result=?, ocr_status='review' WHERE id = ?`,
+			examItemName, inspectNo, examSite, examDesc, diagnosis, reportID,
 		); dbErr != nil {
 			log.Printf("[imaging] 更新影像报告数据失败: reportID=%d err=%v", reportID, dbErr)
 		}
@@ -195,7 +193,7 @@ func ListImagingReports(c *gin.Context) {
 	sortOrder := c.Query("sort_order")
 
 	query := `SELECT ir.id, ir.subject_id, ir.hospital_id, ir.report_type, ir.exam_item_name, ir.inspect_no,
-		ir.dept_name, ir.doctor_name, ir.sample_date, ir.exam_site, ir.exam_description, ir.diagnosis_result,
+		ir.sample_date, ir.exam_site, ir.exam_description, ir.diagnosis_result,
 		ir.file_path, ir.file_md5, ir.ocr_status, ir.thumbnail_path, ir.created_at,
 		COALESCE(h.name, '') as hospital_name,
 		s.name as subject_name
@@ -271,7 +269,7 @@ func ListImagingReports(c *gin.Context) {
 		var hospName sql.NullString
 		if err := rows.Scan(
 			&r.ID, &r.SubjectID, &hospID, &r.ReportType, &r.ExamItemName, &r.InspectNo,
-			&r.DeptName, &r.DoctorName, &r.SampleDate, &r.ExamSite, &r.ExamDescription,
+			&r.SampleDate, &r.ExamSite, &r.ExamDescription,
 			&r.DiagnosisResult, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.ThumbnailPath,
 			&r.CreatedAt, &hospName, &r.SubjectName,
 		); err != nil {
@@ -299,7 +297,7 @@ func GetImagingReport(c *gin.Context) {
 	var hospName sql.NullString
 	err := database.DB.QueryRow(
 		`SELECT ir.id, ir.subject_id, ir.hospital_id, ir.report_type, ir.exam_item_name, ir.inspect_no,
-		ir.dept_name, ir.doctor_name, ir.sample_date, ir.exam_site, ir.exam_description, ir.diagnosis_result,
+		ir.sample_date, ir.exam_site, ir.exam_description, ir.diagnosis_result,
 		ir.file_path, ir.file_md5, ir.ocr_status, ir.thumbnail_path, ir.created_at, ir.updated_at,
 		COALESCE(h.name, '') as hospital_name,
 		s.name as subject_name
@@ -309,7 +307,7 @@ func GetImagingReport(c *gin.Context) {
 		WHERE ir.id = ?`, id,
 	).Scan(
 		&r.ID, &r.SubjectID, &hospID, &r.ReportType, &r.ExamItemName, &r.InspectNo,
-		&r.DeptName, &r.DoctorName, &r.SampleDate, &r.ExamSite, &r.ExamDescription,
+		&r.SampleDate, &r.ExamSite, &r.ExamDescription,
 		&r.DiagnosisResult, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.ThumbnailPath,
 		&r.CreatedAt, &r.UpdatedAt, &hospName, &r.SubjectName,
 	)
@@ -395,11 +393,11 @@ func ApplyImagingMapping(c *gin.Context) {
 	cfgJSON, _ := json.Marshal(cfg)
 	_, err = database.DB.Exec(
 		`UPDATE imaging_reports SET 
-            exam_item_name = ?, inspect_no = ?, dept_name = ?, doctor_name = ?,
+            exam_item_name = ?, inspect_no = ?,
             exam_site = ?, exam_description = ?, diagnosis_result = ?,
             mapping_config_json = ?, ocr_status = 'review'
         WHERE id = ?`,
-		parsed.ExamItemName, parsed.InspectNo, parsed.DeptName, parsed.DoctorName,
+		parsed.ExamItemName, parsed.InspectNo,
 		parsed.ExamSite, parsed.ExamDescription, parsed.DiagnosisResult,
 		string(cfgJSON),
 		id,
@@ -493,8 +491,6 @@ func UpdateImagingReport(c *gin.Context) {
 	var req struct {
 		ExamItemName    string  `json:"exam_item_name"`
 		InspectNo       string  `json:"inspect_no"`
-		DeptName        string  `json:"dept_name"`
-		DoctorName      string  `json:"doctor_name"`
 		ExamSite        string  `json:"exam_site"`
 		ExamDescription string  `json:"exam_description"`
 		DiagnosisResult string  `json:"diagnosis_result"`
@@ -514,13 +510,13 @@ func UpdateImagingReport(c *gin.Context) {
 
 	_, err := database.DB.Exec(
 		`UPDATE imaging_reports SET 
-		exam_item_name=?, inspect_no=?, dept_name=?, doctor_name=?,
+		exam_item_name=?, inspect_no=?,
 		exam_site=?, exam_description=?, diagnosis_result=?,
 		report_type=COALESCE(NULLIF(?, ''), report_type),
 		hospital_id=?, sample_date=?,
 		updated_at=datetime('now')
 		WHERE id=?`,
-		req.ExamItemName, req.InspectNo, req.DeptName, req.DoctorName,
+		req.ExamItemName, req.InspectNo,
 		req.ExamSite, req.ExamDescription, req.DiagnosisResult,
 		req.ReportType, hospID, req.SampleDate, id,
 	)
@@ -649,8 +645,8 @@ func ReOCRImagingReport(c *gin.Context) {
 		parsed := services.ParseImagingReport(ocrResults)
 
 		database.DB.Exec(
-			`UPDATE imaging_reports SET exam_item_name=?, inspect_no=?, dept_name=?, doctor_name=?, exam_site=?, exam_description=?, diagnosis_result=?, ocr_status='review' WHERE id = ?`,
-			parsed.ExamItemName, parsed.InspectNo, parsed.DeptName, parsed.DoctorName, parsed.ExamSite, parsed.ExamDescription, parsed.DiagnosisResult, id,
+			`UPDATE imaging_reports SET exam_item_name=?, inspect_no=?, exam_site=?, exam_description=?, diagnosis_result=?, ocr_status='review' WHERE id = ?`,
+			parsed.ExamItemName, parsed.InspectNo, parsed.ExamSite, parsed.ExamDescription, parsed.DiagnosisResult, id,
 		)
 
 		log.Printf("[imaging] ReOCR完成: reportID=%s", id)

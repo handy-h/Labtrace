@@ -291,14 +291,6 @@ const OCRImportView = Vue.defineComponent({
                   <input v-model="imagingEditForm.inspect_no" class="form-input" style="width: 100%" @blur="saveImagingReport">
                 </div>
                 <div class="info-item">
-                  <span class="info-label">科室</span>
-                  <input v-model="imagingEditForm.dept_name" class="form-input" style="width: 100%" @blur="saveImagingReport">
-                </div>
-                <div class="info-item">
-                  <span class="info-label">报告医生</span>
-                  <input v-model="imagingEditForm.doctor_name" class="form-input" style="width: 100%" @blur="saveImagingReport">
-                </div>
-                <div class="info-item">
                   <span class="info-label">检查部位</span>
                   <input v-model="imagingEditForm.exam_site" class="form-input" style="width: 100%" @blur="saveImagingReport">
                 </div>
@@ -427,7 +419,7 @@ const OCRImportView = Vue.defineComponent({
     const selectedRowIndex = Vue.ref(-1);
     const editingItemId = Vue.ref(null);
     const editForm = Vue.ref({ test_item_name: "", original_value: "", original_unit: "", ref_interval_text: "", flag: "" });
-    const imagingEditForm = Vue.ref({ exam_item_name: "", inspect_no: "", dept_name: "", doctor_name: "", exam_site: "", exam_description: "", diagnosis_result: "" });
+    const imagingEditForm = Vue.ref({ exam_item_name: "", inspect_no: "", exam_site: "", exam_description: "", diagnosis_result: "" });
     const isPdf = Vue.computed(() => {
       if (!selectedReport.value || !selectedReport.value.file_path) return false;
       return selectedReport.value.file_path.toLowerCase().endsWith(".pdf");
@@ -602,8 +594,6 @@ const OCRImportView = Vue.defineComponent({
           imagingEditForm.value = {
             exam_item_name: r.data.exam_item_name || "",
             inspect_no: r.data.inspect_no || "",
-            dept_name: r.data.dept_name || "",
-            doctor_name: r.data.doctor_name || "",
             exam_site: r.data.exam_site || "",
             exam_description: r.data.exam_description || "",
             diagnosis_result: r.data.diagnosis_result || "",

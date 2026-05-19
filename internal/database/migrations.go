@@ -156,8 +156,6 @@ func migrate(db *sql.DB) error {
 		report_type TEXT NOT NULL DEFAULT 'OTHER' CHECK(report_type IN ('CT','MRI','XRAY','ULTRASOUND','ECG','OTHER')),
 		exam_item_name TEXT NOT NULL DEFAULT '',
 		inspect_no TEXT NOT NULL DEFAULT '',
-		dept_name TEXT NOT NULL DEFAULT '',
-		doctor_name TEXT NOT NULL DEFAULT '',
 		sample_date TEXT NOT NULL,
 		exam_site TEXT NOT NULL DEFAULT '',
 		exam_description TEXT NOT NULL DEFAULT '',

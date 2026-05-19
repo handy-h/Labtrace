@@ -73,29 +73,6 @@ func ParseImagingReport(ocrResults []OCRResult) *models.ImagingParsedResult {
 			continue
 		}
 
-		if strings.Contains(lowerText, "科室") && !strings.Contains(lowerText, "影像表现") {
-			if sb.Len() > 0 {
-				saveCurrentField(result, currentField, sb.String())
-			}
-			currentField = "dept_name"
-			sb.Reset()
-			sb.WriteString(extractAfterColon(text))
-			continue
-		}
-
-		if strings.Contains(lowerText, "报告医生") || strings.Contains(lowerText, "诊断医生") ||
-			strings.Contains(lowerText, "审核医生") || strings.Contains(lowerText, "医生") {
-			if strings.Contains(lowerText, "医生") && !strings.Contains(lowerText, "影像表现") {
-				if sb.Len() > 0 {
-					saveCurrentField(result, currentField, sb.String())
-				}
-				currentField = "doctor_name"
-				sb.Reset()
-				sb.WriteString(extractAfterColon(text))
-				continue
-			}
-		}
-
 		if sb.Len() > 0 {
 			sb.WriteString("\n")
 			sb.WriteString(text)
@@ -120,10 +97,6 @@ func saveCurrentField(result *models.ImagingParsedResult, field, value string) {
 		result.ExamItemName = value
 	case "inspect_no":
 		result.InspectNo = value
-	case "dept_name":
-		result.DeptName = value
-	case "doctor_name":
-		result.DoctorName = value
 	case "exam_site":
 		result.ExamSite = value
 	case "exam_description":
@@ -153,8 +126,6 @@ func ParseImagingReportWithMapping(blocks []OCRResult, cfg models.ImagingMapping
 	fieldSetters := map[string]func(string){
 		"exam_item_name":   func(v string) { result.ExamItemName = v },
 		"inspect_no":       func(v string) { result.InspectNo = v },
-		"dept_name":        func(v string) { result.DeptName = v },
-		"doctor_name":      func(v string) { result.DoctorName = v },
 		"exam_site":        func(v string) { result.ExamSite = v },
 		"exam_description": func(v string) { result.ExamDescription = v },
 		"diagnosis_result": func(v string) { result.DiagnosisResult = v },

@@ -17,8 +17,6 @@ type ImagingReport struct {
 	ReportType       string `json:"report_type"`
 	ExamItemName     string `json:"exam_item_name"`
 	InspectNo        string `json:"inspect_no"`
-	DeptName         string `json:"dept_name"`
-	DoctorName       string `json:"doctor_name"`
 	SampleDate       string `json:"sample_date"`
 	ExamSite         string `json:"exam_site"`
 	ExamDescription  string `json:"exam_description"`
@@ -44,8 +42,6 @@ type ImagingUploadResponse struct {
 type ImagingParsedResult struct {
 	ExamItemName    string `json:"exam_item_name"`
 	InspectNo       string `json:"inspect_no"`
-	DeptName        string `json:"dept_name"`
-	DoctorName      string `json:"doctor_name"`
 	ExamSite        string `json:"exam_site"`
 	ExamDescription string `json:"exam_description"`
 	DiagnosisResult string `json:"diagnosis_result"`
@@ -54,7 +50,7 @@ type ImagingParsedResult struct {
 // ImagingMappingConfig stores the user-defined field mapping for imaging reports.
 type ImagingMappingConfig struct {
 	// FieldMappings maps field names to lists of OCR block indices.
-	// Valid field names: exam_item_name, inspect_no, dept_name, doctor_name,
+	// Valid field names: exam_item_name, inspect_no,
 	//                    exam_site, exam_description, diagnosis_result
 	FieldMappings map[string][]int `json:"field_mappings"`
 

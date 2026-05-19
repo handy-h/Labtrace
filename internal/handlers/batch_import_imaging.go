@@ -29,8 +29,6 @@ type ImagingBatchMappingConfig struct {
 	ExamDescription string `json:"exam_description"`
 	DiagnosisResult string `json:"diagnosis_result"`
 	InspectNo       string `json:"inspect_no"`
-	DeptName        string `json:"dept_name"`
-	DoctorName      string `json:"doctor_name"`
 }
 
 type ImagingBatchUploadResponse struct {
@@ -220,12 +218,10 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 		examDescription := getNestedValue(report.Data, req.Mappings.ExamDescription)
 		diagnosisResult := getNestedValue(report.Data, req.Mappings.DiagnosisResult)
 		inspectNo := getNestedValue(report.Data, req.Mappings.InspectNo)
-		deptName := getNestedValue(report.Data, req.Mappings.DeptName)
-		doctorName := getNestedValue(report.Data, req.Mappings.DoctorName)
 
 		res, err := database.DB.Exec(
-			`INSERT INTO imaging_reports (subject_id, hospital_id, report_type, exam_item_name, inspect_no, dept_name, doctor_name, sample_date, exam_site, exam_description, diagnosis_result, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')`,
-			req.SubjectID, hospID, req.ReportType, examItemName, inspectNo, deptName, doctorName, sampleDate, examSite, examDescription, diagnosisResult, filePath, fileMD5,
+			`INSERT INTO imaging_reports (subject_id, hospital_id, report_type, exam_item_name, inspect_no, sample_date, exam_site, exam_description, diagnosis_result, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')`,
+			req.SubjectID, hospID, req.ReportType, examItemName, inspectNo, sampleDate, examSite, examDescription, diagnosisResult, filePath, fileMD5,
 		)
 		if err != nil {
 			result.FailCount++

@@ -58,7 +58,16 @@ const ImagingMappingWizard = Vue.defineComponent({
       <div class="flex-1 relative bg-slate-800" ref="canvasWrapRef" style="overflow:hidden;">
         <canvas ref="canvasRef"
                 style="position:absolute;inset:0;cursor:default;touch-action:none;"
-                @click="onCanvasClick"></canvas>
+                @click="onCanvasClick"
+                @wheel="onWheel"
+                @mousedown="onMouseDown"
+                @mousemove="onMouseMove"
+                @mouseup="onMouseUp"
+                @mouseleave="onMouseUp"></canvas>
+        <!-- 缩放级别指示 -->
+        <div class="absolute bottom-2 right-2 text-white/60 text-xs bg-black/40 px-2 py-1 rounded select-none">
+          {{ (zoomLevel * 100).toFixed(0) }}%
+        </div>
         <!-- 加载中覆盖层 -->
         <div v-if="blocksLoading || pdfLoading"
              style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:5;"
@@ -118,8 +127,11 @@ const ImagingMappingWizard = Vue.defineComponent({
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
           <div v-for="field in fieldList" :key="field.key"
                class="bg-white rounded-lg border p-3 cursor-pointer transition-all"
-               :class="{'ring-2 ring-blue-500 shadow': activeField === field.key}"
-               @click="selectField(field.key)">
+               :class="{'ring-2 ring-blue-500 shadow': activeField === field.key, 'bg-blue-50': isDraggingOver === field.key}"
+               @click="selectField(field.key)"
+               @dragover.prevent="onDragOver(field.key)"
+               @dragleave="onDragLeave(field.key)"
+               @drop="onDrop(field.key, $event)">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm font-medium">{{field.label}}</span>
               <span class="text-xs px-2 py-0.5 rounded"
@@ -127,23 +139,54 @@ const ImagingMappingWizard = Vue.defineComponent({
                 {{getFieldBlockCount(field.key)}} 块
               </span>
             </div>
-            <div class="text-xs text-slate-600 line-clamp-3 whitespace-pre-wrap"
-                 style="max-height: 4.5rem; overflow: hidden;">
-              {{getFieldValue(field.key) || '未分配'}}
+
+            <!-- 编辑模式 -->
+            <div v-if="editingField === field.key" class="mt-2">
+              <textarea v-model="fieldEditValues[field.key]"
+                        class="w-full p-2 text-xs border rounded resize-none"
+                        rows="3"
+                        @keydown.escape="cancelFieldEdit"
+                        autofocus></textarea>
+              <div class="flex gap-2 mt-2">
+                <button @click.stop="saveFieldEdit(field.key)"
+                        class="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+                  保存
+                </button>
+                <button @click.stop="cancelFieldEdit"
+                        class="px-2 py-1 border text-xs rounded hover:bg-slate-50">
+                  取消
+                </button>
+              </div>
             </div>
-            <!-- 手动编辑 -->
-            <textarea v-if="editingField === field.key"
-                      v-model="fieldEditValues[field.key]"
-                      class="w-full mt-2 p-2 text-xs border rounded resize-none"
-                      rows="3"
-                      @blur="saveFieldEdit(field.key)"
-                      @keydown.escape="cancelFieldEdit"
-                      autofocus></textarea>
-            <button v-if="activeField === field.key && editingField !== field.key"
-                    @click.stop="startFieldEdit(field.key)"
-                    class="mt-2 text-xs text-blue-600 hover:text-blue-800">
-              ✎ 编辑内容
-            </button>
+
+            <!-- 非编辑模式 -->
+            <div v-else>
+              <div class="text-xs text-slate-600 line-clamp-3 whitespace-pre-wrap mb-2"
+                   style="max-height: 4.5rem; overflow: hidden;">
+                {{getFieldValue(field.key) || '未分配'}}
+              </div>
+
+              <!-- 已分配的 OCR 块列表（可移除） -->
+              <div v-if="fieldMappings[field.key] && fieldMappings[field.key].length > 0" class="space-y-1">
+                <div v-for="idx in fieldMappings[field.key]" :key="idx"
+                     class="flex items-center justify-between text-xs px-2 py-1 rounded"
+                     :style="{background: fieldColors[field.key] + '10'}">
+                  <span class="truncate flex-1">{{ocrBlocks[idx]?.text || ''}}</span>
+                  <button @click.stop="removeBlockFromField(field.key, idx)"
+                          class="ml-2 text-red-500 hover:text-red-700 shrink-0"
+                          title="移除此块">
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <!-- 编辑按钮 -->
+              <button v-if="activeField === field.key && !editingField"
+                      @click.stop="startFieldEdit(field.key)"
+                      class="mt-2 text-xs text-blue-600 hover:text-blue-800">
+                ✎ 编辑内容
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -154,7 +197,16 @@ const ImagingMappingWizard = Vue.defineComponent({
         <div class="flex-1 relative bg-slate-800" ref="canvasWrapRef2" style="overflow:hidden;">
           <canvas ref="canvasRef2"
                   style="position:absolute;inset:0;cursor:default;touch-action:none;"
-                  @click="onCanvasClick2"></canvas>
+                  @click="onCanvasClick2"
+                  @wheel="onWheel"
+                  @mousedown="onMouseDown"
+                  @mousemove="onMouseMove"
+                  @mouseup="onMouseUp"
+                  @mouseleave="onMouseUp"></canvas>
+          <!-- 缩放级别指示 -->
+          <div class="absolute bottom-2 right-2 text-white/60 text-xs bg-black/40 px-2 py-1 rounded select-none">
+            {{ (zoomLevel * 100).toFixed(0) }}%
+          </div>
         </div>
         <!-- 底部 OCR 块列表（可拖拽） -->
         <div class="h-48 border-t bg-white overflow-y-auto p-3">
@@ -251,13 +303,16 @@ const ImagingMappingWizard = Vue.defineComponent({
     let imgNaturalW = 0, imgNaturalH = 0;
     let canvasScale = 1;
     let canvasOffX = 0, canvasOffY = 0;
+    // 缩放状态
+    const zoomLevel = Vue.ref(1);
+    let isPanning = false;
+    let panOffsetX = 0, panOffsetY = 0;
+    let lastMouseX = 0, lastMouseY = 0;
 
     // 字段定义
     const fieldList = [
       { key: "exam_item_name", label: "检查项目" },
       { key: "inspect_no", label: "检查号" },
-      { key: "dept_name", label: "科室" },
-      { key: "doctor_name", label: "报告医生" },
       { key: "exam_site", label: "检查部位" },
       { key: "exam_description", label: "影像表现" },
       { key: "diagnosis_result", label: "诊断结论" },
@@ -267,8 +322,6 @@ const ImagingMappingWizard = Vue.defineComponent({
     const fieldColors = {
       exam_item_name: "#3B82F6",    // 蓝色
       inspect_no: "#10B981",        // 绿色
-      dept_name: "#F59E0B",         // 黄色
-      doctor_name: "#8B5CF6",       // 紫色
       exam_site: "#EF4444",         // 红色
       exam_description: "#EC4899",  // 粉色
       diagnosis_result: "#F97316",  // 橙色
@@ -304,7 +357,12 @@ const ImagingMappingWizard = Vue.defineComponent({
       try {
         const r = await api.getImagingOCRBlocks(props.reportId);
         if (r.code === 0 && r.data) {
-          ocrBlocks.value = r.data.blocks || [];
+          let blocks = r.data.blocks || [];
+
+          // 拆分包含"标签：内容"格式的块
+          blocks = splitOcrBlocks(blocks);
+
+          ocrBlocks.value = blocks;
           // 尝试加载医院模板
           if (props.hospitalId) {
             await loadHospitalTemplate();
@@ -331,12 +389,60 @@ const ImagingMappingWizard = Vue.defineComponent({
       }
     }
 
+    // 拆分包含"标签：内容"格式的 OCR 块
+    function splitOcrBlocks(blocks) {
+      const splitBlocks = [];
+
+      blocks.forEach((block) => {
+        const text = block.text || "";
+
+        // 检查是否包含冒号分隔符（中文或英文）
+        const colonIdx = text.indexOf("：");
+        const colonIdxEn = text.indexOf(":");
+        const splitIdx = colonIdx !== -1 ? colonIdx : colonIdxEn;
+
+        if (splitIdx !== -1 && splitIdx > 0 && splitIdx < text.length - 1) {
+          // 拆分为两个块：标签和内容
+          const label = text.substring(0, splitIdx).trim();
+          const content = text.substring(splitIdx + 1).trim();
+
+          // 按字符比例分配宽度
+          const textLen = text.length;
+          const labelRatio = label.length / textLen;
+
+          if (label) {
+            splitBlocks.push({
+              ...block,
+              text: label,
+              width: Math.max(1, Math.round(block.width * labelRatio)),
+            });
+          }
+
+          if (content) {
+            splitBlocks.push({
+              ...block,
+              text: content,
+              left: block.left + Math.round(block.width * labelRatio),
+              width: Math.max(1, Math.round(block.width * (content.length / textLen))),
+            });
+          }
+        } else {
+          // 不包含分隔符，保持原样
+          splitBlocks.push(block);
+        }
+      });
+
+      return splitBlocks;
+    }
+
     // PDF 模式：加载第一页到离屏 canvas 作为背景
     async function loadPdfBackground() {
       try {
         pdfDoc = await pdfjsLib.getDocument(props.reportImageUrl).promise;
         pdfPage = await pdfDoc.getPage(1);
+        console.log("[imaging-wizard] PDF loaded, viewport:", pdfPage.getViewport({ scale: 1 }));
         await renderPdfToBackground();
+        console.log("[imaging-wizard] PDF rendered to bg canvas:", pdfBgCanvas?.width, pdfBgCanvas?.height);
       } catch (e) {
         console.error("[imaging-wizard] pdf.js load error", e);
         pdfPage = null;
@@ -350,7 +456,12 @@ const ImagingMappingWizard = Vue.defineComponent({
 
       const bbox = computeOcrBbox();
       const viewport = pdfPage.getViewport({ scale: 1 });
-      const renderScale = bbox.w / viewport.width;
+
+      // 计算缩放比例，保持宽高比
+      const scaleX = bbox.w / viewport.width;
+      const scaleY = bbox.h / viewport.height;
+      const renderScale = Math.min(scaleX, scaleY); // 使用较小的缩放比例保持宽高比
+
       const scaledViewport = pdfPage.getViewport({ scale: renderScale });
 
       pdfBgCanvas = document.createElement("canvas");
@@ -381,8 +492,6 @@ const ImagingMappingWizard = Vue.defineComponent({
       const keywords = {
         exam_item_name: [/检查项目/, /检查名称/],
         inspect_no: [/检查号/, /报告编号/, /编号/],
-        dept_name: [/科室/],
-        doctor_name: [/报告医生/, /诊断医生/, /审核医生/],
         exam_site: [/检查部位/, /部位/],
         exam_description: [/影像表现/, /所见/, /描述/],
         diagnosis_result: [/诊断结论/, /印象/, /诊断意见/],
@@ -409,8 +518,13 @@ const ImagingMappingWizard = Vue.defineComponent({
     }
 
     function getFieldValue(key) {
+      // 如果有手动编辑的值，优先使用
+      if (fieldEditValues.value[key] !== undefined && fieldEditValues.value[key] !== "") {
+        return fieldEditValues.value[key];
+      }
+      // 否则使用映射的 OCR 块内容
       const indices = fieldMappings.value[key] || [];
-      if (!indices.length) return fieldEditValues.value[key] || "";
+      if (!indices.length) return "";
       const texts = indices
         .filter(idx => idx >= 0 && idx < ocrBlocks.value.length)
         .map(idx => ocrBlocks.value[idx].text)
@@ -426,7 +540,7 @@ const ImagingMappingWizard = Vue.defineComponent({
       // 查找该块属于哪个字段
       for (const [field, indices] of Object.entries(fieldMappings.value)) {
         if (indices.includes(idx)) {
-          return fieldColors[field] + "40"; // 40% 透明度
+          return fieldColors[field] + "0D"; // 5% 透明度（十六进制 0D ≈ 5%）
         }
       }
       return "#E2E8F0"; // 默认灰色
@@ -456,10 +570,56 @@ const ImagingMappingWizard = Vue.defineComponent({
       editingField.value = null;
     }
 
-    // 拖拽
+    // 拖拽状态
+    const isDraggingOver = Vue.ref(null);
+
+    // 拖拽（从 OCR 块列表到字段卡片）
     function onDragStart(idx) {
       // 设置拖拽数据
       event.dataTransfer.setData("text/plain", idx);
+    }
+
+    function onDragOver(fieldKey) {
+      isDraggingOver.value = fieldKey;
+    }
+
+    function onDragLeave(fieldKey) {
+      isDraggingOver.value = null;
+    }
+
+    function onDrop(fieldKey, event) {
+      event.preventDefault();
+      isDraggingOver.value = null;
+      const idx = parseInt(event.dataTransfer.getData("text/plain"));
+      if (isNaN(idx) || idx < 0 || idx >= ocrBlocks.value.length) return;
+
+      // 将 OCR 块添加到字段
+      if (!fieldMappings.value[fieldKey]) {
+        fieldMappings.value[fieldKey] = [];
+      }
+      if (!fieldMappings.value[fieldKey].includes(idx)) {
+        fieldMappings.value[fieldKey].push(idx);
+      }
+
+      // 重新渲染 Canvas
+      Vue.nextTick(() => {
+        renderCanvas(canvasRef.value, canvasWrapRef.value);
+        renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+      });
+    }
+
+    function removeBlockFromField(fieldKey, blockIdx) {
+      if (!fieldMappings.value[fieldKey]) return;
+      fieldMappings.value[fieldKey] = fieldMappings.value[fieldKey].filter(idx => idx !== blockIdx);
+      // 如果字段没有块了，删除该字段
+      if (fieldMappings.value[fieldKey].length === 0) {
+        delete fieldMappings.value[fieldKey];
+      }
+      // 重新渲染 Canvas
+      Vue.nextTick(() => {
+        renderCanvas(canvasRef.value, canvasWrapRef.value);
+        renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+      });
     }
 
     // 计算 OCR 块的包围盒（用于 PDF 背景缩放）
@@ -479,19 +639,33 @@ const ImagingMappingWizard = Vue.defineComponent({
         w: (maxX - minX) || 1, h: (maxY - minY) || 1 };
     }
 
-    // Canvas 渲染
+    // Canvas 渲染（支持缩放和平移）
     function renderCanvas(canvas, wrapRef) {
       if (!canvas || !wrapRef) return;
-      const ctx = canvas.getContext("2d");
       const wrap = wrapRef;
       const w = wrap.clientWidth || 800;
       const h = wrap.clientHeight || 600;
+
+      // 如果容器尺寸为 0，延迟重试
+      if (w < 10 || h < 10) {
+        requestAnimationFrame(() => renderCanvas(canvas, wrapRef));
+        return;
+      }
+
+      const ctx = canvas.getContext("2d");
       canvas.width = w;
       canvas.height = h;
 
       ctx.clearRect(0, 0, w, h);
       canvasOffX = 0;
       canvasOffY = 0;
+
+      // 应用缩放和平移
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.scale(zoomLevel.value, zoomLevel.value);
+      ctx.translate(-w / 2, -h / 2);
+      ctx.translate(panOffsetX, panOffsetY);
 
       if (loadedImage) {
         // 图片模式：绘制图片背景
@@ -522,7 +696,8 @@ const ImagingMappingWizard = Vue.defineComponent({
         ctx.fillRect(0, 0, w, h);
       }
 
-      // 绘制 OCR 块（带颜色高亮）
+      // 绘制 OCR 块（带颜色高亮，极低透明度）
+      ctx.globalAlpha = 0.08; // 8% 透明度（进一步降低遮挡）
       ocrBlocks.value.forEach((block, idx) => {
         if (!block.has_position) return;
         const bx = canvasOffX + block.left * canvasScale;
@@ -536,6 +711,46 @@ const ImagingMappingWizard = Vue.defineComponent({
         ctx.lineWidth = 2;
         ctx.strokeRect(bx, by, bw, bh);
       });
+      ctx.globalAlpha = 1; // 恢复透明度
+
+      ctx.restore();
+    }
+
+    // 鼠标滚轮缩放
+    function onWheel(e) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      zoomLevel.value = Math.max(0.5, Math.min(5, zoomLevel.value * delta));
+      Vue.nextTick(() => {
+        renderCanvas(canvasRef.value, canvasWrapRef.value);
+        renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+      });
+    }
+
+    // 鼠标拖拽平移
+    function onMouseDown(e) {
+      if (e.button !== 0) return; // 只响应左键
+      isPanning = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    }
+
+    function onMouseMove(e) {
+      if (!isPanning) return;
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      panOffsetX += dx;
+      panOffsetY += dy;
+      Vue.nextTick(() => {
+        renderCanvas(canvasRef.value, canvasWrapRef.value);
+        renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+      });
+    }
+
+    function onMouseUp() {
+      isPanning = false;
     }
 
     function onSourceImageLoad() {
@@ -584,8 +799,11 @@ const ImagingMappingWizard = Vue.defineComponent({
     // 步骤导航
     function goStep2() {
       step.value = 2;
-      Vue.nextTick(() => {
-        renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+      // 使用 requestAnimationFrame 确保 DOM 完全渲染和布局
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+        });
       });
     }
 
@@ -615,16 +833,29 @@ const ImagingMappingWizard = Vue.defineComponent({
       }
     }
 
+    // 监听 step 变化，切换到 Step 2 时重新渲染 Canvas
+    Vue.watch(step, (newVal) => {
+      if (newVal === 2) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+          });
+        });
+      }
+    });
+
     return {
       steps, step,
       ocrBlocks, blocksLoading, pdfLoading, isPdf,
       canvasRef, canvasWrapRef, sourceImgRef, canvasRef2, canvasWrapRef2,
       fieldList, fieldColors,
       fieldMappings, fieldEditValues, editingField, activeField, selectedBlockIdx,
-      saveAsTemplate,
+      saveAsTemplate, isDraggingOver, zoomLevel,
       getFieldLabel, getFieldValue, getFieldBlockCount, getBlockColor,
       selectBlock, selectField, startFieldEdit, saveFieldEdit, cancelFieldEdit,
-      onDragStart, onSourceImageLoad, onSourceImageError,
+      onDragStart, onDragOver, onDragLeave, onDrop, removeBlockFromField,
+      onWheel, onMouseDown, onMouseMove, onMouseUp,
+      onSourceImageLoad, onSourceImageError,
       onCanvasClick, onCanvasClick2,
       goStep2, doApplyAndFinish,
     };
