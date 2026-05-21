@@ -14,10 +14,17 @@ import (
 func DashboardSummary(c *gin.Context) {
 	var subjectCount, pendingCount, anomalyCount, hospitalCount int
 
-	database.DB.QueryRow(`SELECT COUNT(*) FROM subjects`).Scan(&subjectCount)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM lab_reports WHERE ocr_status = 'review'`).Scan(&pendingCount)
-	database.DB.QueryRow(`SELECT COUNT(*) FROM report_items WHERE flag IN ('H', 'L', '阳性', '阴性')`).Scan(&anomalyCount)
-	database.DB.QueryRow(`SELECT COUNT(DISTINCT hospital_id) FROM lab_reports WHERE hospital_id IS NOT NULL`).Scan(&hospitalCount)
+	err := database.DB.QueryRow(`
+		SELECT
+			(SELECT COUNT(*) FROM subjects),
+			(SELECT COUNT(*) FROM lab_reports WHERE ocr_status = 'review'),
+			(SELECT COUNT(*) FROM report_items WHERE flag != '' AND flag != 'normal'),
+			(SELECT COUNT(DISTINCT hospital_id) FROM lab_reports WHERE hospital_id IS NOT NULL)
+	`).Scan(&subjectCount, &pendingCount, &anomalyCount, &hospitalCount)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
 		"subjects":  subjectCount,

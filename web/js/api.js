@@ -2,18 +2,24 @@
 const API_BASE = "/api/v1";
 
 const api = {
-  async request(method, path, body) {
+  async request(method, path, body, signal) {
     const opts = {
       method,
       headers: { "Content-Type": "application/json" },
     };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(API_BASE + path, opts);
-    const json = await res.json();
-    if (json.code !== 0) {
-      console.error("API error:", json.message);
+    if (signal) opts.signal = signal;
+    try {
+      const res = await fetch(API_BASE + path, opts);
+      const json = await res.json();
+      if (json.code !== 0) {
+        console.error("API error:", json.message);
+      }
+      return json;
+    } catch (e) {
+      if (e.name === "AbortError") return null;
+      throw e;
     }
-    return json;
   },
 
   async upload(path, formData) {
@@ -24,17 +30,17 @@ const api = {
     return res.json();
   },
 
-  get(path) {
-    return this.request("GET", path);
+  get(path, signal) {
+    return this.request("GET", path, null, signal);
   },
-  post(path, b) {
-    return this.request("POST", path, b);
+  post(path, b, signal) {
+    return this.request("POST", path, b, signal);
   },
-  put(path, b) {
-    return this.request("PUT", path, b);
+  put(path, b, signal) {
+    return this.request("PUT", path, b, signal);
   },
-  del(path) {
-    return this.request("DELETE", path);
+  del(path, signal) {
+    return this.request("DELETE", path, null, signal);
   },
 
   // Health
@@ -43,9 +49,10 @@ const api = {
   },
 
   // Subjects
-  listSubjects(search) {
+  listSubjects(search, signal) {
     return this.get(
       "/subjects" + (search ? "?search=" + encodeURIComponent(search) : ""),
+      signal,
     );
   },
   createSubject(data) {
@@ -62,8 +69,8 @@ const api = {
   },
 
   // Hospitals
-  listHospitals() {
-    return this.get("/hospitals");
+  listHospitals(signal) {
+    return this.get("/hospitals", signal);
   },
   createHospital(data) {
     return this.post("/hospitals", data);
@@ -76,10 +83,11 @@ const api = {
   },
 
   // Test Items
-  listTestItems(category) {
+  listTestItems(category, signal) {
     return this.get(
       "/test-items" +
         (category ? "?category=" + encodeURIComponent(category) : ""),
+      signal,
     );
   },
   createTestItem(data) {
@@ -148,9 +156,9 @@ const api = {
   },
 
   // Reports
-  listReports(params) {
+  listReports(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/reports" + (q ? "?" + q : ""));
+    return this.get("/reports" + (q ? "?" + q : ""), signal);
   },
   getReport(id) {
     return this.get("/reports/" + id);
@@ -178,8 +186,8 @@ const api = {
   reOCR(id) {
     return this.post("/reports/" + id + "/re-ocr");
   },
-  getOCRQuota() {
-    return this.get("/ocr/quota");
+  getOCRQuota(signal) {
+    return this.get("/ocr/quota", signal);
   },
   updateOCRQuota(d) {
     return this.put("/ocr/quota", d);
@@ -216,18 +224,18 @@ const api = {
   },
 
   // Trend
-  getTrendData(params) {
+  getTrendData(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/trend/data" + (q ? "?" + q : ""));
+    return this.get("/trend/data" + (q ? "?" + q : ""), signal);
   },
 
   // Dashboard
-  dashboardSummary() {
-    return this.get("/dashboard/summary");
+  dashboardSummary(signal) {
+    return this.get("/dashboard/summary", signal);
   },
-  dashboardAnomalies(params) {
+  dashboardAnomalies(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/dashboard/anomalies" + (q ? "?" + q : ""));
+    return this.get("/dashboard/anomalies" + (q ? "?" + q : ""), signal);
   },
 
   // Backups
@@ -237,8 +245,8 @@ const api = {
   importBackup(formData) {
     return this.upload("/backups/import", formData);
   },
-  listBackups() {
-    return this.get("/backups");
+  listBackups(signal) {
+    return this.get("/backups", signal);
   },
   deleteBackup(id) {
     return this.del("/backups/" + id);
@@ -249,40 +257,25 @@ const api = {
     return this.put("/reports/" + id, d);
   },
 
-  // Test Items (检验项目库)
-  listTestItems(category) {
-    const q = category ? "?category=" + encodeURIComponent(category) : "";
-    return this.get("/test-items" + q);
-  },
-  createTestItem(d) {
-    return this.post("/test-items", d);
-  },
-  updateTestItem(id, d) {
-    return this.put("/test-items/" + id, d);
-  },
-  deleteTestItem(id) {
-    return this.del("/test-items/" + id);
-  },
-
   // Audit Logs
-  listAuditLogs(params) {
+  listAuditLogs(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/audit-logs" + (q ? "?" + q : ""));
+    return this.get("/audit-logs" + (q ? "?" + q : ""), signal);
   },
 
   // Imaging Reports
-  listImagingReportTypes() {
-    return this.get("/imaging-report-types");
+  listImagingReportTypes(signal) {
+    return this.get("/imaging-report-types", signal);
   },
-  listImagingExamItems() {
-    return this.get("/imaging-exam-items");
+  listImagingExamItems(signal) {
+    return this.get("/imaging-exam-items", signal);
   },
   uploadImagingReport(formData) {
     return this.upload("/imaging/upload", formData);
   },
-  listImagingReports(params) {
+  listImagingReports(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/imaging-reports" + (q ? "?" + q : ""));
+    return this.get("/imaging-reports" + (q ? "?" + q : ""), signal);
   },
   getImagingReport(id) {
     return this.get("/imaging-reports/" + id);

@@ -101,7 +101,7 @@ func UpdateSubject(c *gin.Context) {
 		return
 	}
 
-	_, err := database.DB.Exec(
+	result, err := database.DB.Exec(
 		`UPDATE subjects SET name=?, gender=?, birth_date=?, updated_at=datetime('now') WHERE id=?`,
 		s.Name, s.Gender, s.BirthDate, id,
 	)
@@ -109,14 +109,22 @@ func UpdateSubject(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
 	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, models.Error("subject not found"))
+		return
+	}
 	c.JSON(http.StatusOK, models.Success(nil))
 }
 
 func DeleteSubject(c *gin.Context) {
 	id := c.Param("id")
-	_, err := database.DB.Exec(`DELETE FROM subjects WHERE id = ?`, id)
+	result, err := database.DB.Exec(`DELETE FROM subjects WHERE id = ?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, models.Error("subject not found"))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -167,9 +175,13 @@ func UpdateHospital(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.Error(err.Error()))
 		return
 	}
-	_, err := database.DB.Exec(`UPDATE hospitals SET name=?, level=? WHERE id=?`, h.Name, h.Level, id)
+	result, err := database.DB.Exec(`UPDATE hospitals SET name=?, level=? WHERE id=?`, h.Name, h.Level, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, models.Error("hospital not found"))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -177,9 +189,13 @@ func UpdateHospital(c *gin.Context) {
 
 func DeleteHospital(c *gin.Context) {
 	id := c.Param("id")
-	_, err := database.DB.Exec(`DELETE FROM hospitals WHERE id=?`, id)
+	result, err := database.DB.Exec(`DELETE FROM hospitals WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, models.Error("hospital not found"))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

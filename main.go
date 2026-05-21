@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"labtrace/internal/config"
 	"labtrace/internal/database"
@@ -163,16 +166,28 @@ func main() {
 	}
 
 	// Graceful shutdown
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
+	}
+
 	go func() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
 		fmt.Println("\nShutting down...")
-		database.Close()
-		os.Exit(0)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("Server shutdown error: %v", err)
+		}
+
+		// 等待所有后台 OCR goroutine 完成
+		handlers.OCRWaitGroup.Wait()
 	}()
 
-	if err := r.Run(":" + cfg.Port); err != nil {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
 	}
 }

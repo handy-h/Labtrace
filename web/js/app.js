@@ -97,7 +97,6 @@ app.component("CrudModal", CrudModal);
 app.component("SearchDropdown", SearchDropdown);
 app.component("SubjectSelector", SubjectSelector);
 app.component("SparklineChart", SparklineChart);
-app.component("SyncScrollPanel", SyncScrollPanel);
 app.component("DrilldownPopup", DrilldownPopup);
 
 app.mount("#app");

@@ -71,7 +71,7 @@ func UpdateTestItem(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.Error(err.Error()))
 		return
 	}
-	_, err := database.DB.Exec(
+	result, err := database.DB.Exec(
 		`UPDATE test_items SET code=?, standard_name=?, category=?, default_unit=?, value_type=? WHERE id=?`,
 		it.Code, it.StandardName, it.Category, it.DefaultUnit, it.ValueType, id,
 	)
@@ -79,14 +79,22 @@ func UpdateTestItem(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
 	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, models.Error("test item not found"))
+		return
+	}
 	c.JSON(http.StatusOK, models.Success(nil))
 }
 
 func DeleteTestItem(c *gin.Context) {
 	id := c.Param("id")
-	_, err := database.DB.Exec(`DELETE FROM test_items WHERE id=?`, id)
+	result, err := database.DB.Exec(`DELETE FROM test_items WHERE id=?`, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, models.Error("test item not found"))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

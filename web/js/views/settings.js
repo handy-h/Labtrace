@@ -129,6 +129,7 @@ const SettingsView = Vue.defineComponent({
     const editingHospId = Vue.ref(null);
     const quota = Vue.ref(null);
     const editUsed = Vue.ref('');
+    const _ctrl = new AbortController();
 
     // 检验项目分类
     const testItems = Vue.ref([]);
@@ -192,8 +193,8 @@ const SettingsView = Vue.defineComponent({
     });
 
     function loadQuota() {
-      api.getOCRQuota().then(r => {
-        if (r.data) { quota.value = r.data; editUsed.value = String(r.data.used_count); }
+      api.getOCRQuota(_ctrl.signal).then(r => {
+        if (r && r.data) { quota.value = r.data; editUsed.value = String(r.data.used_count); }
       });
     }
     function saveQuota() {
@@ -206,10 +207,10 @@ const SettingsView = Vue.defineComponent({
       });
     }
 
-    function loadBackups() { api.listBackups().then(r => { if (r.data) backups.value = r.data; }); }
-    function loadAudit() { api.listAuditLogs().then(r => { if (r.data) auditLogs.value = r.data; }); }
-    function loadHospitals() { api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; }); }
-    function loadTestItems() { api.listTestItems().then(r => { if (r.data) testItems.value = r.data; }); }
+    function loadBackups() { api.listBackups(_ctrl.signal).then(r => { if (r && r.data) backups.value = r.data; }); }
+    function loadAudit() { api.listAuditLogs(null, _ctrl.signal).then(r => { if (r && r.data) auditLogs.value = r.data; }); }
+    function loadHospitals() { api.listHospitals(_ctrl.signal).then(r => { if (r && r.data) hospitals.value = r.data; }); }
+    function loadTestItems() { api.listTestItems(null, _ctrl.signal).then(r => { if (r && r.data) testItems.value = r.data; }); }
     function doExport() {
       api.exportBackup(backupDesc.value).then(r => {
         if (r.code === 0) { alert('备份成功: ' + r.data.filename); backupDesc.value = ''; loadBackups(); }
@@ -252,6 +253,7 @@ const SettingsView = Vue.defineComponent({
     }
 
     Vue.onMounted(() => { loadBackups(); loadAudit(); loadHospitals(); loadQuota(); loadTestItems(); });
+    Vue.onUnmounted(() => _ctrl.abort());
     return {
       backupDesc, backups, auditLogs, hospitals, showHospModal, hospForm, editingHospId,
       quota, editUsed, quotaPct, quotaTextClass, quotaBarClass,

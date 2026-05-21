@@ -94,10 +94,10 @@ const OCRImportView = Vue.defineComponent({
           <span v-else style="color: var(--color-text-muted)">—</span>
         </template>
         <template #cell-actions="{ row }">
-          <button @click="viewReport(row.id)" class="btn-ghost" style="font-size: 0.875rem">查看</button>
-          <button v-if="row.ocr_status==='review'" @click="openMappingWizard(row)" class="btn-ghost" style="font-size: 0.875rem; color: #9333ea">自定义映射</button>
-          <button v-if="row.ocr_status==='review'" @click="doImport(row.id)" class="btn-ghost" style="font-size: 0.875rem; color: var(--color-success)">入库</button>
-          <button v-if="row.ocr_status!=='processing'" @click="doReOCR(row.id)" class="btn-ghost" style="font-size: 0.875rem; color: var(--color-warning)">重新识别</button>
+          <button @click="viewReport(row.id)" class="btn-ghost">查看</button>
+          <button v-if="row.ocr_status==='review'" @click="openMappingWizard(row)" class="btn-ghost info">自定义映射</button>
+          <button v-if="row.ocr_status==='review'" @click="doImport(row.id)" class="btn-ghost success">入库</button>
+          <button v-if="row.ocr_status!=='processing'" @click="doReOCR(row.id)" class="btn-ghost warning">重新识别</button>
         </template>
       </data-table>
     </div>
@@ -106,6 +106,9 @@ const OCRImportView = Vue.defineComponent({
     <div v-if="imagingReports.length && form.report_category === 'imaging'" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">影像检查报告列表</h2>
       <data-table :columns="imagingReportListColumns" :data="imagingReports" empty-text="暂无影像报告">
+        <template #cell-sample_date="{ row }">
+          {{ formatDate(row.sample_date) }}
+        </template>
         <template #cell-report_type="{ row }">
           <span class="px-2 py-0.5 rounded text-xs" style="background: var(--color-primary); color: white">{{ getImagingTypeName(row.report_type) }}</span>
         </template>
@@ -121,10 +124,10 @@ const OCRImportView = Vue.defineComponent({
           <span :class="statusClass(row.ocr_status)">{{statusText(row.ocr_status)}}</span>
         </template>
         <template #cell-actions="{ row }">
-          <button @click="viewImagingReport(row.id)" class="btn-ghost" style="font-size: 0.875rem">查看</button>
-          <button v-if="row.ocr_status==='review'" @click="openImagingMappingWizard(row)" class="btn-ghost" style="font-size: 0.875rem; color: #9333ea">自定义映射</button>
-          <button v-if="row.ocr_status==='review'" @click="doImportImaging(row.id)" class="btn-ghost" style="font-size: 0.875rem; color: var(--color-success)">入库</button>
-          <button v-if="row.ocr_status!=='processing'" @click="doReOCRImaging(row.id)" class="btn-ghost" style="font-size: 0.875rem; color: var(--color-warning)">重新识别</button>
+          <button @click="viewImagingReport(row.id)" class="btn-ghost">查看</button>
+          <button v-if="row.ocr_status==='review'" @click="openImagingMappingWizard(row)" class="btn-ghost info">自定义映射</button>
+          <button v-if="row.ocr_status==='review'" @click="doImportImaging(row.id)" class="btn-ghost success">入库</button>
+          <button v-if="row.ocr_status!=='processing'" @click="doReOCRImaging(row.id)" class="btn-ghost warning">重新识别</button>
         </template>
       </data-table>
     </div>
@@ -162,7 +165,7 @@ const OCRImportView = Vue.defineComponent({
           <!-- Right: data table -->
           <div class="overflow-auto" style="width: 55%; border-left: 1px solid var(--table-border)">
             <div class="px-4 py-2 flex items-center gap-2" style="border-bottom: 1px solid var(--table-border); background: var(--color-bg-secondary)">
-              <label class="text-sm font-medium" style="color: var(--color-text-secondary); white-space: nowrap">检验项目分类：</label>
+              <label class="form-label" style="white-space: nowrap">检验项目分类：</label>
               <input v-model="selectedReport.categories"
                      class="form-input"
                      style="flex: 1; max-width: 200px"
@@ -337,7 +340,7 @@ const OCRImportView = Vue.defineComponent({
         <div class="progress-bar-fill bg-blue-500" :style="{ width: batchPct + '%' }"></div>
       </div>
       <div style="max-height: 5rem; overflow-y: auto">
-        <div v-for="(item, i) in batchQueue" :key="i" class="flex items-center gap-2" style="padding: 1px 0">
+        <div v-for="item in batchQueue" :key="item.file.name" class="flex items-center gap-2" style="padding: 1px 0">
           <span v-if="item.status === 'done'" style="color: var(--color-success)">&#10003;</span>
           <span v-else-if="item.status === 'error'" style="color: var(--color-danger)">&#10007;</span>
           <span v-else-if="item.status === 'uploading'" style="color: var(--color-warning)">&#9679;</span>
@@ -359,7 +362,7 @@ const OCRImportView = Vue.defineComponent({
     </ocr-mapping-wizard>
 
     <!-- 关联标准项目弹窗 -->
-    <div v-if="showLinkModal" class="modal-overlay" @click.self="showLinkModal=false">
+    <div v-if="showLinkModal" class="modal-overlay" @mousedown.self="showLinkModal=false">
       <div class="modal-content w-[420px]">
         <h2 class="modal-title">关联标准项目</h2>
         <div class="card" style="background: var(--color-bg); margin-bottom: 0.75rem">
@@ -414,6 +417,7 @@ const OCRImportView = Vue.defineComponent({
     const uploading = Vue.ref(false);
     const selectedReport = Vue.ref(null);
     const selectedImagingReport = Vue.ref(null);
+    const _ctrl = new AbortController();
     const reportImageUrl = Vue.ref("");
     const imagingImageUrl = Vue.ref("");
     const selectedRowIndex = Vue.ref(-1);
@@ -472,16 +476,16 @@ const OCRImportView = Vue.defineComponent({
     const currentSubjectId = Vue.inject("currentSubjectId", null);
 
     Vue.onMounted(() => {
-      api.listSubjects().then((r) => { if (r.data) subjects.value = r.data; });
-      api.listHospitals().then((r) => { if (r.data) hospitals.value = r.data; });
-      api.listImagingReportTypes().then((r) => { if (r.data) imagingTypes.value = r.data; });
+      api.listSubjects(null, _ctrl.signal).then((r) => { if (r && r.data) subjects.value = r.data; });
+      api.listHospitals(_ctrl.signal).then((r) => { if (r && r.data) hospitals.value = r.data; });
+      api.listImagingReportTypes(_ctrl.signal).then((r) => { if (r && r.data) imagingTypes.value = r.data; });
       loadLabReports();
       loadImagingReports();
       loadQuota();
       document.addEventListener("keydown", onKeyDown);
     });
 
-    Vue.onUnmounted(() => { document.removeEventListener("keydown", onKeyDown); });
+    Vue.onUnmounted(() => { document.removeEventListener("keydown", onKeyDown); _ctrl.abort(); });
 
     if (currentSubjectId) {
       Vue.watch(currentSubjectId, (id) => { if (id) form.value.subject_id = id; });
@@ -913,10 +917,12 @@ const OCRImportView = Vue.defineComponent({
     // 格式化日期：只取日期部分 YYYY-MM-DD
     function formatDate(raw) {
       if (!raw) return '-';
-      // 提取日期部分（去掉时间）
-      const datePart = String(raw).split(/\s+/)[0];
-      // 统一分隔符为 -
-      return datePart.replace(/[\/.]/g, '-');
+      const s = String(raw).trim();
+      // 先尝试提取 YYYY-MM-DD 或 YYYY/MM/DD 或 YYYY.MM.DD
+      const m = s.match(/(\d{4}[-\/\.]\d{1,2}[-\/\.]\d{1,2})/);
+      if (m) return m[1].replace(/[\/.]/g, '-');
+      // 回退：取第一个空格前的部分
+      return s.split(/\s+/)[0].replace(/[\/.]/g, '-');
     }
 
     return {

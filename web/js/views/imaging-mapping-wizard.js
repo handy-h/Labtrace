@@ -18,7 +18,7 @@ const ImagingMappingWizard = Vue.defineComponent({
 <teleport to="body">
 <div v-if="visible"
      class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60"
-     @click.self="$emit('close')">
+     @mousedown.self="$emit('close')">
   <!-- 隐藏图片加载器 -->
   <img v-if="!isPdf"
        ref="sourceImgRef"

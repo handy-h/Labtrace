@@ -169,6 +169,16 @@ func migrate(db *sql.DB) error {
 		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 	);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_imaging_reports_md5 ON imaging_reports(file_md5) WHERE file_md5 != '';
+
+	CREATE INDEX IF NOT EXISTS idx_report_items_report_id    ON report_items(report_id);
+	CREATE INDEX IF NOT EXISTS idx_report_items_test_item_id ON report_items(test_item_id);
+	CREATE INDEX IF NOT EXISTS idx_report_items_flag         ON report_items(flag) WHERE flag != '';
+	CREATE INDEX IF NOT EXISTS idx_ref_intervals_test_item   ON reference_intervals(test_item_id);
+	CREATE INDEX IF NOT EXISTS idx_lab_reports_subject       ON lab_reports(subject_id);
+	CREATE INDEX IF NOT EXISTS idx_lab_reports_status        ON lab_reports(ocr_status);
+	CREATE INDEX IF NOT EXISTS idx_lab_reports_sample_date   ON lab_reports(sample_date);
+	CREATE INDEX IF NOT EXISTS idx_test_items_standard_name  ON test_items(standard_name);
+	CREATE INDEX IF NOT EXISTS idx_aliases_alias_name        ON test_item_aliases(alias_name);
 	`
 
 	_, err := db.Exec(ddl)

@@ -6,7 +6,7 @@ const BatchImportView = Vue.defineComponent({
     <div class="card">
       <!-- Step 1: 基本信息 -->
       <div v-if="step === 1">
-        <h3 class="text-lg font-medium mb-4">步骤 1: 选择受检者和医院</h3>
+        <h3 class="page-subtitle">步骤 1: 选择受检者和医院</h3>
         <div class="form-row mb-4">
           <div class="form-group">
             <label class="form-label">受检者</label>
@@ -28,8 +28,8 @@ const BatchImportView = Vue.defineComponent({
 
       <!-- Step 2: 上传文件 -->
       <div v-if="step === 2">
-        <h3 class="text-lg font-medium mb-4">步骤 2: 上传文件</h3>
-        <p class="text-sm text-gray-600 mb-4">请上传JSON和PDF文件，文件名将自动匹配</p>
+        <h3 class="page-subtitle">步骤 2: 上传文件</h3>
+        <p class="text-hint mb-4">请上传JSON和PDF文件，文件名将自动匹配</p>
         <div class="form-row mb-4">
           <div class="form-group">
             <label class="form-label">JSON文件</label>
@@ -41,9 +41,9 @@ const BatchImportView = Vue.defineComponent({
           </div>
         </div>
         <div v-if="filePairs.length" class="mb-4">
-          <h4 class="font-medium mb-2">已匹配的文件</h4>
+          <h4 class="section-title">已匹配的文件</h4>
           <div class="max-h-32 overflow-y-auto border rounded p-2">
-            <div v-for="(p, i) in filePairs" :key="i" class="flex items-center gap-2 py-1">
+            <div v-for="p in filePairs" :key="p.name" class="flex items-center gap-2 py-1">
               <span class="text-green-600">✓</span>
               <span>{{ p.name }}</span>
             </div>
@@ -65,14 +65,14 @@ const BatchImportView = Vue.defineComponent({
 
       <!-- Step 3: 字段映射 -->
       <div v-if="step === 3">
-        <h3 class="text-lg font-medium mb-3">步骤 3: 配置字段映射</h3>
+        <h3 class="page-subtitle">步骤 3: 配置字段映射</h3>
 
         <!-- 文件切换标签（独立一行） -->
         <div v-if="previewData.length > 1" class="mb-3">
           <div class="flex gap-1 flex-wrap">
             <button v-for="(r, i) in previewData" :key="i"
               @click="selectedFileIndex = i"
-              :class="['px-2 py-1 text-xs rounded border', selectedFileIndex === i ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50']">
+              :class="['btn btn-sm', selectedFileIndex === i ? 'btn-primary' : 'btn-secondary']">
               {{ r.file_name }}
             </button>
           </div>
@@ -82,14 +82,14 @@ const BatchImportView = Vue.defineComponent({
         <div class="flex gap-4 mb-3">
           <!-- 左侧：JSON 内容 -->
           <div class="flex-1 p-3 border rounded flex flex-col" style="min-width: 0; height: 380px; overflow: hidden;">
-            <h4 class="font-medium text-sm mb-2 flex-shrink-0">示例JSON数据</h4>
+            <h4 class="section-title flex-shrink-0">示例JSON数据</h4>
             <div class="overflow-y-auto bg-gray-50 rounded" style="flex: 1 1 0; min-width: 0;">
               <pre class="text-xs p-2" style="white-space: pre-wrap; word-break: break-word;">{{ formatJSON(previewData[selectedFileIndex]?.data) }}</pre>
             </div>
           </div>
           <!-- 右侧：字段映射 -->
           <div class="flex-1 p-3 border rounded" style="min-width: 0; height: 380px; overflow-y: auto;">
-            <h4 class="font-medium text-sm mb-2">字段映射</h4>
+            <h4 class="section-title">字段映射</h4>
             <div class="space-y-1.5">
               <div class="flex items-center gap-2 text-sm">
                 <label class="form-label flex-shrink-0 w-24">采样日期</label>
@@ -133,7 +133,7 @@ const BatchImportView = Vue.defineComponent({
 
         <!-- 预览 -->
         <div class="mb-3">
-          <h4 class="font-medium text-sm mb-1">预览</h4>
+          <h4 class="section-title mb-1">预览</h4>
           <div class="border rounded p-2">
             <div class="flex gap-4 text-sm mb-2 px-1">
               <span><span class="text-gray-500">采样日期:</span> {{ (previewData[selectedFileIndex]?.sample_date || '-') }}</span>
@@ -171,12 +171,12 @@ const BatchImportView = Vue.defineComponent({
 
       <!-- Step 4: 确认导入 -->
       <div v-if="step === 4">
-        <h3 class="text-lg font-medium mb-4">步骤 4: 确认导入</h3>
+        <h3 class="page-subtitle">步骤 4: 确认导入</h3>
         <div v-if="hasEmptyDates" class="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
           ⚠️ 有报告未提取到采样日期，请手动填写或查看原始JSON/PDF确认后再提交。
         </div>
         <div class="mb-4">
-          <h4 class="font-medium mb-2">待导入报告</h4>
+          <h4 class="section-title">待导入报告</h4>
           <div class="max-h-48 overflow-y-auto border rounded">
             <table class="w-full text-sm">
               <thead class="bg-gray-50 sticky top-0">
@@ -197,8 +197,8 @@ const BatchImportView = Vue.defineComponent({
                   <td class="px-3 py-2 text-center">{{ r.items?.length || 0 }}</td>
                   <td class="px-3 py-2 text-center">
                     <div class="flex gap-1 justify-center">
-                      <button @click="showJsonModal(r)" class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-200">JSON</button>
-                      <button @click="viewPdf(r)" class="text-xs px-2 py-1 bg-green-50 text-green-600 rounded hover:bg-green-100 border border-green-200">PDF</button>
+                      <button @click="showJsonModal(r)" class="btn btn-sm btn-secondary">JSON</button>
+                      <button @click="viewPdf(r)" class="btn btn-sm btn-secondary">PDF</button>
                     </div>
                   </td>
                 </tr>
@@ -215,7 +215,7 @@ const BatchImportView = Vue.defineComponent({
       </div>
 
       <!-- JSON 查看弹窗 -->
-      <div v-if="jsonModalVisible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="jsonModalVisible = false">
+      <div v-if="jsonModalVisible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @mousedown.self="jsonModalVisible = false">
         <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
           <div class="flex items-center justify-between p-4 border-b">
             <h4 class="font-medium">{{ jsonModalData?.file_name }} - JSON数据</h4>
@@ -253,6 +253,7 @@ const BatchImportView = Vue.defineComponent({
     const subjects = Vue.ref([]);
     const hospitals = Vue.ref([]);
     const form = Vue.ref({ subject_id: '', hospital_id: '' });
+    const _ctrl = new AbortController();
 
     const jsonFiles = Vue.ref([]);
     const pdfFiles = Vue.ref([]);
@@ -326,8 +327,7 @@ const BatchImportView = Vue.defineComponent({
         for (const report of previewData.value) {
           report.sample_date = parseDateForInput(getNestedValue(report.data, newPath)) || '';
         }
-      },
-      { deep: true }
+      }
     );
 
     // 监听 items_path 变化，重新提取检验项目
@@ -337,13 +337,12 @@ const BatchImportView = Vue.defineComponent({
         for (const report of previewData.value) {
           report.items = extractItemsClient(report.data, newPath);
         }
-      },
-      { deep: true }
+      }
     );
 
     Vue.onMounted(() => {
-      api.listSubjects().then(r => subjects.value = r.data || []);
-      api.listHospitals().then(r => hospitals.value = r.data || []);
+      api.listSubjects(null, _ctrl.signal).then(r => subjects.value = r && r.data || []);
+      api.listHospitals(_ctrl.signal).then(r => hospitals.value = r && r.data || []);
     });
 
     function onJsonFileChange(e) {
@@ -543,6 +542,8 @@ const BatchImportView = Vue.defineComponent({
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
     }
+
+    Vue.onUnmounted(() => _ctrl.abort());
 
     return {
       step, subjects, hospitals, form,

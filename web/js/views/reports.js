@@ -63,7 +63,7 @@ const ReportsView = Vue.defineComponent({
           <span :class="statusClass(row.ocr_status)">{{ statusText(row.ocr_status) }}</span>
         </template>
         <template #cell-actions="{ row }">
-          <button @click="viewLabReport(row.id)" class="btn-ghost" style="font-size: 0.875rem">查看</button>
+          <button @click="viewLabReport(row.id)" class="btn-ghost">查看</button>
         </template>
       </data-table>
     </div>
@@ -91,7 +91,7 @@ const ReportsView = Vue.defineComponent({
           <span :class="statusClass(row.ocr_status)">{{ statusText(row.ocr_status) }}</span>
         </template>
         <template #cell-actions="{ row }">
-          <button @click="viewImagingReport(row.id)" class="btn-ghost" style="font-size: 0.875rem">查看</button>
+          <button @click="viewImagingReport(row.id)" class="btn-ghost">查看</button>
         </template>
       </data-table>
     </div>
@@ -125,7 +125,7 @@ const ReportsView = Vue.defineComponent({
 
           <div class="overflow-auto" style="width: 55%; border-left: 1px solid var(--table-border)">
             <div style="padding: 1rem 1.5rem">
-              <h3 class="text-lg font-medium mb-4" style="color: var(--color-text)">基本信息</h3>
+              <h3 class="page-subtitle">基本信息</h3>
               <div class="info-grid mb-4">
                 <div class="info-item"><span class="info-label">受检者:&nbsp;&nbsp;</span><span class="info-value">{{ subjectName(selectedLabReport.subject_id) }}</span></div>
                 <div class="info-item"><span class="info-label">采样日期:&nbsp;&nbsp;</span><span class="info-value">{{ selectedLabReport.sample_date || '-' }}</span></div>
@@ -133,7 +133,7 @@ const ReportsView = Vue.defineComponent({
                 <div class="info-item"><span class="info-label">分类:&nbsp;&nbsp;</span><span class="info-value">{{ selectedLabReport.categories || '-' }}</span></div>
               </div>
 
-              <h3 class="text-lg font-medium mb-4" style="color: var(--color-text)">检验项目</h3>
+              <h3 class="page-subtitle">检验项目</h3>
               <table class="lt-table">
                 <thead><tr>
                   <th>项目</th><th>结果</th><th>参考区间</th><th>单位</th><th>提示符</th>
@@ -187,7 +187,7 @@ const ReportsView = Vue.defineComponent({
 
           <div class="overflow-auto" style="width: 45%; border-left: 1px solid var(--table-border)">
             <div style="padding: 1.5rem">
-              <h3 class="text-lg font-medium mb-4" style="color: var(--color-text)">基本信息</h3>
+              <h3 class="page-subtitle">基本信息</h3>
               <div class="info-grid mb-6">
                 <div class="info-item"><span class="info-label">受检者:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.subject_name || '-' }}</span></div>
                 <div class="info-item"><span class="info-label">检查日期:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.sample_date || '-' }}</span></div>
@@ -198,10 +198,10 @@ const ReportsView = Vue.defineComponent({
                 <div class="info-item"><span class="info-label">检查部位:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.exam_site || '-' }}</span></div>
               </div>
 
-              <h3 class="text-lg font-medium mb-4" style="color: var(--color-text)">诊断结论</h3>
+              <h3 class="page-subtitle">诊断结论</h3>
               <p class="text-sm" style="color: var(--color-text); white-space: pre-wrap">{{ selectedImagingReport.diagnosis_result && selectedImagingReport.diagnosis_result !== 'null' ? selectedImagingReport.diagnosis_result : '' }}</p>
 
-              <h3 class="text-lg font-medium mb-4 mt-6" style="color: var(--color-text)">影像表现</h3>
+              <h3 class="page-subtitle mt-6">影像表现</h3>
               <p class="text-sm" style="color: var(--color-text); white-space: pre-wrap">{{ selectedImagingReport.exam_description || '暂无' }}</p>
             </div>
           </div>
@@ -218,6 +218,7 @@ const ReportsView = Vue.defineComponent({
     const labReports = Vue.ref([]);
     const imagingReports = Vue.ref([]);
     const imagingSort = Vue.ref({ field: '', order: '' });
+    const _ctrl = new AbortController();
     const filters = Vue.ref({
       subject_id: '',
       hospital_id: '',
@@ -387,12 +388,13 @@ const ReportsView = Vue.defineComponent({
     }
 
     Vue.onMounted(() => {
-      api.listSubjects().then(r => { if (r.data) subjects.value = r.data; });
-      api.listHospitals().then(r => { if (r.data) hospitals.value = r.data; });
-      api.listImagingReportTypes().then(r => { if (r.data) imagingTypes.value = r.data; });
-      api.listImagingExamItems().then(r => { if (r.data) examItemTypes.value = r.data; });
+      api.listSubjects(null, _ctrl.signal).then(r => { if (r && r.data) subjects.value = r.data; });
+      api.listHospitals(_ctrl.signal).then(r => { if (r && r.data) hospitals.value = r.data; });
+      api.listImagingReportTypes(_ctrl.signal).then(r => { if (r && r.data) imagingTypes.value = r.data; });
+      api.listImagingExamItems(_ctrl.signal).then(r => { if (r && r.data) examItemTypes.value = r.data; });
       loadReports();
     });
+    Vue.onUnmounted(() => _ctrl.abort());
 
     Vue.watch(reportType, () => {
       loadReports();

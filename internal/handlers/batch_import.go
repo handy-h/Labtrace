@@ -176,7 +176,11 @@ func ConfirmBatchImport(c *gin.Context) {
 		return
 	}
 
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 	uploadDir := cfg.UploadDir
 	os.MkdirAll(uploadDir, 0755)
 
@@ -187,6 +191,9 @@ func ConfirmBatchImport(c *gin.Context) {
 		ReportIDs    []int64     `json:"report_ids"`
 	}
 	result := &ImportResult{Errors: []string{}}
+
+	// 一次性加载 test_items 索引，避免循环内重复查库
+	itemIdx := services.LoadTestItemIndex()
 
 	for _, report := range req.Reports {
 		if report.PDFData == "" {
@@ -243,23 +250,38 @@ func ConfirmBatchImport(c *gin.Context) {
 		reportID, _ := res.LastInsertId()
 		items := extractItemsFromJSON(report.Data, req.Mappings.ItemsPath)
 
+		// 开启事务：包含所有 report_items INSERT
+		tx, txErr := database.DB.Begin()
+		if txErr != nil {
+			result.FailCount++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: 开启事务失败", report.FileName))
+			database.DB.Exec(`DELETE FROM lab_reports WHERE id = ?`, reportID)
+			os.Remove(filePath)
+			continue
+		}
+
+		txFailed := false
+		categorySet := make(map[string]bool)
+
 		for _, itemData := range items {
-			if itemMap, ok := itemData.(map[string]interface{}); ok {
-				name := getNestedValue(itemMap, req.Mappings.ItemName)
-				value := getNestedValue(itemMap, req.Mappings.ItemValue)
-				unit := getNestedValue(itemMap, req.Mappings.ItemUnit)
-				category := getNestedValue(itemMap, req.Mappings.ItemCategory)
-				if category == "" {
-					category = getNestedValue(report.Data, req.Mappings.ItemCategory)
-				}
-				minVal := getNestedValue(itemMap, req.Mappings.RefMin)
-				maxVal := getNestedValue(itemMap, req.Mappings.RefMax)
+			itemMap, ok := itemData.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			name := getNestedValue(itemMap, req.Mappings.ItemName)
+			value := getNestedValue(itemMap, req.Mappings.ItemValue)
+			unit := getNestedValue(itemMap, req.Mappings.ItemUnit)
+			category := getNestedValue(itemMap, req.Mappings.ItemCategory)
+			if category == "" {
+				category = getNestedValue(report.Data, req.Mappings.ItemCategory)
+			}
+			minVal := getNestedValue(itemMap, req.Mappings.RefMin)
+			maxVal := getNestedValue(itemMap, req.Mappings.RefMax)
 
 			refText := ""
 			if req.Mappings.RefRange != "" {
 				refText = getNestedValue(itemMap, req.Mappings.RefRange)
 			}
-			// 回退：如果 ref_range 路径取不到值，尝试 min/max
 			if refText == "" {
 				if minVal != "" && maxVal != "" {
 					refText = fmt.Sprintf("%s-%s", minVal, maxVal)
@@ -268,7 +290,6 @@ func ConfirmBatchImport(c *gin.Context) {
 				} else if maxVal != "" {
 					refText = fmt.Sprintf("<=%s", maxVal)
 				}
-				// 智能回退：当 min/max 都取不到值时，尝试常见的 refRange 字段名
 				if refText == "" {
 					for _, key := range []string{"refRange", "ref_range", "reference"} {
 						if v := getNestedValue(itemMap, key); v != "" {
@@ -279,63 +300,69 @@ func ConfirmBatchImport(c *gin.Context) {
 				}
 			}
 
-				// Match or create test_item for proper categorization
-				var testItemID interface{}
-				if name != "" {
-					matchID := services.MatchTestItemByName(name)
-					if matchID > 0 {
-						testItemID = matchID
-						// Always update category when user maps it
-						if category != "" {
-							database.DB.Exec(
-								`UPDATE test_items SET category = ? WHERE id = ?`,
-								category, matchID,
-							)
-						}
-					} else {
-						// Create new test_item entry
-						code := strings.ReplaceAll(strings.ToUpper(name), " ", "_")
-						res, err := database.DB.Exec(
-							`INSERT INTO test_items (code, standard_name, category, default_unit, value_type) VALUES (?, ?, ?, ?, 'numeric')`,
-							code, name, category, unit,
-						)
-						if err == nil {
-							newID, _ := res.LastInsertId()
-							testItemID = newID
-						}
+			// 内存匹配 test_item，避免循环内重复查库
+			var testItemID interface{}
+			if name != "" {
+				matchID := itemIdx.Match(name)
+				if matchID > 0 {
+					testItemID = matchID
+					if category != "" {
+						tx.Exec(`UPDATE test_items SET category = ? WHERE id = ?`, category, matchID)
+					}
+				} else {
+					code := strings.ReplaceAll(strings.ToUpper(name), " ", "_")
+					r, execErr := tx.Exec(
+						`INSERT INTO test_items (code, standard_name, category, default_unit, value_type) VALUES (?, ?, ?, ?, 'numeric')`,
+						code, name, category, unit,
+					)
+					if execErr == nil {
+						newID, _ := r.LastInsertId()
+						testItemID = newID
+						itemIdx.AddCandidate(newID, name, category)
 					}
 				}
+			}
 
-			database.DB.Exec(
+			if _, execErr := tx.Exec(
 				`INSERT INTO report_items (report_id, test_item_id, test_item_name, original_value, original_unit, confidence, ref_interval_text, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 				reportID, testItemID, name, value, unit, 100, refText, category,
-			)
+			); execErr != nil {
+				txFailed = true
+				break
+			}
+
+			if category != "" {
+				categorySet[category] = true
 			}
 		}
 
-		// 收集所有项目的分类，去重后更新 lab_reports.categories
-		categorySet := make(map[string]bool)
-		for _, itemData := range items {
-			if itemMap, ok := itemData.(map[string]interface{}); ok {
-				cat := getNestedValue(itemMap, req.Mappings.ItemCategory)
-				if cat == "" {
-					cat = getNestedValue(report.Data, req.Mappings.ItemCategory)
-				}
-				if cat != "" {
-					categorySet[cat] = true
-				}
-			}
+		if txFailed {
+			tx.Rollback()
+			database.DB.Exec(`DELETE FROM lab_reports WHERE id = ?`, reportID)
+			os.Remove(filePath)
+			result.FailCount++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: 写入检验项目失败", report.FileName))
+			continue
 		}
+
 		if len(categorySet) > 0 {
 			cats := make([]string, 0, len(categorySet))
 			for c := range categorySet {
 				cats = append(cats, c)
 			}
 			sort.Strings(cats)
-			database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
+			tx.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
 		}
 
-		// Auto-match reference intervals and compute flags
+		if err := tx.Commit(); err != nil {
+			database.DB.Exec(`DELETE FROM lab_reports WHERE id = ?`, reportID)
+			os.Remove(filePath)
+			result.FailCount++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: 提交事务失败", report.FileName))
+			continue
+		}
+
+		// Auto-match reference intervals and compute flags（自带事务）
 		matchRefAndCalcFlag(fmt.Sprintf("%d", reportID))
 
 		result.SuccessCount++

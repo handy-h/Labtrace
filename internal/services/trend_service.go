@@ -11,6 +11,7 @@ import (
 
 // TrendDataPoint represents a single data point in a trend chart.
 type TrendDataPoint struct {
+	ReportID        int64    `json:"report_id"`
 	ReportItemID    int64    `json:"report_item_id"`
 	TestItemID      int64    `json:"test_item_id"`
 	TestItemName    string   `json:"test_item_name"`
@@ -30,18 +31,20 @@ type TrendDataPoint struct {
 // If testItemID is 0, returns all test items for the subject.
 func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]TrendDataPoint, error) {
 	query := `
-		SELECT ri.id, COALESCE(ri.test_item_id, 0), COALESCE(ri.test_item_name, ti.standard_name, ''),
+		SELECT lr.id, ri.id, COALESCE(ri.test_item_id, 0), COALESCE(ri.test_item_name, ti.standard_name, ''),
 			lr.sample_date, COALESCE(h.name, ''),
 			ri.original_value, ri.normalized_value,
 			COALESCE(NULLIF(ri.normalized_unit, ''), NULLIF(ri.original_unit, ''), ti.default_unit, ''),
 			ri.flag,
-			ri.ref_interval_id, ri.ref_interval_text,
+			ri.ref_interval_text,
+			ref.value_min, ref.value_max,
 			s.birth_date
 		FROM report_items ri
 		JOIN lab_reports lr ON lr.id = ri.report_id
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
 		JOIN subjects s ON s.id = lr.subject_id
 		LEFT JOIN test_items ti ON ti.id = ri.test_item_id
+		LEFT JOIN reference_intervals ref ON ref.id = ri.ref_interval_id
 		WHERE lr.subject_id = ? AND lr.ocr_status = 'imported'
 	`
 	args := []interface{}{subjectID}
@@ -72,13 +75,15 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 	for rows.Next() {
 		var p TrendDataPoint
 		var normValue sql.NullFloat64
-		var refID sql.NullInt64
+		var refMin, refMax sql.NullFloat64
 		var birthDate string
 
-		if err := rows.Scan(&p.ReportItemID, &p.TestItemID, &p.TestItemName,
+		if err := rows.Scan(&p.ReportID, &p.ReportItemID, &p.TestItemID, &p.TestItemName,
 			&p.SampleDate, &p.HospitalName,
 			&p.OriginalValue, &normValue, &p.Unit,
-			&p.Flag, &refID, &p.RefIntervalText, &birthDate); err != nil {
+			&p.Flag, &p.RefIntervalText,
+			&refMin, &refMax,
+			&birthDate); err != nil {
 			continue
 		}
 
@@ -98,21 +103,14 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 
 		p.AgeAtSample = calcAgeYears(birthDate, p.SampleDate)
 
-		if refID.Valid {
-			var refMin, refMax sql.NullFloat64
-			database.DB.QueryRow(
-				`SELECT value_min, value_max FROM reference_intervals WHERE id = ?`, refID.Int64,
-			).Scan(&refMin, &refMax)
-			if refMin.Valid {
-				p.RefMin = &refMin.Float64
-			}
-			if refMax.Valid {
-				p.RefMax = &refMax.Float64
-			}
+		if refMin.Valid {
+			p.RefMin = &refMin.Float64
+		}
+		if refMax.Valid {
+			p.RefMax = &refMax.Float64
 		}
 
-		// Parse ref_interval_text for display and flag calculation
-		// Priority: ref_interval_text (from OCR) > ref_interval_id lookup
+		// ref_interval_text（OCR 来源）优先级高于 ref_interval_id JOIN 结果
 		if p.RefIntervalText != "" {
 			if min, max, ok := parseRefRange(p.RefIntervalText); ok {
 				p.RefMin = &min

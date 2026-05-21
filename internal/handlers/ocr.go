@@ -51,7 +51,11 @@ func Upload(c *gin.Context) {
 	}
 
 	// Save file to uploads directory
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 	uploadDir := cfg.UploadDir
 	os.MkdirAll(uploadDir, 0755)
 
@@ -83,7 +87,9 @@ func Upload(c *gin.Context) {
 	reportID, _ := result.LastInsertId()
 
 	// Async OCR recognition
+	OCRWaitGroup.Add(1)
 	go func() {
+		defer OCRWaitGroup.Done()
 		ocrResults, err := services.Recognize(fileBytes, cfg)
 
 		// Record OCR API call in monthly quota (success = HTTP call succeeded)
@@ -93,19 +99,25 @@ func Upload(c *gin.Context) {
 		}
 
 		if err != nil {
-			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
+				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+			}
 			services.LogAction("ocr_failed", "OCR失败", "lab_report", reportID, gin.H{"error": err.Error()})
 			return
 		}
 
 		// Store raw OCR JSON
 		ocrJSON, _ := json.Marshal(ocrResults)
-		database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID)
+		if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID); dbErr != nil {
+			log.Printf("[ocr] 存储OCR原始数据失败: reportID=%d err=%v", reportID, dbErr)
+		}
 
 		// Check if OCR returned any data
 		if len(ocrResults) == 0 {
 			log.Printf("[ocr] OCR returned zero results for report %d", reportID)
-			database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID)
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
+				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+			}
 			services.LogAction("ocr_failed", "OCR失败", "lab_report", reportID, gin.H{"error": "OCR returned no results"})
 			return
 		}
@@ -150,7 +162,9 @@ func Upload(c *gin.Context) {
 		}
 
 		// Update status to review (only if items were inserted)
-		database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, reportID)
+		if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, reportID); dbErr != nil {
+			log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
+		}
 
 		// Audit log
 		services.LogAction("ocr_upload", "OCR上传", "lab_report", reportID, nil)

@@ -11,7 +11,8 @@
 - **生物参考区间动态匹配** — 根据受检者性别/采样当日年龄自动匹配
 - **单位标准化引擎** — 预设转换矩阵 + 安全阀验证
 - **计算勾稽校验** — 入库前自动校验（如总蛋白=白蛋白+球蛋白）
-- **检验项目分类** — 支持分类管理、归一化、按分类筛选报告
+- **影像报告管理** — 上传影像报告图片/PDF，OCR识别，映射向导辅助字段提取
+- **批量导入** — 一次上传多份检验/影像报告，批量OCR识别与入库
 - **数据私有化** — 本地SQLite + AES-256-GCM加密备份
 
 ## 技术栈
@@ -84,26 +85,35 @@ LabTrace/
 │   ├── config/config.go             # 配置加载
 │   ├── database/
 │   │   ├── db.go                    # SQLite连接管理
-│   │   ├── migrations.go            # DDL迁移（12张表）
+│   │   ├── migrations.go            # DDL迁移（15张表）
 │   │   └── seed.go                  # 预置数据初始化
-│   ├── models/models.go             # 数据模型定义
+│   ├── models/
+│   │   ├── models.go                # 数据模型定义
+│   │   └── imaging.go               # 影像报告数据模型
 │   ├── handlers/                    # HTTP处理器
 │   │   ├── ping.go                  # 健康检查
 │   │   ├── subject.go               # 受检者+医院CRUD
 │   │   ├── testitem.go              # 检验项目+别名+参考区间CRUD
 │   │   ├── unit.go                  # 单位转换CRUD
 │   │   ├── calc.go                  # 计算校验规则CRUD
-│   │   ├── category.go              # 检验报告分类CRUD
 │   │   ├── ocr.go                   # OCR上传/识别
 │   │   ├── ocr_quota.go             # OCR配额查询/更新 + 重新OCR
+│   │   ├── ocr_wg.go                # OCR后台goroutine等待组（优雅关闭）
 │   │   ├── report.go                # 检验报告CRUD/核效/入库
+│   │   ├── imaging.go               # 影像报告CRUD/OCR/映射/入库
 │   │   ├── rule.go                  # 医院解析规则+映射模板CRUD
 │   │   ├── trend.go                 # 趋势数据查询
 │   │   ├── dashboard.go             # 仪表盘统计+异常筛选
+│   │   ├── batch_import.go          # 检验报告批量导入
+│   │   ├── batch_import_imaging.go  # 影像报告批量导入
 │   │   ├── backup.go                # 备份导出/导入
 │   │   └── audit.go                 # 审计日志查询
 │   ├── services/                    # 业务逻辑层
 │   │   ├── ocr_service.go           # 阿里云OCR调用
+│   │   ├── ocr_parser.go            # OCR结果解析
+│   │   ├── ocr_mapping.go           # OCR字段映射
+│   │   ├── ocr_quota.go             # OCR配额管理
+│   │   ├── imaging_ocr_service.go   # 影像报告OCR处理
 │   │   ├── rule_service.go          # 解析规则匹配
 │   │   ├── unit_service.go          # 单位转换引擎
 │   │   ├── reference_service.go     # 参考区间动态匹配
@@ -111,6 +121,7 @@ LabTrace/
 │   │   ├── calc_service.go          # 计算勾稽校验
 │   │   ├── dict_service.go          # 数据字典映射
 │   │   ├── testitem_service.go      # 检验项目服务（Backfill等）
+│   │   ├── trend_service.go         # 趋势数据聚合
 │   │   ├── backup_service.go        # 加密备份
 │   │   └── audit_service.go         # 审计日志
 │   └── middleware/cors.go           # CORS中间件
@@ -121,23 +132,25 @@ LabTrace/
 │       ├── app.js                   # Vue3应用入口+路由
 │       ├── api.js                   # API请求封装
 │       ├── utils.js                 # 工具函数
-│       ├── views/                   # 6个视图组件
+│       ├── views/                   # 11个视图组件
 │       │   ├── dashboard.js         # 仪表盘
 │       │   ├── ocr-import.js        # OCR上传+比对视图
-│       │   ├── ocr-mapping-wizard.js# OCR映射向导
+│       │   ├── ocr-mapping-wizard.js# 检验报告OCR映射向导
+│       │   ├── imaging-mapping-wizard.js # 影像报告OCR映射向导
+│       │   ├── batch_import.js      # 检验报告批量导入
+│       │   ├── batch_import_imaging.js   # 影像报告批量导入
+│       │   ├── reports.js           # 已入库报告管理
 │       │   ├── subjects.js          # 受检者管理
 │       │   ├── test-items.js        # 检验项目库
 │       │   ├── trend.js             # 趋势分析
 │       │   └── settings.js          # 设置
-│       └── components/              # 8个可复用组件
+│       └── components/              # 6个可复用组件
 │           ├── data-table.js        # 数据表格
 │           ├── crud-modal.js        # CRUD弹窗
 │           ├── search-dropdown.js   # 搜索下拉
 │           ├── subject-selector.js  # 受检者选择器
 │           ├── sparkline.js         # 迷你折线图
-│           ├── sync-scroll.js       # 同步滚动面板
-│           ├── drilldown-popup.js   # 数据下钻弹窗
-│           └── ocr-mapping-wizard.js# OCR映射向导
+│           └── drilldown-popup.js   # 数据下钻弹窗
 ├── data/                            # 数据目录（运行时生成，已gitignore）
 │   ├── labtrace.db                  # SQLite数据库
 │   └── uploads/                     # 上传文件
@@ -162,11 +175,13 @@ LabTrace/
 | 参考区间 | 4 | CRUD |
 | 单位转换 | 4 | CRUD + 安全阀验证 |
 | 计算规则 | 4 | CRUD |
-| 检验报告分类 | 5 | CRUD + 归一化 |
-| OCR/报告 | 10 | 上传/识别/核效/入库/重新OCR/OCR块/映射 |
+| OCR/检验报告 | 12 | 上传/识别/核效/入库/重新OCR/OCR块/映射/图片 |
 | OCR配额 | 2 | 查询/更新当月使用量 |
+| 影像报告 | 10 | 上传/识别/核效/入库/重新OCR/映射/模板 |
+| 批量导入（检验） | 2 | 批量上传/批量确认入库 |
+| 批量导入（影像） | 2 | 批量上传/批量确认入库 |
 | 医院规则 | 4 | CRUD |
-| 医院映射模板 | 2 | 查询/保存 |
+| 医院映射模板 | 4 | 检验/影像模板查询/保存 |
 | 趋势分析 | 1 | 数据查询 |
 | 仪表盘 | 2 | 统计/异常列表 |
 | 备份 | 4 | 导出/导入/列表/删除 |
@@ -190,11 +205,13 @@ OCR_QUOTA_MONTHLY=500    # 可选，每月OCR调用配额上限
 
 7个主要视图：
 1. **仪表盘** — 统计卡片 + 异常筛选 + 结果摘要表
-2. **OCR上传** — 文件上传 + 沉浸式比对视图（左原图同步滚动+右数据网格）+ 映射向导
-3. **受检者管理** — 列表 + 详情面板 + 年龄自动计算
-4. **检验项目库** — 标准项目 + 别名映射 + 参考区间 + 单位转换 + 计算规则
-5. **趋势分析** — ECharts折线图 + 动态参考带 + 数据下钻
-6. **设置** — 密钥管理 + 备份恢复 + OCR配额 + 审计日志
+2. **OCR上传（检验）** — 文件上传 + 沉浸式比对视图（左原图同步滚动+右数据网格）+ 映射向导
+3. **OCR上传（影像）** — 影像报告上传 + OCR识别 + 影像映射向导
+4. **批量导入** — 多文件批量上传、OCR识别与一键入库（检验/影像）
+5. **受检者管理** — 列表 + 详情面板 + 年龄自动计算
+6. **检验项目库** — 标准项目 + 别名映射 + 参考区间 + 单位转换 + 计算规则
+7. **趋势分析** — ECharts折线图 + 动态参考带 + 数据下钻
+8. **设置** — 密钥管理 + 备份恢复 + OCR配额 + 审计日志
 
 ## 设计系统
 

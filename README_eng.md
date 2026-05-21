@@ -11,7 +11,8 @@ A professional data governance platform for managing personal lab test records a
 - **Dynamic Biological Reference Range Matching** — Automatic matching based on subject's gender and age at sampling date
 - **Unit Standardization Engine** — Pre-configured conversion matrix with safety valve validation
 - **Calculated Cross-Check** — Pre-validation before database insertion (e.g., Total Protein = Albumin + Globulin)
-- **Test Item Classification** — Category management, normalization, and report filtering by category
+- **Imaging Report Management** — Upload imaging report images/PDFs, OCR recognition, mapping wizard for field extraction
+- **Batch Import** — Upload multiple lab/imaging reports at once with bulk OCR recognition and ingestion
 - **Data Privacy** — Local SQLite storage with AES-256-GCM encrypted backups
 
 ## Technology Stack
@@ -84,26 +85,35 @@ LabTrace/
 │   ├── config/config.go             # Configuration loading
 │   ├── database/
 │   │   ├── db.go                    # SQLite connection management
-│   │   ├── migrations.go            # DDL migrations (12 tables)
+│   │   ├── migrations.go            # DDL migrations (15 tables)
 │   │   └── seed.go                  # Seed data initialization
-│   ├── models/models.go             # Data model definitions
+│   ├── models/
+│   │   ├── models.go                # Data model definitions
+│   │   └── imaging.go               # Imaging report data models
 │   ├── handlers/                    # HTTP handlers
 │   │   ├── ping.go                  # Health check
 │   │   ├── subject.go               # Subject & hospital CRUD
 │   │   ├── testitem.go              # Test items, aliases & reference intervals CRUD
 │   │   ├── unit.go                  # Unit conversion CRUD
 │   │   ├── calc.go                  # Calculated cross-check rules CRUD
-│   │   ├── category.go              # Report category CRUD
 │   │   ├── ocr.go                   # OCR upload & recognition
 │   │   ├── ocr_quota.go             # OCR quota query/update + re-OCR
+│   │   ├── ocr_wg.go                # OCR background goroutine wait group (graceful shutdown)
 │   │   ├── report.go                # Lab report CRUD / verification / ingestion
+│   │   ├── imaging.go               # Imaging report CRUD / OCR / mapping / ingestion
 │   │   ├── rule.go                  # Hospital parsing rules & mapping templates CRUD
 │   │   ├── trend.go                 # Trend data queries
 │   │   ├── dashboard.go             # Dashboard statistics & anomaly filtering
+│   │   ├── batch_import.go          # Lab report batch import
+│   │   ├── batch_import_imaging.go  # Imaging report batch import
 │   │   ├── backup.go                # Backup export & import
 │   │   └── audit.go                 # Audit log queries
 │   ├── services/                    # Business logic layer
 │   │   ├── ocr_service.go           # Alibaba Cloud OCR integration
+│   │   ├── ocr_parser.go            # OCR result parsing
+│   │   ├── ocr_mapping.go           # OCR field mapping
+│   │   ├── ocr_quota.go             # OCR quota management
+│   │   ├── imaging_ocr_service.go   # Imaging report OCR processing
 │   │   ├── rule_service.go          # Parsing rule matching
 │   │   ├── unit_service.go          # Unit conversion engine
 │   │   ├── reference_service.go     # Dynamic reference range matching
@@ -111,6 +121,7 @@ LabTrace/
 │   │   ├── calc_service.go          # Calculated cross-check
 │   │   ├── dict_service.go          # Data dictionary mapping
 │   │   ├── testitem_service.go      # Test item service (Backfill, etc.)
+│   │   ├── trend_service.go         # Trend data aggregation
 │   │   ├── backup_service.go        # Encrypted backup
 │   │   └── audit_service.go         # Audit log service
 │   └── middleware/cors.go           # CORS middleware
@@ -121,23 +132,25 @@ LabTrace/
 │       ├── app.js                   # Vue 3 app entry & router
 │       ├── api.js                   # API request wrapper
 │       ├── utils.js                 # Utility functions
-│       ├── views/                   # 6 view components
+│       ├── views/                   # 11 view components
 │       │   ├── dashboard.js         # Dashboard
 │       │   ├── ocr-import.js        # OCR upload & comparison view
-│       │   ├── ocr-mapping-wizard.js# OCR mapping wizard
+│       │   ├── ocr-mapping-wizard.js# Lab report OCR mapping wizard
+│       │   ├── imaging-mapping-wizard.js # Imaging report OCR mapping wizard
+│       │   ├── batch_import.js      # Lab report batch import
+│       │   ├── batch_import_imaging.js   # Imaging report batch import
+│       │   ├── reports.js           # Ingested report management
 │       │   ├── subjects.js          # Subject management
 │       │   ├── test-items.js        # Test item library
 │       │   ├── trend.js             # Trend analysis
 │       │   └── settings.js          # Settings
-│       └── components/              # 8 reusable components
+│       └── components/              # 6 reusable components
 │           ├── data-table.js        # Data table
 │           ├── crud-modal.js        # CRUD modal
 │           ├── search-dropdown.js   # Search dropdown
 │           ├── subject-selector.js  # Subject selector
 │           ├── sparkline.js         # Sparkline chart
-│           ├── sync-scroll.js       # Synchronized scroll panels
-│           ├── drilldown-popup.js   # Drill-down popup
-│           └── ocr-mapping-wizard.js# OCR mapping wizard
+│           └── drilldown-popup.js   # Drill-down popup
 ├── data/                            # Runtime data directory (gitignored)
 │   ├── labtrace.db                  # SQLite database
 │   └── uploads/                     # Uploaded files
@@ -162,11 +175,13 @@ Base path: `/api/v1`. Unified response format: `{"code":0,"message":"ok","data":
 | Reference Intervals | 4 | CRUD |
 | Unit Conversion | 4 | CRUD + safety valve validation |
 | Calculated Rules | 4 | CRUD |
-| Report Categories | 5 | CRUD + normalization |
-| OCR / Reports | 10 | Upload / recognize / verify / ingest / re-OCR / blocks / mapping |
+| OCR / Lab Reports | 12 | Upload / recognize / verify / ingest / re-OCR / blocks / mapping / image |
 | OCR Quota | 2 | Query / update monthly usage |
+| Imaging Reports | 10 | Upload / recognize / verify / ingest / re-OCR / mapping / templates |
+| Batch Import (Lab) | 2 | Batch upload / batch confirm ingestion |
+| Batch Import (Imaging) | 2 | Batch upload / batch confirm ingestion |
 | Hospital Rules | 4 | CRUD |
-| Hospital Mapping Templates | 2 | Query / save |
+| Hospital Mapping Templates | 4 | Lab / imaging template query & save |
 | Trend Analysis | 1 | Data query |
 | Dashboard | 2 | Statistics & anomaly list |
 | Backup | 4 | Export / import / list / delete |
@@ -188,13 +203,15 @@ Reference: https://help.aliyun.com/zh/ocr/product-overview/ocr-unified-identific
 
 ## UI Views
 
-7 main views:
+8 main views:
 1. **Dashboard** — Stat cards, anomaly filtering, summary table
-2. **OCR Upload** — File upload + immersive comparison view (synchronized original image + data grid) + mapping wizard
-3. **Subject Management** — List + detail panel + auto age calculation
-4. **Test Item Library** — Standard items + alias mapping + reference ranges + unit conversion + calculated rules
-5. **Trend Analysis** — ECharts line charts + dynamic reference bands + drill-down
-6. **Settings** — Key management, backup & restore, OCR quota, audit log
+2. **OCR Upload (Lab)** — File upload + immersive comparison view (synchronized original image + data grid) + mapping wizard
+3. **OCR Upload (Imaging)** — Imaging report upload + OCR recognition + imaging mapping wizard
+4. **Batch Import** — Multi-file bulk upload, OCR recognition and one-click ingestion (lab & imaging)
+5. **Subject Management** — List + detail panel + auto age calculation
+6. **Test Item Library** — Standard items + alias mapping + reference ranges + unit conversion + calculated rules
+7. **Trend Analysis** — ECharts line charts + dynamic reference bands + drill-down
+8. **Settings** — Key management, backup & restore, OCR quota, audit log
 
 ## Design System
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"labtrace/internal/config"
 	"labtrace/internal/database"
@@ -201,6 +202,7 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 		if sampleDate == "" {
 			sampleDate = getNestedValue(report.Data, req.Mappings.SampleDate)
 		}
+		sampleDate = extractDatePart(sampleDate)
 		if sampleDate == "" {
 			result.FailCount++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: 缺少采样日期", report.FileName))
@@ -238,4 +240,14 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.Success(result))
+}
+
+var reDateOnly = regexp.MustCompile(`\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}`)
+
+// extractDatePart 从任意日期时间字符串中提取 YYYY-MM-DD 部分。
+func extractDatePart(s string) string {
+	if m := reDateOnly.FindString(s); m != "" {
+		return m
+	}
+	return s
 }

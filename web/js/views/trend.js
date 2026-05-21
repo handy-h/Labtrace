@@ -44,11 +44,47 @@ const TrendView = Vue.defineComponent({
         <template #cell-sparkline="{ row }">
           <sparkline-chart :data="sparklineData[row.test_item_name || ('item_' + row.report_item_id)] || []" :subject-id="filter.subject_id" :test-item-id="row.test_item_id" @navigate="onSparklineNavigate"></sparkline-chart>
         </template>
+        <template #cell-actions="{ row }">
+          <button @click="viewTrendReport(row.report_id)" class="btn-ghost">查看检查单</button>
+        </template>
       </data-table>
     </div>
 
     <!-- 下钻浮窗 -->
     <drilldown-popup :visible="showDrilldown" :data-point="drilldownDataPoint" @close="showDrilldown = false"></drilldown-popup>
+
+    <!-- 检验报告查看弹窗 -->
+    <div v-if="trendReportView" class="modal-overlay">
+      <div class="modal-content modal-full" style="display: flex; flex-direction: column">
+        <div class="flex items-center justify-between px-6 py-3 shrink-0" style="border-bottom: 1px solid var(--table-border)">
+          <h2 class="modal-title" style="margin-bottom: 0">检验报告 #{{ trendReportView.id }} &nbsp;<span style="font-size:0.875rem; font-weight:400; color: var(--color-text-muted)">{{ trendReportView.sample_date }} · {{ trendReportView.hospital_name }}</span></h2>
+          <button @mousedown.stop @click="closeTrendReport" class="btn btn-secondary btn-sm">关闭</button>
+        </div>
+        <div class="flex-1 flex overflow-hidden min-h-0">
+          <div class="relative overflow-auto" style="width: 45%">
+            <img :src="trendReportImageUrl" v-if="trendReportImageUrl && !isTrendReportPdf" style="max-width:100%; border:1px solid var(--table-border)">
+            <embed :src="trendReportImageUrl" v-if="trendReportImageUrl && isTrendReportPdf" type="application/pdf" class="w-full" style="height:100%; min-height:100%; border:none">
+          </div>
+          <div class="overflow-auto" style="width: 55%; border-left: 1px solid var(--table-border)">
+            <div style="padding: 1rem 1.5rem">
+              <h3 class="page-subtitle">检验项目</h3>
+              <table class="lt-table">
+                <thead><tr><th>项目</th><th>结果</th><th>参考区间</th><th>单位</th><th>提示符</th></tr></thead>
+                <tbody>
+                  <tr v-for="item in trendReportView.items" :key="item.id">
+                    <td class="cell-medium">{{ item.test_item_name || '-' }}</td>
+                    <td>{{ item.original_value }}</td>
+                    <td class="cell-muted">{{ item.ref_interval_text || '-' }}</td>
+                    <td>{{ item.original_unit }}</td>
+                    <td><span v-html="flagBadge(item.flag)"></span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>`,
   setup() {
     const subjects = Vue.ref([]);
@@ -59,6 +95,7 @@ const TrendView = Vue.defineComponent({
     const drilldownDataPoint = Vue.ref({});
     const sparklineData = Vue.ref({});
     let chartInstance = null;
+    const _ctrl = new AbortController();
 
     const currentSubjectId = Vue.inject('currentSubjectId', null);
 
@@ -76,19 +113,21 @@ const TrendView = Vue.defineComponent({
         { key: 'unit', label: '单位', align: 'center' },
         { key: 'sparkline', label: '趋势', width: '100px' },
         { key: 'hospital_name', label: '医院' },
+        { key: 'actions', label: '' },
       );
       return cols;
     });
 
     Vue.onMounted(() => {
-      api.listSubjects().then(r => { if (r.data) subjects.value = r.data; });
-      api.listTestItems().then(r => { if (r.data) testItems.value = r.data; });
+      api.listSubjects(null, _ctrl.signal).then(r => { if (r && r.data) subjects.value = r.data; });
+      api.listTestItems(null, _ctrl.signal).then(r => { if (r && r.data) testItems.value = r.data; });
       window.addEventListener('resize', onResize);
     });
 
     Vue.onUnmounted(() => {
       window.removeEventListener('resize', onResize);
       if (chartInstance) { chartInstance.dispose(); chartInstance = null; }
+      _ctrl.abort();
     });
 
     if (currentSubjectId) {
@@ -175,6 +214,7 @@ const TrendView = Vue.defineComponent({
           ci++;
         });
       } else {
+        const refBorderColor = 'rgba(42, 157, 143, 0.3)';
         const values = allDates.map(dt => {
           const pt = trendData.value.find(d => d.sample_date === dt);
           return pt ? pt.converted_value : null;
@@ -238,6 +278,29 @@ const TrendView = Vue.defineComponent({
       loadTrend();
     }
 
-    return { subjects, testItems, filter, trendData, trendColumns, showDrilldown, drilldownDataPoint, sparklineData, loadTrend, exportTrendCsv, onSparklineNavigate, flagBadge };
+    const trendReportView = Vue.ref(null);
+    const trendReportImageUrl = Vue.ref('');
+    const isTrendReportPdf = Vue.computed(() =>
+      trendReportView.value && trendReportView.value.file_path
+        ? trendReportView.value.file_path.toLowerCase().endsWith('.pdf')
+        : false
+    );
+
+    function viewTrendReport(reportId) {
+      if (!reportId) return;
+      api.getReport(reportId).then(r => {
+        if (r && r.data) {
+          trendReportView.value = r.data;
+          trendReportImageUrl.value = api.getReportImage(r.data.id) + '?t=' + Date.now();
+        }
+      });
+    }
+
+    function closeTrendReport() {
+      trendReportView.value = null;
+      trendReportImageUrl.value = '';
+    }
+
+    return { subjects, testItems, filter, trendData, trendColumns, showDrilldown, drilldownDataPoint, sparklineData, loadTrend, exportTrendCsv, onSparklineNavigate, flagBadge, trendReportView, trendReportImageUrl, isTrendReportPdf, viewTrendReport, closeTrendReport };
   }
 });

@@ -150,3 +150,107 @@ func BackfillTestItemIDs() int {
 	}
 	return updated
 }
+
+// TestItemCandidate 用于内存匹配的轻量结构。
+type TestItemCandidate struct {
+	ID       int64
+	Name     string
+	Category string
+}
+
+// TestItemIndex 预加载全部 test_items 和 aliases，供批量内存匹配使用。
+type TestItemIndex struct {
+	Candidates   []TestItemCandidate
+	aliasMap     map[string]int64 // alias_name → test_item_id
+	categoryByID map[int64]string // id → category
+}
+
+// LoadTestItemIndex 一次性加载全部 test_items 和 aliases 到内存。
+func LoadTestItemIndex() *TestItemIndex {
+	idx := &TestItemIndex{aliasMap: make(map[string]int64), categoryByID: make(map[int64]string)}
+
+	rows, err := database.DB.Query(`SELECT id, standard_name, COALESCE(category,'') FROM test_items`)
+	if err != nil {
+		return idx
+	}
+	for rows.Next() {
+		var c TestItemCandidate
+		rows.Scan(&c.ID, &c.Name, &c.Category)
+		idx.Candidates = append(idx.Candidates, c)
+		idx.categoryByID[c.ID] = c.Category
+	}
+	rows.Close()
+
+	arows, err := database.DB.Query(`SELECT alias_name, test_item_id FROM test_item_aliases`)
+	if err != nil {
+		return idx
+	}
+	defer arows.Close()
+	for arows.Next() {
+		var alias string
+		var tid int64
+		arows.Scan(&alias, &tid)
+		idx.aliasMap[alias] = tid
+	}
+	return idx
+}
+
+// Match 在内存中查找 test_item_id，策略与 MatchTestItemByName 相同，但不查数据库。
+func (idx *TestItemIndex) Match(name string) int64 {
+	if name == "" || len(idx.Candidates) == 0 {
+		return 0
+	}
+	name = strings.TrimSpace(name)
+	lowerName := strings.ToLower(name)
+	normalizedInput := normalizeName(name)
+
+	for _, c := range idx.Candidates {
+		if c.Name == name {
+			return c.ID
+		}
+	}
+	if id, ok := idx.aliasMap[name]; ok {
+		return id
+	}
+	for _, c := range idx.Candidates {
+		if strings.ToLower(c.Name) == lowerName {
+			return c.ID
+		}
+	}
+	for _, c := range idx.Candidates {
+		if strings.EqualFold(normalizeName(c.Name), normalizedInput) {
+			return c.ID
+		}
+	}
+	bestID := int64(0)
+	bestLen := 0
+	for _, c := range idx.Candidates {
+		lowerStd := strings.ToLower(c.Name)
+		if strings.Contains(lowerName, lowerStd) && len(c.Name) > bestLen {
+			bestID = c.ID
+			bestLen = len(c.Name)
+		}
+	}
+	if bestID > 0 {
+		return bestID
+	}
+	for _, c := range idx.Candidates {
+		lowerStd := strings.ToLower(c.Name)
+		if strings.Contains(lowerStd, lowerName) && len(name) > bestLen {
+			bestID = c.ID
+			bestLen = len(name)
+		}
+	}
+	return bestID
+}
+
+// GetCategory 返回已加载的 test_item 的分类，找不到时返回空字符串。
+func (idx *TestItemIndex) GetCategory(id int64) string {
+	return idx.categoryByID[id]
+}
+
+// AddCandidate 追加新创建的 test_item，避免同批次重复创建同名项目。
+func (idx *TestItemIndex) AddCandidate(id int64, name string, category string) {
+	idx.Candidates = append(idx.Candidates, TestItemCandidate{ID: id, Name: name, Category: category})
+	idx.categoryByID[id] = category
+}

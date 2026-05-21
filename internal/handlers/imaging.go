@@ -67,7 +67,11 @@ func UploadImagingReport(c *gin.Context) {
 		return
 	}
 
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 	uploadDir := cfg.UploadDir
 	os.MkdirAll(uploadDir, 0755)
 
@@ -100,7 +104,9 @@ func UploadImagingReport(c *gin.Context) {
 	}
 	reportID, _ := result.LastInsertId()
 
+	OCRWaitGroup.Add(1)
 	go func() {
+		defer OCRWaitGroup.Done()
 		ocrResults, err := services.Recognize(fileBytes, cfg)
 
 		apiSuccess := err == nil
@@ -614,7 +620,9 @@ func ReOCRImagingReport(c *gin.Context) {
 		return
 	}
 
+	OCRWaitGroup.Add(1)
 	go func() {
+		defer OCRWaitGroup.Done()
 		fileBytes, err := os.ReadFile(filePath)
 		if err != nil {
 			log.Printf("[imaging] 读取文件失败: %v", err)
@@ -622,7 +630,12 @@ func ReOCRImagingReport(c *gin.Context) {
 			return
 		}
 
-		cfg, _ := config.Load()
+		cfg, err := config.Load()
+		if err != nil {
+			log.Printf("[imaging] 配置加载失败: %v", err)
+			database.DB.Exec(`UPDATE imaging_reports SET ocr_status = 'failed' WHERE id = ?`, id)
+			return
+		}
 		ocrResults, err := services.Recognize(fileBytes, cfg)
 
 		apiSuccess := err == nil

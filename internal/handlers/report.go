@@ -2,6 +2,7 @@ package handlers
 
 	import (
 		"database/sql"
+		"log"
 		"net/http"
 		"sort"
 		"strings"
@@ -134,14 +135,15 @@ func loadReportItems(reportID string) []models.ReportItem {
 		COALESCE(ri.test_item_name, ti.standard_name, '') as test_item_name,
 		COALESCE(
 			ri.ref_interval_text,
-			CASE WHEN ri.ref_interval_id IS NOT NULL THEN
-				(SELECT CAST(value_min AS TEXT) || '-' || CAST(value_max AS TEXT) FROM reference_intervals WHERE id = ri.ref_interval_id)
-			ELSE ''
-			END, ''
+			CASE WHEN ref.id IS NOT NULL
+				THEN CAST(ref.value_min AS TEXT) || '-' || CAST(ref.value_max AS TEXT)
+			ELSE '' END,
+			''
 		) as ref_interval_text,
 		COALESCE(ti.category, '') as category
 		FROM report_items ri
 		LEFT JOIN test_items ti ON ti.id = ri.test_item_id
+		LEFT JOIN reference_intervals ref ON ref.id = ri.ref_interval_id
 		WHERE ri.report_id = ? ORDER BY ri.id`, reportID,
 	)
 	if err != nil {
@@ -187,8 +189,10 @@ func UpdateReportItem(c *gin.Context) {
 
 	// If test_item_id is explicitly provided, update it separately
 	if item.TestItemID != nil {
-		database.DB.Exec(`UPDATE report_items SET test_item_id=? WHERE id=? AND report_id=?`,
-			*item.TestItemID, itemID, reportID)
+		if _, err := database.DB.Exec(`UPDATE report_items SET test_item_id=? WHERE id=? AND report_id=?`,
+			*item.TestItemID, itemID, reportID); err != nil {
+			log.Printf("[report] 更新 test_item_id 失败: itemID=%s err=%v", itemID, err)
+		}
 	}
 
 	_, err := database.DB.Exec(
@@ -243,14 +247,26 @@ func ConfirmReport(c *gin.Context) {
 	// 匹配参考区间、计算提示符（让核效阶段就能看到flag）
 	matchRefAndCalcFlag(id)
 
-	_, err := database.DB.Exec(`UPDATE report_items SET confidence = 100 WHERE report_id = ?`, id)
+	tx, err := database.DB.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 		return
 	}
 
-	// 更新报告状态为已入库
-	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'imported' WHERE id = ?`, id)
+	if _, err = tx.Exec(`UPDATE report_items SET confidence = 100 WHERE report_id = ?`, id); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	if _, err = tx.Exec(`UPDATE lab_reports SET ocr_status = 'imported' WHERE id = ?`, id); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
 
 	c.JSON(http.StatusOK, models.Success(nil))
 }
@@ -306,66 +322,105 @@ func matchRefAndCalcFlag(reportID string) {
 	}
 	rows.Close()
 
+	// 一次性加载全部 test_items 供内存匹配，避免循环内重复查库
+	itemIdx := services.LoadTestItemIndex()
+
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
 	// Auto-match test_item_name → test_item_id, create if not exists
 	for i := range items {
 		if items[i].TestItemID == nil && items[i].TestItemName != "" {
-			matchID := services.MatchTestItemByName(items[i].TestItemName)
+			matchID := itemIdx.Match(items[i].TestItemName)
 			if matchID > 0 {
 				items[i].TestItemID = &matchID
-				database.DB.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, matchID, items[i].ID)
-				// Update test_item category if the item has one
+				if _, execErr := tx.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, matchID, items[i].ID); execErr != nil {
+					log.Printf("[matchRef] 更新 test_item_id 失败: %v", execErr)
+				}
 				if items[i].Category != "" {
-					database.DB.Exec(`UPDATE test_items SET category = ? WHERE id = ?`, items[i].Category, matchID)
+					if _, execErr := tx.Exec(`UPDATE test_items SET category = ? WHERE id = ?`, items[i].Category, matchID); execErr != nil {
+						log.Printf("[matchRef] 更新 category 失败: %v", execErr)
+					}
+				} else if cat := itemIdx.GetCategory(matchID); cat != "" {
+					// 从 test_items 反向回填分类到 report_items
+					items[i].Category = cat
+					tx.Exec(`UPDATE report_items SET category = ? WHERE id = ?`, cat, items[i].ID)
 				}
 			} else {
 				// Create new test_item
 				name := items[i].TestItemName
 				code := strings.ReplaceAll(strings.ToUpper(name), " ", "_")
-				res, err := database.DB.Exec(
+				res, execErr := tx.Exec(
 					`INSERT INTO test_items (code, standard_name, category, default_unit, value_type) VALUES (?, ?, ?, ?, 'numeric')`,
 					code, name, items[i].Category, items[i].OrigUnit,
 				)
-				if err == nil {
+				if execErr == nil {
 					newID, _ := res.LastInsertId()
 					items[i].TestItemID = &newID
-					database.DB.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, newID, items[i].ID)
+					if _, execErr2 := tx.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, newID, items[i].ID); execErr2 != nil {
+						log.Printf("[matchRef] 关联新 test_item 失败: %v", execErr2)
+					}
+					itemIdx.AddCandidate(newID, name, items[i].Category)
 				}
 			}
 		}
 	}
 
-	// Match reference interval, calculate flag
+	// 批量加载所有相关参考区间（一次 IN 查询）
+	var testItemIDs []int64
+	seen := make(map[int64]bool)
 	for _, it := range items {
-		if it.TestItemID == nil {
-			continue
+		if it.TestItemID != nil && !seen[*it.TestItemID] {
+			testItemIDs = append(testItemIDs, *it.TestItemID)
+			seen[*it.TestItemID] = true
 		}
-		ri, _ := services.MatchReference(*it.TestItemID, gender, ageAtSample)
-		flag := services.CalculateFlag(it.OrigValue, ri)
-		var refID interface{} = nil
-		if ri != nil {
-			refID = ri.ID
-		}
-		database.DB.Exec(
-			`UPDATE report_items SET ref_interval_id=?, flag=? WHERE id=?`,
-			refID, flag, it.ID,
-		)
 	}
+	refMap, _ := services.LoadReferenceIntervals(testItemIDs)
 
-	// 收集所有项目的分类，去重后更新 lab_reports.categories
+	// Match reference interval and calculate flag — all in memory, then batch UPDATE
 	catSet := make(map[string]bool)
 	for _, it := range items {
 		if it.Category != "" {
 			catSet[it.Category] = true
 		}
+		if it.TestItemID == nil {
+			continue
+		}
+		candidates := refMap[*it.TestItemID]
+		ri := services.MatchBestRef(candidates, gender, ageAtSample)
+		flag := services.CalculateFlag(it.OrigValue, ri)
+		var refID interface{} = nil
+		if ri != nil {
+			refID = ri.ID
+		}
+		if _, execErr := tx.Exec(
+			`UPDATE report_items SET ref_interval_id=?, flag=? WHERE id=?`,
+			refID, flag, it.ID,
+		); execErr != nil {
+			log.Printf("[matchRef] 更新 flag 失败: itemID=%d err=%v", it.ID, execErr)
+		}
 	}
+
+	// 收集所有项目的分类，去重后更新 lab_reports.categories
 	if len(catSet) > 0 {
 		cats := make([]string, 0, len(catSet))
 		for c := range catSet {
 			cats = append(cats, c)
 		}
 		sort.Strings(cats)
-		database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
+		if _, execErr := tx.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID); execErr != nil {
+			log.Printf("[matchRef] 更新 categories 失败: reportID=%s err=%v", reportID, execErr)
+		}
 	}
+
+	err = tx.Commit()
 }
 
 // ImportReport imports a report into the database (final step after review).
@@ -380,7 +435,9 @@ func ImportReport(c *gin.Context) {
 	warnings, _ := services.ValidateCalculations(reportItems)
 
 	// Update report status
-	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'imported' WHERE id = ?`, id)
+	if _, err := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'imported' WHERE id = ?`, id); err != nil {
+		log.Printf("[report] 更新报告状态失败: id=%s err=%v", id, err)
+	}
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
 		"status":   "imported",

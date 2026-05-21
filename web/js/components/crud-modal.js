@@ -9,7 +9,7 @@ const CrudModal = Vue.defineComponent({
   },
   emits: ['close', 'save'],
   template: `
-  <div v-if="visible" class="modal-overlay" @click.self="$emit('close')">
+  <div v-if="visible" class="modal-overlay" @mousedown.self="$emit('close')">
     <div :class="['modal-content', width]">
       <h2 class="modal-title">{{title}}</h2>
       <slot></slot>
