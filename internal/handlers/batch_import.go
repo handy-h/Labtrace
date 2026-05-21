@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -254,18 +255,29 @@ func ConfirmBatchImport(c *gin.Context) {
 				minVal := getNestedValue(itemMap, req.Mappings.RefMin)
 				maxVal := getNestedValue(itemMap, req.Mappings.RefMax)
 
-				refText := ""
-				if req.Mappings.RefRange != "" {
-					refText = getNestedValue(itemMap, req.Mappings.RefRange)
-				} else {
-					if minVal != "" && maxVal != "" {
-						refText = fmt.Sprintf("%s-%s", minVal, maxVal)
-					} else if minVal != "" {
-						refText = fmt.Sprintf(">=%s", minVal)
-					} else if maxVal != "" {
-						refText = fmt.Sprintf("<=%s", maxVal)
+			refText := ""
+			if req.Mappings.RefRange != "" {
+				refText = getNestedValue(itemMap, req.Mappings.RefRange)
+			}
+			// 回退：如果 ref_range 路径取不到值，尝试 min/max
+			if refText == "" {
+				if minVal != "" && maxVal != "" {
+					refText = fmt.Sprintf("%s-%s", minVal, maxVal)
+				} else if minVal != "" {
+					refText = fmt.Sprintf(">=%s", minVal)
+				} else if maxVal != "" {
+					refText = fmt.Sprintf("<=%s", maxVal)
+				}
+				// 智能回退：当 min/max 都取不到值时，尝试常见的 refRange 字段名
+				if refText == "" {
+					for _, key := range []string{"refRange", "ref_range", "reference"} {
+						if v := getNestedValue(itemMap, key); v != "" {
+							refText = v
+							break
+						}
 					}
 				}
+			}
 
 				// Match or create test_item for proper categorization
 				var testItemID interface{}
@@ -294,11 +306,33 @@ func ConfirmBatchImport(c *gin.Context) {
 					}
 				}
 
-				database.DB.Exec(
-					`INSERT INTO report_items (report_id, test_item_id, test_item_name, original_value, original_unit, confidence, ref_interval_text) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-					reportID, testItemID, name, value, unit, 100, refText,
-				)
+			database.DB.Exec(
+				`INSERT INTO report_items (report_id, test_item_id, test_item_name, original_value, original_unit, confidence, ref_interval_text, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				reportID, testItemID, name, value, unit, 100, refText, category,
+			)
 			}
+		}
+
+		// 收集所有项目的分类，去重后更新 lab_reports.categories
+		categorySet := make(map[string]bool)
+		for _, itemData := range items {
+			if itemMap, ok := itemData.(map[string]interface{}); ok {
+				cat := getNestedValue(itemMap, req.Mappings.ItemCategory)
+				if cat == "" {
+					cat = getNestedValue(report.Data, req.Mappings.ItemCategory)
+				}
+				if cat != "" {
+					categorySet[cat] = true
+				}
+			}
+		}
+		if len(categorySet) > 0 {
+			cats := make([]string, 0, len(categorySet))
+			for c := range categorySet {
+				cats = append(cats, c)
+			}
+			sort.Strings(cats)
+			database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
 		}
 
 		// Auto-match reference intervals and compute flags

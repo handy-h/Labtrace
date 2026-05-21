@@ -55,7 +55,9 @@ const ImagingMappingWizard = Vue.defineComponent({
     <!-- ════ STEP 1：可视化预览 + 自动高亮 ════ -->
     <div v-if="step===1" class="flex flex-1 min-h-0">
       <!-- 左侧：Canvas 预览 -->
-      <div class="flex-1 relative bg-slate-800" ref="canvasWrapRef" style="overflow:hidden;">
+      <div :class="['flex-1 relative', isPdf ? 'bg-slate-100' : 'bg-slate-800']"
+           ref="canvasWrapRef"
+           style="overflow:hidden;">
         <canvas ref="canvasRef"
                 style="position:absolute;inset:0;cursor:default;touch-action:none;"
                 @click="onCanvasClick"
@@ -194,7 +196,9 @@ const ImagingMappingWizard = Vue.defineComponent({
       <!-- 右侧：Canvas 预览 + OCR 块 -->
       <div class="flex-1 flex flex-col min-h-0">
         <!-- Canvas 区域 -->
-        <div class="flex-1 relative bg-slate-800" ref="canvasWrapRef2" style="overflow:hidden;">
+        <div :class="['flex-1 relative', isPdf ? 'bg-slate-100' : 'bg-slate-800']"
+             ref="canvasWrapRef2"
+             style="overflow:hidden;">
           <canvas ref="canvasRef2"
                   style="position:absolute;inset:0;cursor:default;touch-action:none;"
                   @click="onCanvasClick2"
@@ -313,6 +317,7 @@ const ImagingMappingWizard = Vue.defineComponent({
     const fieldList = [
       { key: "exam_item_name", label: "检查项目" },
       { key: "inspect_no", label: "检查号" },
+      { key: "sample_date", label: "检查日期" },
       { key: "exam_site", label: "检查部位" },
       { key: "exam_description", label: "影像表现" },
       { key: "diagnosis_result", label: "诊断结论" },
@@ -322,6 +327,7 @@ const ImagingMappingWizard = Vue.defineComponent({
     const fieldColors = {
       exam_item_name: "#3B82F6",    // 蓝色
       inspect_no: "#10B981",        // 绿色
+      sample_date: "#8B5CF6",       // 紫色
       exam_site: "#EF4444",         // 红色
       exam_description: "#EC4899",  // 粉色
       diagnosis_result: "#F97316",  // 橙色
@@ -341,16 +347,44 @@ const ImagingMappingWizard = Vue.defineComponent({
     // 初始化：加载 OCR 数据
     Vue.onMounted(async () => {
       if (props.visible && props.reportId) {
+        resetWizardState();
         await loadOCRBlocks();
       }
     });
 
     Vue.watch(() => props.visible, async (val) => {
       if (val && props.reportId) {
-        step.value = 1;
+        resetWizardState();
         await loadOCRBlocks();
       }
     });
+
+    function resetWizardState() {
+      step.value = 1;
+      ocrBlocks.value = [];
+      fieldMappings.value = {};
+      fieldEditValues.value = {};
+      editingField.value = null;
+      activeField.value = null;
+      selectedBlockIdx.value = -1;
+      saveAsTemplate.value = false;
+      zoomLevel.value = 1;
+      panOffsetX = 0;
+      panOffsetY = 0;
+      loadedImage = null;
+      imgNaturalW = 0;
+      imgNaturalH = 0;
+      canvasScale = 1;
+      canvasOffX = 0;
+      canvasOffY = 0;
+      pdfDoc = null;
+      pdfPage = null;
+      pdfBgCanvas = null;
+      if (pdfRenderTask) {
+        pdfRenderTask.cancel();
+        pdfRenderTask = null;
+      }
+    }
 
     async function loadOCRBlocks() {
       blocksLoading.value = true;
@@ -358,10 +392,6 @@ const ImagingMappingWizard = Vue.defineComponent({
         const r = await api.getImagingOCRBlocks(props.reportId);
         if (r.code === 0 && r.data) {
           let blocks = r.data.blocks || [];
-
-          // 拆分包含"标签：内容"格式的块
-          blocks = splitOcrBlocks(blocks);
-
           ocrBlocks.value = blocks;
           // 尝试加载医院模板
           if (props.hospitalId) {
@@ -389,109 +419,12 @@ const ImagingMappingWizard = Vue.defineComponent({
       }
     }
 
-    // 拆分包含"标签：内容"格式的 OCR 块
-    function splitOcrBlocks(blocks) {
-      const splitBlocks = [];
-
-      blocks.forEach((block) => {
-        const text = block.text || "";
-
-        // 检查是否包含冒号分隔符（中文或英文）
-        const colonIdx = text.indexOf("：");
-        const colonIdxEn = text.indexOf(":");
-        const splitIdx = colonIdx !== -1 ? colonIdx : colonIdxEn;
-
-        if (splitIdx !== -1 && splitIdx > 0 && splitIdx < text.length - 1) {
-          // 拆分为两个块：标签和内容
-          const label = text.substring(0, splitIdx).trim();
-          const content = text.substring(splitIdx + 1).trim();
-
-          // 按字符比例分配宽度
-          const textLen = text.length;
-          const labelRatio = label.length / textLen;
-
-          if (label) {
-            splitBlocks.push({
-              ...block,
-              text: label,
-              width: Math.max(1, Math.round(block.width * labelRatio)),
-            });
-          }
-
-          if (content) {
-            splitBlocks.push({
-              ...block,
-              text: content,
-              left: block.left + Math.round(block.width * labelRatio),
-              width: Math.max(1, Math.round(block.width * (content.length / textLen))),
-            });
-          }
-        } else {
-          // 不包含分隔符，保持原样
-          splitBlocks.push(block);
-        }
-      });
-
-      return splitBlocks;
-    }
-
-    // PDF 模式：加载第一页到离屏 canvas 作为背景
-    async function loadPdfBackground() {
-      try {
-        pdfDoc = await pdfjsLib.getDocument(props.reportImageUrl).promise;
-        pdfPage = await pdfDoc.getPage(1);
-        console.log("[imaging-wizard] PDF loaded, viewport:", pdfPage.getViewport({ scale: 1 }));
-        await renderPdfToBackground();
-        console.log("[imaging-wizard] PDF rendered to bg canvas:", pdfBgCanvas?.width, pdfBgCanvas?.height);
-      } catch (e) {
-        console.error("[imaging-wizard] pdf.js load error", e);
-        pdfPage = null;
-        pdfBgCanvas = null;
-      }
-    }
-
-    async function renderPdfToBackground() {
-      if (!pdfPage || ocrBlocks.value.length === 0) return;
-      if (pdfRenderTask) { pdfRenderTask.cancel(); pdfRenderTask = null; }
-
-      const bbox = computeOcrBbox();
-      const viewport = pdfPage.getViewport({ scale: 1 });
-
-      // 计算缩放比例，保持宽高比
-      const scaleX = bbox.w / viewport.width;
-      const scaleY = bbox.h / viewport.height;
-      const renderScale = Math.min(scaleX, scaleY); // 使用较小的缩放比例保持宽高比
-
-      const scaledViewport = pdfPage.getViewport({ scale: renderScale });
-
-      pdfBgCanvas = document.createElement("canvas");
-      pdfBgCanvas.width = scaledViewport.width;
-      pdfBgCanvas.height = scaledViewport.height;
-
-      pdfRenderTask = pdfPage.render({
-        canvasContext: pdfBgCanvas.getContext("2d"),
-        viewport: scaledViewport,
-      });
-      await pdfRenderTask.promise;
-      pdfRenderTask = null;
-    }
-
-    async function loadHospitalTemplate() {
-      try {
-        const r = await api.getImagingMappingTemplate(props.hospitalId);
-        if (r.code === 0 && r.data) {
-          fieldMappings.value = r.data.field_mappings || {};
-        }
-      } catch (e) {
-        // 模板不存在，忽略
-      }
-    }
-
     // 自动关键词匹配
     function autoMapFields() {
       const keywords = {
         exam_item_name: [/检查项目/, /检查名称/],
         inspect_no: [/检查号/, /报告编号/, /编号/],
+        sample_date: [/检查日期/, /报告日期/, /日期/],
         exam_site: [/检查部位/, /部位/],
         exam_description: [/影像表现/, /所见/, /描述/],
         diagnosis_result: [/诊断结论/, /印象/, /诊断意见/],
@@ -546,14 +479,81 @@ const ImagingMappingWizard = Vue.defineComponent({
       return "#E2E8F0"; // 默认灰色
     }
 
+    function getBlockField(idx) {
+      for (const [field, indices] of Object.entries(fieldMappings.value)) {
+        if (indices.includes(idx)) return field;
+      }
+      return "";
+    }
+
+    async function loadHospitalTemplate() {
+      try {
+        const r = await api.getImagingMappingTemplate(props.hospitalId);
+        if (r.code === 0 && r.data) {
+          fieldMappings.value = r.data.field_mappings || {};
+        }
+      } catch (e) {
+        // 模板不存在时继续使用自动匹配。
+      }
+    }
+
+    async function loadPdfBackground() {
+      try {
+        pdfDoc = await pdfjsLib.getDocument(props.reportImageUrl).promise;
+        pdfPage = await pdfDoc.getPage(1);
+        await renderPdfToBackground();
+      } catch (e) {
+        console.error("[imaging-wizard] pdf.js load error", e);
+        pdfPage = null;
+        pdfBgCanvas = null;
+      }
+    }
+
+    async function renderPdfToBackground() {
+      if (!pdfPage || ocrBlocks.value.length === 0) return;
+      if (pdfRenderTask) {
+        pdfRenderTask.cancel();
+        pdfRenderTask = null;
+      }
+
+      const bbox = computeOcrBbox();
+      const viewport = pdfPage.getViewport({ scale: 1 });
+      const renderScale = bbox.w / viewport.width;
+      const scaledViewport = pdfPage.getViewport({ scale: renderScale });
+
+      pdfBgCanvas = document.createElement("canvas");
+      pdfBgCanvas.width = Math.ceil(scaledViewport.width);
+      pdfBgCanvas.height = Math.ceil(scaledViewport.height);
+
+      const bgCtx = pdfBgCanvas.getContext("2d");
+      bgCtx.fillStyle = "#ffffff";
+      bgCtx.fillRect(0, 0, pdfBgCanvas.width, pdfBgCanvas.height);
+
+      pdfRenderTask = pdfPage.render({
+        canvasContext: bgCtx,
+        viewport: scaledViewport,
+        background: "#ffffff",
+      });
+      await pdfRenderTask.promise;
+      pdfRenderTask = null;
+    }
+
     function selectBlock(idx) {
       selectedBlockIdx.value = idx;
+      Vue.nextTick(() => {
+        renderCanvas(canvasRef.value, canvasWrapRef.value);
+        renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+      });
     }
 
     function selectField(key) {
       activeField.value = key;
       // 高亮对应 OCR 块
       selectedBlockIdx.value = -1;
+      Vue.nextTick(() => {
+        renderCanvas(canvasRef.value, canvasWrapRef.value);
+        renderCanvas(canvasRef2.value, canvasWrapRef2.value);
+      });
     }
 
     function startFieldEdit(key) {
@@ -657,6 +657,8 @@ const ImagingMappingWizard = Vue.defineComponent({
       canvas.height = h;
 
       ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = isPdf.value ? "#f8fafc" : "#0f172a";
+      ctx.fillRect(0, 0, w, h);
       canvasOffX = 0;
       canvasOffY = 0;
 
@@ -684,6 +686,13 @@ const ImagingMappingWizard = Vue.defineComponent({
         const pdfDrawY = canvasOffY + bbox.minY * canvasScale;
         const pdfDrawW = bbox.w * canvasScale;
         const pdfDrawH = bbox.h * canvasScale;
+        ctx.save();
+        ctx.shadowColor = "rgba(15, 23, 42, 0.14)";
+        ctx.shadowBlur = 18;
+        ctx.shadowOffsetY = 3;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(pdfDrawX, pdfDrawY, pdfDrawW, pdfDrawH);
+        ctx.restore();
         ctx.drawImage(pdfBgCanvas, 0, 0, pdfBgCanvas.width, pdfBgCanvas.height,
           pdfDrawX, pdfDrawY, pdfDrawW, pdfDrawH);
       } else if (ocrBlocks.value.length > 0) {
@@ -696,22 +705,69 @@ const ImagingMappingWizard = Vue.defineComponent({
         ctx.fillRect(0, 0, w, h);
       }
 
-      // 绘制 OCR 块（带颜色高亮，极低透明度）
-      ctx.globalAlpha = 0.08; // 8% 透明度（进一步降低遮挡）
+      // 绘制 OCR 块（浅色底 + 边框），PDF 扫描件很浅时也能定位文字区域。
+      // 支持两种坐标格式：has_position=true（左上角坐标）和 has_position=false（中心点坐标）
       ocrBlocks.value.forEach((block, idx) => {
-        if (!block.has_position) return;
-        const bx = canvasOffX + block.left * canvasScale;
-        const by = canvasOffY + block.top * canvasScale;
+        const bx = block.has_position
+          ? canvasOffX + block.left * canvasScale
+          : canvasOffX + (block.left - block.width / 2) * canvasScale;
+        const by = block.has_position
+          ? canvasOffY + block.top * canvasScale
+          : canvasOffY + (block.top - block.height / 2) * canvasScale;
         const bw = block.width * canvasScale;
         const bh = block.height * canvasScale;
-        const color = getBlockColor(block, idx);
+        const field = getBlockField(idx);
+        const color = field ? fieldColors[field] : "#64748B";
+        const isSelected = selectedBlockIdx.value === idx;
+        const isActiveFieldBlock = activeField.value && field === activeField.value;
+
+        ctx.globalAlpha = field ? 0.16 : 0.08;
         ctx.fillStyle = color;
         ctx.fillRect(bx, by, bw, bh);
-        ctx.strokeStyle = selectedBlockIdx.value === idx ? "#3B82F6" : "transparent";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx, by, bw, bh);
+
+        if (field || isSelected || isActiveFieldBlock) {
+          ctx.globalAlpha = isSelected || isActiveFieldBlock ? 0.95 : 0.5;
+          ctx.strokeStyle = isSelected ? "#2563EB" : color;
+          ctx.lineWidth = isSelected || isActiveFieldBlock ? 2.5 : 1.2;
+          ctx.strokeRect(bx, by, bw, bh);
+        }
       });
-      ctx.globalAlpha = 1; // 恢复透明度
+      ctx.globalAlpha = 1;
+
+      // 在预览上回绘 OCR 文本。部分影像 PDF 的原始扫描文字非常淡，
+      // 仅展示 PDF 背景无法阅读，文本层作为可读性兜底。
+      const shouldDrawText = isPdf.value || !loadedImage || canvasScale > 0.45;
+      if (shouldDrawText) {
+        const fontSize = Math.max(10, Math.min(15, 12 * canvasScale));
+        ctx.font = `600 ${fontSize}px sans-serif`;
+        ctx.textBaseline = "top";
+        ctx.lineWidth = Math.max(2.5, fontSize / 3);
+        ocrBlocks.value.forEach((block, idx) => {
+          if (!block.text) return;
+          const bx = block.has_position
+            ? canvasOffX + block.left * canvasScale
+            : canvasOffX + (block.left - block.width / 2) * canvasScale;
+          const by = block.has_position
+            ? canvasOffY + block.top * canvasScale
+            : canvasOffY + (block.top - block.height / 2) * canvasScale;
+          const bw = block.width * canvasScale;
+          if (bw < 14) return;
+
+          const maxChars = Math.max(4, Math.floor(bw / Math.max(fontSize * 0.55, 5)));
+          const label = block.text.length > maxChars
+            ? block.text.slice(0, Math.max(1, maxChars - 1)) + "…"
+            : block.text;
+          const field = getBlockField(idx);
+          const fill = field ? fieldColors[field] : "#0f172a";
+
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = "rgba(255,255,255,0.96)";
+          ctx.strokeText(label, bx + 2, by + 1);
+          ctx.fillStyle = fill;
+          ctx.fillText(label, bx + 2, by + 1);
+        });
+        ctx.globalAlpha = 1;
+      }
 
       ctx.restore();
     }
@@ -780,9 +836,11 @@ const ImagingMappingWizard = Vue.defineComponent({
 
       for (let i = ocrBlocks.value.length - 1; i >= 0; i--) {
         const block = ocrBlocks.value[i];
-        if (!block.has_position) continue;
-        if (x >= block.left && x <= block.left + block.width &&
-            y >= block.top && y <= block.top + block.height) {
+        const bx1 = block.has_position ? block.left : block.left - block.width / 2;
+        const by1 = block.has_position ? block.top : block.top - block.height / 2;
+        const bx2 = block.has_position ? block.left + block.width : block.left + block.width / 2;
+        const by2 = block.has_position ? block.top + block.height : block.top + block.height / 2;
+        if (x >= bx1 && x <= bx2 && y >= by1 && y <= by2) {
           selectedBlockIdx.value = i;
           Vue.nextTick(() => {
             renderCanvas(canvasRef.value, canvasWrapRef.value);
@@ -807,12 +865,30 @@ const ImagingMappingWizard = Vue.defineComponent({
       });
     }
 
-    // 应用映射并保存
-    async function doApplyAndFinish() {
+    function buildMappingConfig(includeFieldValues) {
       const config = {
         field_mappings: fieldMappings.value,
         hospital_id: props.hospitalId || null,
       };
+
+      if (includeFieldValues) {
+        const values = {};
+        for (const [field, value] of Object.entries(fieldEditValues.value)) {
+          if (typeof value !== "string") continue;
+          const trimmed = value.trim();
+          if (trimmed) values[field] = trimmed;
+        }
+        if (Object.keys(values).length > 0) {
+          config.field_values = values;
+        }
+      }
+
+      return config;
+    }
+
+    // 应用映射并保存
+    async function doApplyAndFinish() {
+      const config = buildMappingConfig(true);
 
       try {
         const r = await api.applyImagingMapping(props.reportId, config);
@@ -821,7 +897,7 @@ const ImagingMappingWizard = Vue.defineComponent({
           if (saveAsTemplate.value && props.hospitalId) {
             await api.saveImagingMappingTemplate(props.hospitalId, {
               name: "default",
-              config: config,
+              config: buildMappingConfig(false),
             });
           }
           emit("done");
@@ -861,4 +937,3 @@ const ImagingMappingWizard = Vue.defineComponent({
     };
   },
 });
-

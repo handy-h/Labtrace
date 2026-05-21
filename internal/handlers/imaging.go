@@ -136,10 +136,11 @@ func UploadImagingReport(c *gin.Context) {
 		diagnosis := parsed.DiagnosisResult
 		examItemName := parsed.ExamItemName
 		inspectNo := parsed.InspectNo
+		sampleDate := parsed.SampleDate
 
 		if _, dbErr := database.DB.Exec(
-			`UPDATE imaging_reports SET exam_item_name=?, inspect_no=?, exam_site=?, exam_description=?, diagnosis_result=?, ocr_status='review' WHERE id = ?`,
-			examItemName, inspectNo, examSite, examDesc, diagnosis, reportID,
+			`UPDATE imaging_reports SET exam_item_name=?, inspect_no=?, sample_date=COALESCE(NULLIF(?, ''), sample_date), exam_site=?, exam_description=?, diagnosis_result=?, ocr_status='review' WHERE id = ?`,
+			examItemName, inspectNo, sampleDate, examSite, examDesc, diagnosis, reportID,
 		); dbErr != nil {
 			log.Printf("[imaging] 更新影像报告数据失败: reportID=%d err=%v", reportID, dbErr)
 		}
@@ -393,11 +394,11 @@ func ApplyImagingMapping(c *gin.Context) {
 	cfgJSON, _ := json.Marshal(cfg)
 	_, err = database.DB.Exec(
 		`UPDATE imaging_reports SET 
-            exam_item_name = ?, inspect_no = ?,
+            exam_item_name = ?, inspect_no = ?, sample_date = COALESCE(NULLIF(?, ''), sample_date),
             exam_site = ?, exam_description = ?, diagnosis_result = ?,
             mapping_config_json = ?, ocr_status = 'review'
         WHERE id = ?`,
-		parsed.ExamItemName, parsed.InspectNo,
+		parsed.ExamItemName, parsed.InspectNo, parsed.SampleDate,
 		parsed.ExamSite, parsed.ExamDescription, parsed.DiagnosisResult,
 		string(cfgJSON),
 		id,

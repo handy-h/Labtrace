@@ -3,6 +3,7 @@ package handlers
 	import (
 		"database/sql"
 		"net/http"
+		"sort"
 		"strings"
 		"time"
 
@@ -348,6 +349,22 @@ func matchRefAndCalcFlag(reportID string) {
 			`UPDATE report_items SET ref_interval_id=?, flag=? WHERE id=?`,
 			refID, flag, it.ID,
 		)
+	}
+
+	// 收集所有项目的分类，去重后更新 lab_reports.categories
+	catSet := make(map[string]bool)
+	for _, it := range items {
+		if it.Category != "" {
+			catSet[it.Category] = true
+		}
+	}
+	if len(catSet) > 0 {
+		cats := make([]string, 0, len(catSet))
+		for c := range catSet {
+			cats = append(cats, c)
+		}
+		sort.Strings(cats)
+		database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
 	}
 }
 

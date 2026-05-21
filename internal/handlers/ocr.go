@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 
 	"labtrace/internal/config"
 	"labtrace/internal/database"
@@ -119,6 +121,22 @@ func Upload(c *gin.Context) {
 					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range, item.Category,
 				)
+			}
+
+			// 收集所有项目的分类，去重后更新 lab_reports.categories
+			catSet := make(map[string]bool)
+			for _, item := range parsedItems {
+				if item.Category != "" {
+					catSet[item.Category] = true
+				}
+			}
+			if len(catSet) > 0 {
+				cats := make([]string, 0, len(catSet))
+				for c := range catSet {
+					cats = append(cats, c)
+				}
+				sort.Strings(cats)
+				database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
 			}
 		} else {
 			// Fallback: insert raw OCR blocks as individual items
@@ -243,6 +261,22 @@ func ApplyColumnMapping(c *gin.Context) {
 			`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			id, item.Name, item.Value, item.Unit, item.Confidence, item.BBox, item.Range, rowNotes, item.Category,
 		)
+	}
+
+	// 收集所有项目的分类，去重后更新 lab_reports.categories
+	categorySet := make(map[string]bool)
+	for _, item := range parsedItems {
+		if item.Category != "" {
+			categorySet[item.Category] = true
+		}
+	}
+	if len(categorySet) > 0 {
+		cats := make([]string, 0, len(categorySet))
+		for c := range categorySet {
+			cats = append(cats, c)
+		}
+		sort.Strings(cats)
+		database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), id)
 	}
 
 	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id)

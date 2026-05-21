@@ -22,7 +22,6 @@ const BatchImportImagingView = Vue.defineComponent({
               <option v-for="h in hospitals" :key="h.id" :value="h.id">{{ h.name }}</option>
             </select>
           </div>
-
         </div>
         <button @click="step = 2" class="btn btn-primary" :disabled="!form.subject_id">下一步</button>
       </div>
@@ -228,8 +227,7 @@ const BatchImportImagingView = Vue.defineComponent({
     const step = Vue.ref(1);
     const subjects = Vue.ref([]);
     const hospitals = Vue.ref([]);
-    const imagingTypes = Vue.ref([]);
-    const form = Vue.ref({ subject_id: '', hospital_id: '', report_type: '' });
+    const form = Vue.ref({ subject_id: '', hospital_id: '' });
 
     const jsonFiles = Vue.ref([]);
     const pdfFiles = Vue.ref([]);
@@ -289,7 +287,6 @@ const BatchImportImagingView = Vue.defineComponent({
     Vue.onMounted(() => {
       api.listSubjects().then(r => subjects.value = r.data || []);
       api.listHospitals().then(r => hospitals.value = r.data || []);
-      api.listImagingReportTypes().then(r => imagingTypes.value = r.data || []);
     });
 
     function onJsonFileChange(e) {
@@ -412,7 +409,6 @@ const BatchImportImagingView = Vue.defineComponent({
         const r = await api.confirmBatchImagingImport({
           subject_id: parseInt(form.value.subject_id),
           hospital_id: form.value.hospital_id ? parseInt(form.value.hospital_id) : null,
-          report_type: form.value.report_type,
           mappings: mappings.value,
           reports
         });
@@ -426,7 +422,7 @@ const BatchImportImagingView = Vue.defineComponent({
 
     function reset() {
       step.value = 1;
-      form.value = { subject_id: '', hospital_id: '', report_type: '' };
+      form.value = { subject_id: '', hospital_id: '' };
       jsonFiles.value = [];
       pdfFiles.value = [];
       filePairs.value = [];
@@ -456,7 +452,7 @@ const BatchImportImagingView = Vue.defineComponent({
     }
 
     return {
-      step, subjects, hospitals, imagingTypes, form,
+      step, subjects, hospitals, form,
       filePairs, uploadErrors, previewData, previewValues, selectedReport,
       uploading, importing, importResult, mappings,
       selectedFileIndex, jsonModalVisible, jsonModalData, hasEmptyDates,

@@ -42,6 +42,7 @@ type ImagingUploadResponse struct {
 type ImagingParsedResult struct {
 	ExamItemName    string `json:"exam_item_name"`
 	InspectNo       string `json:"inspect_no"`
+	SampleDate      string `json:"sample_date"`
 	ExamSite        string `json:"exam_site"`
 	ExamDescription string `json:"exam_description"`
 	DiagnosisResult string `json:"diagnosis_result"`
@@ -50,9 +51,12 @@ type ImagingParsedResult struct {
 // ImagingMappingConfig stores the user-defined field mapping for imaging reports.
 type ImagingMappingConfig struct {
 	// FieldMappings maps field names to lists of OCR block indices.
-	// Valid field names: exam_item_name, inspect_no,
+	// Valid field names: exam_item_name, inspect_no, sample_date,
 	//                    exam_site, exam_description, diagnosis_result
 	FieldMappings map[string][]int `json:"field_mappings"`
+
+	// FieldValues stores manual overrides for mapped field content.
+	FieldValues map[string]string `json:"field_values,omitempty"`
 
 	// HospitalID is optional, used for template matching.
 	HospitalID *int64 `json:"hospital_id,omitempty"`

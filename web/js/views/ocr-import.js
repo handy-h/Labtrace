@@ -275,11 +275,11 @@ const OCRImportView = Vue.defineComponent({
               
               <div class="info-grid mb-6">
                 <div class="info-item">
-                  <span class="info-label">检查日期</span>
-                  <span class="info-value">{{ selectedImagingReport.sample_date || '-' }}</span>
+                  <span class="info-label">检查日期:&nbsp;&nbsp;</span>
+                  <span class="info-value">{{ formatDate(selectedImagingReport.sample_date) }}</span>
                 </div>
                 <div class="info-item">
-                  <span class="info-label">医院</span>
+                  <span class="info-label">医院:&nbsp;&nbsp;</span>
                   <span class="info-value">{{ selectedImagingReport.hospital_name || '-' }}</span>
                 </div>
                 <div class="info-item">
@@ -910,6 +910,15 @@ const OCRImportView = Vue.defineComponent({
       // 影像图片加载完成
     }
 
+    // 格式化日期：只取日期部分 YYYY-MM-DD
+    function formatDate(raw) {
+      if (!raw) return '-';
+      // 提取日期部分（去掉时间）
+      const datePart = String(raw).split(/\s+/)[0];
+      // 统一分隔符为 -
+      return datePart.replace(/[\/.]/g, '-');
+    }
+
     return {
       subjects, hospitals, labReports, imagingReports, imagingTypes, form, uploading, selectedReport, selectedImagingReport, reportImageUrl, imagingImageUrl, selectedRowIndex,
       editingItemId, editForm, imagingEditForm, zoomLevel, quota, quotaPct, quotaClass, quotaBarClass,
@@ -924,7 +933,7 @@ const OCRImportView = Vue.defineComponent({
       imagingWizardVisible, imagingWizardReportId, imagingWizardHospitalId, imagingWizardImageUrl, imagingWizardFilePath,
       openImagingMappingWizard, onImagingWizardDone,
       selectedFiles, batchQueue, batchUploading, batchCurrent, batchDoneCount, batchPct, removeFile,
-      onReportCategoryChange, getImagingTypeName,
+      onReportCategoryChange, getImagingTypeName, formatDate,
     };
   },
 });

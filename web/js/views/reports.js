@@ -192,6 +192,7 @@ const ReportsView = Vue.defineComponent({
                 <div class="info-item"><span class="info-label">受检者:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.subject_name || '-' }}</span></div>
                 <div class="info-item"><span class="info-label">检查日期:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.sample_date || '-' }}</span></div>
                 <div class="info-item"><span class="info-label">医院:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.hospital_name || '-' }}</span></div>
+                <div class="info-item"><span class="info-label">检验项目分类:&nbsp;&nbsp;</span><span class="info-value">{{ getImagingTypeName(selectedImagingReport.report_type) || '-' }}</span></div>
                 <div class="info-item"><span class="info-label">检查项目:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.exam_item_name || '-' }}</span></div>
                 <div class="info-item"><span class="info-label">检查号:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.inspect_no || '-' }}</span></div>
                 <div class="info-item"><span class="info-label">检查部位:&nbsp;&nbsp;</span><span class="info-value">{{ selectedImagingReport.exam_site || '-' }}</span></div>
