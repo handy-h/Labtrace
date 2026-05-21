@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 
 	"labtrace/internal/config"
 	"labtrace/internal/database"
@@ -49,7 +51,11 @@ func Upload(c *gin.Context) {
 	}
 
 	// Save file to uploads directory
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 	uploadDir := cfg.UploadDir
 	os.MkdirAll(uploadDir, 0755)
 
@@ -63,7 +69,6 @@ func Upload(c *gin.Context) {
 	subjectID, _ := strconv.ParseInt(c.PostForm("subject_id"), 10, 64)
 	hospitalID, _ := strconv.ParseInt(c.PostForm("hospital_id"), 10, 64)
 	sampleDate := c.PostForm("sample_date")
-	categoryID, _ := strconv.ParseInt(c.PostForm("category_id"), 10, 64)
 
 	// Create lab_reports record
 	var hospID interface{} = nil
@@ -71,14 +76,9 @@ func Upload(c *gin.Context) {
 		hospID = hospitalID
 	}
 
-	var catID interface{} = nil
-	if categoryID > 0 {
-		catID = categoryID
-	}
-
 	result, err := database.DB.Exec(
-		`INSERT INTO lab_reports (subject_id, hospital_id, sample_date, category_id, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, ?, 'processing')`,
-		subjectID, hospID, sampleDate, catID, filePath, fileMD5,
+		`INSERT INTO lab_reports (subject_id, hospital_id, sample_date, file_path, file_md5, ocr_status) VALUES (?, ?, ?, ?, ?, 'processing')`,
+		subjectID, hospID, sampleDate, filePath, fileMD5,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
@@ -87,7 +87,9 @@ func Upload(c *gin.Context) {
 	reportID, _ := result.LastInsertId()
 
 	// Async OCR recognition
+	OCRWaitGroup.Add(1)
 	go func() {
+		defer OCRWaitGroup.Done()
 		ocrResults, err := services.Recognize(fileBytes, cfg)
 
 		// Record OCR API call in monthly quota (success = HTTP call succeeded)
@@ -123,67 +125,48 @@ func Upload(c *gin.Context) {
 		// Parse OCR results into structured lab items (name/value/unit/range)
 		parsedItems := services.ParseLabResults(ocrResults)
 
-		// 使用事务包裹批量插入，确保原子性
-		tx, txErr := database.DB.Begin()
-		if txErr != nil {
-			log.Printf("[ocr] 开启事务失败: reportID=%d err=%v", reportID, txErr)
-			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
-				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
-			}
-			return
-		}
-
-		insertCount := 0
 		if len(parsedItems) > 0 {
+			// Create report_items from parsed items
 			for _, item := range parsedItems {
 				normalizedValue := services.NormalizeQualitative(item.Value)
-				if _, dbErr := tx.Exec(
-					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range,
-				); dbErr != nil {
-					log.Printf("[ocr] 插入报告项失败: reportID=%d name=%s err=%v", reportID, item.Name, dbErr)
-					continue
+				database.DB.Exec(
+					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range, item.Category,
+				)
+			}
+
+			// 收集所有项目的分类，去重后更新 lab_reports.categories
+			catSet := make(map[string]bool)
+			for _, item := range parsedItems {
+				if item.Category != "" {
+					catSet[item.Category] = true
 				}
-				insertCount++
+			}
+			if len(catSet) > 0 {
+				cats := make([]string, 0, len(catSet))
+				for c := range catSet {
+					cats = append(cats, c)
+				}
+				sort.Strings(cats)
+				database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
 			}
 		} else {
 			// Fallback: insert raw OCR blocks as individual items
 			for _, r := range ocrResults {
 				normalizedValue := services.NormalizeQualitative(r.Text)
-				if _, dbErr := tx.Exec(
+				database.DB.Exec(
 					`INSERT INTO report_items (report_id, original_value, confidence, ocr_bbox) VALUES (?, ?, ?, ?)`,
 					reportID, normalizedValue, int(r.Confidence), fmt.Sprintf(`{"x":%d,"y":%d,"w":%d,"h":%d}`, r.Left, r.Top, r.Width, r.Height),
-				); dbErr != nil {
-					log.Printf("[ocr] 插入OCR原始块失败: reportID=%d err=%v", reportID, dbErr)
-					continue
-				}
-				insertCount++
+				)
 			}
 		}
 
-		if insertCount == 0 {
-			log.Printf("[ocr] 未插入任何报告项: reportID=%d", reportID)
-			tx.Rollback()
-			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
-				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
-			}
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			log.Printf("[ocr] 提交事务失败: reportID=%d err=%v", reportID, err)
-			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, reportID); dbErr != nil {
-				log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
-			}
-			return
-		}
-
-		// Update status to review
+		// Update status to review (only if items were inserted)
 		if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, reportID); dbErr != nil {
 			log.Printf("[ocr] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
 		}
 
-		log.Printf("[ocr] 完成: reportID=%d inserted=%d", reportID, insertCount)
+		// Audit log
 		services.LogAction("ocr_upload", "OCR上传", "lab_report", reportID, nil)
 	}()
 
@@ -282,26 +265,6 @@ func ApplyColumnMapping(c *gin.Context) {
 		database.DB.Exec(`UPDATE lab_reports SET sample_date = ? WHERE id = ?`, cfg.SampleDate, id)
 	}
 
-	// 处理分类：从映射结果中提取分类名称，匹配 report_categories
-	var mismatchCategory string
-	for _, item := range parsedItems {
-		if item.Category != "" {
-			// 尝试精确匹配分类名
-			var catID int64
-			err := database.DB.QueryRow(`SELECT id FROM report_categories WHERE name = ?`, item.Category).Scan(&catID)
-			if err == nil {
-				// 匹配成功，设置 category_id
-				database.DB.Exec(`UPDATE lab_reports SET category_id = ? WHERE id = ?`, catID, id)
-				database.DB.Exec(`UPDATE lab_reports SET mismatch_category = '' WHERE id = ?`, id)
-			} else {
-				// 未匹配，记录原始名称供前端归一化
-				mismatchCategory = item.Category
-				database.DB.Exec(`UPDATE lab_reports SET mismatch_category = ? WHERE id = ?`, mismatchCategory, id)
-			}
-			break // 只取第一个有效分类
-		}
-	}
-
 	mappingJSON, _ := services.MarshalColumnMappingConfig(cfg)
 	database.DB.Exec(`UPDATE lab_reports SET column_mapping_json = ? WHERE id = ?`, mappingJSON, id)
 
@@ -309,9 +272,25 @@ func ApplyColumnMapping(c *gin.Context) {
 	for _, item := range parsedItems {
 		rowNotes := item.RowText
 		database.DB.Exec(
-			`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, item.Name, item.Value, item.Unit, item.Confidence, item.BBox, item.Range, rowNotes,
+			`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, item.Name, item.Value, item.Unit, item.Confidence, item.BBox, item.Range, rowNotes, item.Category,
 		)
+	}
+
+	// 收集所有项目的分类，去重后更新 lab_reports.categories
+	categorySet := make(map[string]bool)
+	for _, item := range parsedItems {
+		if item.Category != "" {
+			categorySet[item.Category] = true
+		}
+	}
+	if len(categorySet) > 0 {
+		cats := make([]string, 0, len(categorySet))
+		for c := range categorySet {
+			cats = append(cats, c)
+		}
+		sort.Strings(cats)
+		database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), id)
 	}
 
 	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id)
@@ -345,9 +324,8 @@ func ApplyColumnMapping(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
-		"items":               items,
-		"item_count":          len(items),
-		"mismatch_category":   mismatchCategory,
+		"items":      items,
+		"item_count": len(items),
 	}))
 }
 

@@ -7,7 +7,7 @@ const DrilldownPopup = Vue.defineComponent({
   },
   emits: ['close'],
   template: `
-  <div v-if="visible" class="modal-overlay" @click.self="$emit('close')">
+  <div v-if="visible" class="modal-overlay" @mousedown.self="$emit('close')">
     <div class="modal-content w-[500px]">
       <h3 class="modal-title">数据详情</h3>
       <div style="margin-bottom: 0.75rem">

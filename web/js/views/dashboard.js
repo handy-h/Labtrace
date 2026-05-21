@@ -94,20 +94,22 @@ const DashboardView = Vue.defineComponent({
     const quotaBarClass = Vue.computed(() => quotaBarClass(quota.value));
     const quotaBarWidth = Vue.computed(() => quotaPct(quota.value));
 
+    const _ctrl = new AbortController();
+
     function loadSummary() {
-      api.dashboardSummary().then(r => { if (r.data) summary.value = r.data; });
+      api.dashboardSummary(_ctrl.signal).then(r => { if (r && r.data) summary.value = r.data; });
     }
     function loadAnomalies() {
       const params = {};
       if (filter.value.flag) params.flag = filter.value.flag;
-      api.dashboardAnomalies(params).then(r => { if (r.data && r.data.data) anomalies.value = r.data.data; });
+      api.dashboardAnomalies(params, _ctrl.signal).then(r => { if (r && r.data && r.data.data) anomalies.value = r.data.data; });
     }
     function loadQuota() {
-      api.getOCRQuota().then(r => { if (r.data) quota.value = r.data; });
+      api.getOCRQuota(_ctrl.signal).then(r => { if (r && r.data) quota.value = r.data; });
     }
     function loadRecentLog() {
-      api.listAuditLogs({ action: 'ocr_upload' }).then(r => {
-        if (r.data && r.data.length > 0) recentLog.value = r.data[0];
+      api.listAuditLogs({ action: 'ocr_upload' }, _ctrl.signal).then(r => {
+        if (r && r.data && r.data.length > 0) recentLog.value = r.data[0];
       });
     }
 
@@ -118,6 +120,7 @@ const DashboardView = Vue.defineComponent({
     }
 
     Vue.onMounted(() => { loadSummary(); loadAnomalies(); loadQuota(); loadRecentLog(); });
+    Vue.onUnmounted(() => _ctrl.abort());
     return { summary, anomalies, filter, quota, recentLog, anomalyColumns, quotaTextClass, quotaBarClass, quotaBarWidth, loadAnomalies, exportAnomaliesCsv, confClass, flagBadge };
   }
 });

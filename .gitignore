@@ -63,3 +63,4 @@ start-mcp.sh
 .code-context-index-state.json
 opencode.json
 .labtrace.pid
+.trae/documents/

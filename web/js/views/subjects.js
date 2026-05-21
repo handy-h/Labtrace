@@ -34,7 +34,7 @@ const SubjectsView = Vue.defineComponent({
     </div>
 
     <!-- 新增表单 -->
-    <div v-if="showForm" class="modal-overlay" @click.self="showForm = false">
+    <div v-if="showForm" class="modal-overlay" @mousedown.self="showForm = false">
       <div class="modal-content w-96">
         <h2 class="modal-title">新增受检者</h2>
         <input v-model="form.name" placeholder="姓名" class="form-input mb-2">
@@ -48,7 +48,7 @@ const SubjectsView = Vue.defineComponent({
     </div>
 
     <!-- 编辑弹窗 -->
-    <div v-if="showEditForm" class="modal-overlay" @click.self="showEditForm = false">
+    <div v-if="showEditForm" class="modal-overlay" @mousedown.self="showEditForm = false">
       <div class="modal-content w-96">
         <h2 class="modal-title">编辑受检者</h2>
         <input v-model="editForm.name" placeholder="姓名" class="form-input mb-2">
@@ -62,7 +62,7 @@ const SubjectsView = Vue.defineComponent({
     </div>
 
     <!-- 详情弹窗 -->
-    <div v-if="detail" class="modal-overlay" @click.self="detail=null">
+    <div v-if="detail" class="modal-overlay" @mousedown.self="detail=null">
       <div class="modal-content w-[600px]">
         <h2 class="modal-title">{{detail.name}} 的档案</h2>
         <div class="grid grid-cols-3 gap-2 mb-4 text-sm">

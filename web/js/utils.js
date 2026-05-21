@@ -53,6 +53,16 @@ function deepClone(obj) {
 }
 
 /**
+ * 置信度格式化
+ * @param {number} val - 置信度值(0-100)
+ * @returns {string} 格式化后的字符串
+ */
+function formatConfidence(val) {
+  if (val == null) return '-';
+  return val + '%';
+}
+
+/**
  * 计算年龄
  * @param {string} birthDate - 出生日期
  * @param {string} refDate - 参考日期
@@ -79,51 +89,15 @@ function confClass(c) {
 }
 
 /**
- * 提示符徽章HTML
+ * 提示符徽章 HTML
  * @param {string} f - 提示符
- * @returns {string} HTML字符串
+ * @returns {string} HTML 字符串
  */
 function flagBadge(f) {
-  if (!f || f === 'normal') return '';
-  // 白名单校验，防止 XSS
-  const allowed = { H: 1, L: 1, '阳性': 1, '阴性': 1, '↑': 1, '↓': 1 };
-  if (!(f in allowed)) return '';
-  const cls = (f === 'H' || f === '阳性' || f === '↑') ? 'text-red-600 font-bold' : 'text-blue-600 font-bold';
-  return `<span class="${cls}">${f}</span>`;
-}
-
-/**
- * 计算配额使用百分比
- * @param {Object} quota - 配额对象 {total_quota, used_count}
- * @returns {number} 使用百分比 (0-100)
- */
-function quotaPct(quota) {
-  if (!quota || quota.total_quota === 0) return 0;
-  return Math.min(100, Math.round(quota.used_count / quota.total_quota * 100));
-}
-
-/**
- * 配额文字颜色类名
- * @param {Object} quota - 配额对象 {total_quota, used_count}
- * @returns {string} CSS类名
- */
-function quotaTextClass(quota) {
-  if (!quota) return 'text-slate-500';
-  const remain = quota.total_quota - quota.used_count;
-  if (remain > 50) return 'text-green-600 font-bold';
-  if (remain > 10) return 'text-orange-500 font-bold';
-  return 'text-red-600 font-bold';
-}
-
-/**
- * 配额进度条颜色类名
- * @param {Object} quota - 配额对象 {total_quota, used_count}
- * @returns {string} CSS类名
- */
-function quotaBarClass(quota) {
-  if (!quota) return 'bg-green-500';
-  const remain = quota.total_quota - quota.used_count;
-  if (remain > 50) return 'bg-green-500';
-  if (remain > 10) return 'bg-orange-500';
-  return 'bg-red-500';
+  if (!f || f === 'normal') return '<span style="color: #2A9D8F; font-weight: 600">正常</span>';
+  if (f === 'H' || f === 'h') return '<span style="color: #C25151; font-weight: 600">偏高</span>';
+  if (f === 'L' || f === 'l') return '<span style="color: #4A7EBB; font-weight: 600">偏低</span>';
+  if (f === '阳性') return '<span style="color: #C25151; font-weight: 600">阳性</span>';
+  if (f === '阴性') return '<span style="color: #4A7EBB; font-weight: 600">阴性</span>';
+  return `<span style="font-weight: 600">${f}</span>`;
 }

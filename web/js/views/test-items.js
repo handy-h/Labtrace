@@ -137,7 +137,7 @@ const TestItemsView = Vue.defineComponent({
     </crud-modal>
 
     <!-- 别名管理 -->
-    <div v-if="showAliasModal" class="modal-overlay" @click.self="showAliasModal=false">
+    <div v-if="showAliasModal" class="modal-overlay" @mousedown.self="showAliasModal=false">
       <div class="modal-content w-[500px]">
         <h2 class="modal-title">别名管理 — {{aliasTargetItem.standard_name}}</h2>
         <data-table :columns="aliasTableColumns" :data="aliasList" compact empty-text="暂无别名">
@@ -159,7 +159,7 @@ const TestItemsView = Vue.defineComponent({
     </div>
 
     <!-- 参考区间管理 -->
-    <div v-if="showRefModal" class="modal-overlay" @click.self="showRefModal=false">
+    <div v-if="showRefModal" class="modal-overlay" @mousedown.self="showRefModal=false">
       <div class="modal-content w-[600px]">
         <h2 class="modal-title">参考区间 — {{refTargetItem.standard_name}}</h2>
         <data-table :columns="refTableColumns" :data="refList" compact empty-text="暂无参考区间">

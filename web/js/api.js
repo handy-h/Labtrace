@@ -2,15 +2,24 @@
 const API_BASE = "/api/v1";
 
 const api = {
-  async request(method, path, body) {
+  async request(method, path, body, signal) {
     const opts = {
       method,
       headers: { "Content-Type": "application/json" },
     };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(API_BASE + path, opts);
-    const json = await res.json();
-    return json;
+    if (signal) opts.signal = signal;
+    try {
+      const res = await fetch(API_BASE + path, opts);
+      const json = await res.json();
+      if (json.code !== 0) {
+        console.error("API error:", json.message);
+      }
+      return json;
+    } catch (e) {
+      if (e.name === "AbortError") return null;
+      throw e;
+    }
   },
 
   async upload(path, formData) {
@@ -21,23 +30,29 @@ const api = {
     return res.json();
   },
 
-  get(path) {
-    return this.request("GET", path);
+  get(path, signal) {
+    return this.request("GET", path, null, signal);
   },
-  post(path, b) {
-    return this.request("POST", path, b);
+  post(path, b, signal) {
+    return this.request("POST", path, b, signal);
   },
-  put(path, b) {
-    return this.request("PUT", path, b);
+  put(path, b, signal) {
+    return this.request("PUT", path, b, signal);
   },
-  del(path) {
-    return this.request("DELETE", path);
+  del(path, signal) {
+    return this.request("DELETE", path, null, signal);
+  },
+
+  // Health
+  ping() {
+    return this.get("/ping");
   },
 
   // Subjects
-  listSubjects(search) {
+  listSubjects(search, signal) {
     return this.get(
       "/subjects" + (search ? "?search=" + encodeURIComponent(search) : ""),
+      signal,
     );
   },
   createSubject(data) {
@@ -54,8 +69,8 @@ const api = {
   },
 
   // Hospitals
-  listHospitals() {
-    return this.get("/hospitals");
+  listHospitals(signal) {
+    return this.get("/hospitals", signal);
   },
   createHospital(data) {
     return this.post("/hospitals", data);
@@ -68,10 +83,11 @@ const api = {
   },
 
   // Test Items
-  listTestItems(category) {
+  listTestItems(category, signal) {
     return this.get(
       "/test-items" +
         (category ? "?category=" + encodeURIComponent(category) : ""),
+      signal,
     );
   },
   createTestItem(data) {
@@ -140,9 +156,9 @@ const api = {
   },
 
   // Reports
-  listReports(params) {
+  listReports(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/reports" + (q ? "?" + q : ""));
+    return this.get("/reports" + (q ? "?" + q : ""), signal);
   },
   getReport(id) {
     return this.get("/reports/" + id);
@@ -170,8 +186,8 @@ const api = {
   reOCR(id) {
     return this.post("/reports/" + id + "/re-ocr");
   },
-  getOCRQuota() {
-    return this.get("/ocr/quota");
+  getOCRQuota(signal) {
+    return this.get("/ocr/quota", signal);
   },
   updateOCRQuota(d) {
     return this.put("/ocr/quota", d);
@@ -208,18 +224,18 @@ const api = {
   },
 
   // Trend
-  getTrendData(params) {
+  getTrendData(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/trend/data" + (q ? "?" + q : ""));
+    return this.get("/trend/data" + (q ? "?" + q : ""), signal);
   },
 
   // Dashboard
-  dashboardSummary() {
-    return this.get("/dashboard/summary");
+  dashboardSummary(signal) {
+    return this.get("/dashboard/summary", signal);
   },
-  dashboardAnomalies(params) {
+  dashboardAnomalies(params, signal) {
     const q = new URLSearchParams(params).toString();
-    return this.get("/dashboard/anomalies" + (q ? "?" + q : ""));
+    return this.get("/dashboard/anomalies" + (q ? "?" + q : ""), signal);
   },
 
   // Backups
@@ -229,8 +245,8 @@ const api = {
   importBackup(formData) {
     return this.upload("/backups/import", formData);
   },
-  listBackups() {
-    return this.get("/backups");
+  listBackups(signal) {
+    return this.get("/backups", signal);
   },
   deleteBackup(id) {
     return this.del("/backups/" + id);
@@ -241,26 +257,74 @@ const api = {
     return this.put("/reports/" + id, d);
   },
 
-  // Report Categories
-  listCategories() {
-    return this.get("/categories");
-  },
-  createCategory(data) {
-    return this.post("/categories", data);
-  },
-  updateCategory(id, d) {
-    return this.put("/categories/" + id, d);
-  },
-  deleteCategory(id) {
-    return this.del("/categories/" + id);
-  },
-  normalizeCategory(d) {
-    return this.post("/categories/normalize", d);
+  // Audit Logs
+  listAuditLogs(params, signal) {
+    const q = new URLSearchParams(params).toString();
+    return this.get("/audit-logs" + (q ? "?" + q : ""), signal);
   },
 
-  // Audit Logs
-  listAuditLogs(params) {
-    const q = new URLSearchParams(params).toString();
-    return this.get("/audit-logs" + (q ? "?" + q : ""));
+  // Imaging Reports
+  listImagingReportTypes(signal) {
+    return this.get("/imaging-report-types", signal);
   },
+  listImagingExamItems(signal) {
+    return this.get("/imaging-exam-items", signal);
+  },
+  uploadImagingReport(formData) {
+    return this.upload("/imaging/upload", formData);
+  },
+  listImagingReports(params, signal) {
+    const q = new URLSearchParams(params).toString();
+    return this.get("/imaging-reports" + (q ? "?" + q : ""), signal);
+  },
+  getImagingReport(id) {
+    return this.get("/imaging-reports/" + id);
+  },
+  updateImagingReport(id, d) {
+    return this.put("/imaging-reports/" + id, d);
+  },
+  deleteImagingReport(id) {
+    return this.del("/imaging-reports/" + id);
+  },
+  getImagingReportImage(id) {
+    return API_BASE + "/imaging-reports/" + id + "/image";
+  },
+  importImagingReport(id) {
+    return this.post("/imaging-reports/" + id + "/import");
+  },
+  reOCRImaging(id) {
+    return this.post("/imaging-reports/" + id + "/re-ocr")
+  },
+
+  // Imaging Mapping
+  getImagingOCRBlocks(id) {
+    return this.get("/imaging-reports/" + id + "/ocr-blocks");
+  },
+  applyImagingMapping(id, config) {
+    return this.post("/imaging-reports/" + id + "/apply-mapping", config);
+  },
+  getImagingMappingTemplate(hospitalId) {
+    return this.get("/hospitals/" + hospitalId + "/imaging-mapping-template");
+  },
+  saveImagingMappingTemplate(hospitalId, data) {
+    return this.post("/hospitals/" + hospitalId + "/imaging-mapping-template", data);
+  },
+
+  // Batch Upload
+  uploadBatchFiles(formData) {
+    return this.upload("/batch/upload", formData)
+  },
+  
+  confirmBatchImport(data) {
+    return this.post("/batch/confirm", data)
+  },
+
+  // Batch Import Imaging
+  uploadBatchImagingFiles(formData) {
+    return this.upload("/batch/imaging/upload", formData)
+  },
+
+  confirmBatchImagingImport(data) {
+    return this.post("/batch/imaging/confirm", data)
+  }
 };

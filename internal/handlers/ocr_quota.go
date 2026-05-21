@@ -37,7 +37,12 @@ func ReOCR(c *gin.Context) {
 	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'processing' WHERE id = ?`, id)
 
 	// Run OCR
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, id)
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 	ocrResults, err := services.Recognize(fileBytes, cfg)
 
 	// Record API call in quota (count regardless of Recognize result)
@@ -48,10 +53,7 @@ func ReOCR(c *gin.Context) {
 
 	if err != nil {
 		database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, id)
-		c.JSON(http.StatusOK, models.Success(gin.H{
-			"status": "failed",
-			"error":  err.Error(),
-		}))
+		c.JSON(http.StatusBadGateway, models.Error("OCR识别失败: "+err.Error()))
 		return
 	}
 
@@ -63,10 +65,7 @@ func ReOCR(c *gin.Context) {
 	if len(ocrResults) == 0 {
 		log.Printf("[reocr] OCR returned zero results for report %s", id)
 		database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'failed' WHERE id = ?`, id)
-		c.JSON(http.StatusOK, models.Success(gin.H{
-			"status": "failed",
-			"error":  "OCR 未识别到任何文字内容",
-		}))
+		c.JSON(http.StatusBadGateway, models.Error("OCR未识别到任何文字内容"))
 		return
 	}
 

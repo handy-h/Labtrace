@@ -36,10 +36,6 @@ func Open(dbPath string) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 
-	if err := Seed(DB); err != nil {
-		return fmt.Errorf("seed: %w", err)
-	}
-
 	return nil
 }
 

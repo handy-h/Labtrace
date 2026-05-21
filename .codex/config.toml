@@ -1,0 +1,22 @@
+[mcp_servers.code-context]
+command = "./code-context-mcp"
+args = []  # 可选，参数列表
+env = {
+    "OLLAMA_URL" = "http://localhost:11434",
+    "OLLAMA_EMBED_MODEL" = "nomic-embed-text:latest",
+    "EMBEDDING_DIM" = "768",
+    "ZILLIZ_URI" = "https://in03-a302ba9ce3ea4dc.serverless.gcp-us-west1.cloud.zilliz.com",
+    "ZILLIZ_TOKEN" = "8463115804c7ff67c7573a5240b0098d33b7d69926529a2021bd72474838dde4b56ec19712edc2331fff6ad54986b425efab8786",
+    "COLLECTION_NAME" = "LabTrace",
+    "AUTO_INDEX" = "true",
+    "PROJECT_PATH" = "/home/gao/Builds/LabTrace"
+}
+
+[mcp_servers.code-context.tools.code_search]
+approval_mode = "approve"
+
+[mcp_servers.code-context.tools.index_project]
+approval_mode = "approve"
+
+[mcp_servers.code-context.tools.file_context]
+approval_mode = "approve"

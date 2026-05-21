@@ -16,7 +16,10 @@ make dev                      # debug mode (GIN_MODE=debug, logs to dev.log)
 make run                      # release mode
 make stop                     # graceful shutdown via PID file
 make clean                    # remove binary + caches, preserves data/
-go test ./internal/services/  # run tests (only ocr_parser_test.go exists)
+make test                     # run all tests
+make lint                     # static analysis (go vet)
+make rebuild                  # clean + build
+make restart                  # stop + run
 ```
 
 Default URL: `http://localhost:8080` (port configurable via `PORT` in `.env`).

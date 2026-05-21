@@ -30,7 +30,7 @@ type TableRegion struct {
 type ColumnDef struct {
 	ColIndex    int    `json:"col_index"`
 	HeaderText  string `json:"header_text"`
-	MappedField string `json:"mapped_field"` // "name"|"value"|"unit"|"range"|"notes"|"ignore"
+	MappedField string `json:"mapped_field"` // "name"|"value"|"unit"|"range"|"category"|"notes"|"ignore"
 	XMin        int    `json:"x_min"`        // left boundary in OCR coords
 	XMax        int    `json:"x_max"`        // right boundary in OCR coords
 	Group       int    `json:"group"`        // group index (0-based), for multi-group (multi-column) layouts

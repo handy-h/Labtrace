@@ -17,7 +17,7 @@ const OCRMappingWizard = Vue.defineComponent({
 <teleport to="body">
 <div v-if="visible"
      class="fixed inset-0 z-[200] flex items-center justify-center bg-black/60"
-     @click.self="$emit('close')">
+     @mousedown.self="$emit('close')">
   <!-- 隐藏图片加载器：仅对图片文件生效，PDF 跳过 -->
   <img v-if="!isPdf"
        ref="sourceImgRef"
@@ -525,7 +525,6 @@ const OCRMappingWizard = Vue.defineComponent({
     const redoStack = Vue.ref([]);
     const selectedRows = Vue.ref(new Set());
     const editingCell = Vue.ref(null);
-    const mismatchCategory = Vue.ref("");
     let activeEditInput = null;
 
     const splitBar = Vue.ref({
@@ -1396,7 +1395,6 @@ const OCRMappingWizard = Vue.defineComponent({
         const r = await api.applyColumnMapping(props.reportId, cfg);
         if (r.code === 0 && r.data) {
           parsedItems.value = r.data.items || [];
-          mismatchCategory.value = r.data.mismatch_category || "";
           originalItemIds.value = new Set(parsedItems.value.map(it => it.id).filter(Boolean));
           undoStack.value = [];
           redoStack.value = [];
@@ -1619,7 +1617,7 @@ const OCRMappingWizard = Vue.defineComponent({
           alert("入库失败：" + (importResult.message || "未知错误"));
           return;
         }
-        emit("done", { reportId: props.reportId, mismatchCategory: mismatchCategory.value });
+        emit("done", { reportId: props.reportId });
       } catch (e) {
         alert("提交出错：" + e.message);
       } finally {
@@ -1715,7 +1713,6 @@ const OCRMappingWizard = Vue.defineComponent({
       step2Error,
       headerGroups,
       parsedItems,
-      mismatchCategory,
       undoStack,
       redoStack,
       selectedRows,

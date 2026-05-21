@@ -11,6 +11,7 @@ import (
 
 // TrendDataPoint represents a single data point in a trend chart.
 type TrendDataPoint struct {
+	ReportID        int64    `json:"report_id"`
 	ReportItemID    int64    `json:"report_item_id"`
 	TestItemID      int64    `json:"test_item_id"`
 	TestItemName    string   `json:"test_item_name"`
@@ -30,18 +31,20 @@ type TrendDataPoint struct {
 // If testItemID is 0, returns all test items for the subject.
 func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]TrendDataPoint, error) {
 	query := `
-		SELECT ri.id, COALESCE(ri.test_item_id, 0), COALESCE(ri.test_item_name, ti.standard_name, ''),
+		SELECT lr.id, ri.id, COALESCE(ri.test_item_id, 0), COALESCE(ri.test_item_name, ti.standard_name, ''),
 			lr.sample_date, COALESCE(h.name, ''),
 			ri.original_value, ri.normalized_value,
 			COALESCE(NULLIF(ri.normalized_unit, ''), NULLIF(ri.original_unit, ''), ti.default_unit, ''),
 			ri.flag,
-			ri.ref_interval_id, ri.ref_interval_text,
+			ri.ref_interval_text,
+			ref.value_min, ref.value_max,
 			s.birth_date
 		FROM report_items ri
 		JOIN lab_reports lr ON lr.id = ri.report_id
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
 		JOIN subjects s ON s.id = lr.subject_id
 		LEFT JOIN test_items ti ON ti.id = ri.test_item_id
+		LEFT JOIN reference_intervals ref ON ref.id = ri.ref_interval_id
 		WHERE lr.subject_id = ? AND lr.ocr_status = 'imported'
 	`
 	args := []interface{}{subjectID}
@@ -68,27 +71,26 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 	}
 	defer rows.Close()
 
-	// 第一遍：收集所有数据点和需要查询的 ref_interval_id
 	var points []TrendDataPoint
-	var pointRefIDs []sql.NullInt64 // 与 points 一一对应，存储每个点的 refID
-	refIDs := make(map[int64]bool)
-
 	for rows.Next() {
 		var p TrendDataPoint
 		var normValue sql.NullFloat64
-		var refID sql.NullInt64
+		var refMin, refMax sql.NullFloat64
 		var birthDate string
 
-		if err := rows.Scan(&p.ReportItemID, &p.TestItemID, &p.TestItemName,
+		if err := rows.Scan(&p.ReportID, &p.ReportItemID, &p.TestItemID, &p.TestItemName,
 			&p.SampleDate, &p.HospitalName,
 			&p.OriginalValue, &normValue, &p.Unit,
-			&p.Flag, &refID, &p.RefIntervalText, &birthDate); err != nil {
+			&p.Flag, &p.RefIntervalText,
+			&refMin, &refMax,
+			&birthDate); err != nil {
 			continue
 		}
 
 		if normValue.Valid {
 			p.ConvertedValue = normValue.Float64
 		} else {
+			// Try parsing original_value, handling prefixes like "<" or ">"
 			valStr := strings.TrimLeft(p.OriginalValue, "<>≤≥")
 			valStr = strings.TrimSpace(valStr)
 			if v, err := strconv.ParseFloat(valStr, 64); err == nil {
@@ -96,53 +98,19 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 			}
 		}
 
+		// Trim trailing "/" from unit (OCR often produces "U/L/" instead of "U/L")
 		p.Unit = strings.TrimRight(p.Unit, "/")
+
 		p.AgeAtSample = calcAgeYears(birthDate, p.SampleDate)
 
-		if refID.Valid {
-			refIDs[refID.Int64] = true
+		if refMin.Valid {
+			p.RefMin = &refMin.Float64
 		}
-		pointRefIDs = append(pointRefIDs, refID)
-
-		points = append(points, p)
-	}
-
-	// 批量查询所有需要的参考区间（消除 N+1）
-	refMap := make(map[int64][2]*float64) // id -> [min, max]
-	if len(refIDs) > 0 {
-		ids := make([]interface{}, 0, len(refIDs))
-		placeholders := make([]string, 0, len(refIDs))
-		for id := range refIDs {
-			ids = append(ids, id)
-			placeholders = append(placeholders, "?")
+		if refMax.Valid {
+			p.RefMax = &refMax.Float64
 		}
-		refQuery := `SELECT id, value_min, value_max FROM reference_intervals WHERE id IN (` +
-			strings.Join(placeholders, ",") + `)`
-		refRows, err := database.DB.Query(refQuery, ids...)
-		if err == nil {
-			defer refRows.Close()
-			for refRows.Next() {
-				var id int64
-				var refMin, refMax sql.NullFloat64
-				if refRows.Scan(&id, &refMin, &refMax) == nil {
-					var pair [2]*float64
-					if refMin.Valid {
-						pair[0] = &refMin.Float64
-					}
-					if refMax.Valid {
-						pair[1] = &refMax.Float64
-					}
-					refMap[id] = pair
-				}
-			}
-		}
-	}
 
-	// 第二遍：填充参考区间并计算 flag
-	for i := range points {
-		p := &points[i]
-
-		// 解析 ref_interval_text（优先级最高）
+		// ref_interval_text（OCR 来源）优先级高于 ref_interval_id JOIN 结果
 		if p.RefIntervalText != "" {
 			if min, max, ok := parseRefRange(p.RefIntervalText); ok {
 				p.RefMin = &min
@@ -150,19 +118,7 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 			}
 		}
 
-		// 如果 ref_interval_text 没有解析出结果，尝试从批量查询的 refMap 中获取
-		if p.RefMin == nil && i < len(pointRefIDs) && pointRefIDs[i].Valid {
-			if pair, ok := refMap[pointRefIDs[i].Int64]; ok {
-				if pair[0] != nil {
-					p.RefMin = pair[0]
-				}
-				if pair[1] != nil {
-					p.RefMax = pair[1]
-				}
-			}
-		}
-
-		// 根据参考区间计算 flag（如果尚未设置）
+		// Calculate flag if not set but we have ref range and numeric value
 		if p.Flag == "" && p.RefMin != nil && p.RefMax != nil && p.ConvertedValue != 0 {
 			if p.ConvertedValue < *p.RefMin {
 				p.Flag = "L"
@@ -172,6 +128,8 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 				p.Flag = "normal"
 			}
 		}
+
+		points = append(points, p)
 	}
 
 	return points, nil

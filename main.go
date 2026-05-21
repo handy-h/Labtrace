@@ -40,6 +40,8 @@ func main() {
 		fmt.Printf("Backfilled test_item_id for %d report items\n", n)
 	}
 
+	fmt.Printf("LabTrace starting on :%s (db: %s)\n", cfg.Port, cfg.DBPath)
+
 	// Gin router
 	r := gin.Default()
 	r.Use(middleware.CORS())
@@ -134,42 +136,57 @@ func main() {
 		v1.GET("/backups", handlers.ListBackups)
 		v1.DELETE("/backups/:id", handlers.DeleteBackup)
 
-		// Report Categories
-		v1.GET("/categories", handlers.ListCategories)
-		v1.POST("/categories", handlers.CreateCategory)
-		v1.PUT("/categories/:id", handlers.UpdateCategory)
-		v1.DELETE("/categories/:id", handlers.DeleteCategory)
-		v1.POST("/categories/normalize", handlers.NormalizeCategory)
-
 		// Audit Logs
 		v1.GET("/audit-logs", handlers.ListAuditLogs)
+
+		// Imaging Reports
+		v1.GET("/imaging-report-types", handlers.ListImagingReportTypes)
+		v1.GET("/imaging-exam-items", handlers.ListImagingExamItems)
+		v1.POST("/imaging/upload", handlers.UploadImagingReport)
+		v1.GET("/imaging-reports", handlers.ListImagingReports)
+		v1.GET("/imaging-reports/:id", handlers.GetImagingReport)
+		v1.PUT("/imaging-reports/:id", handlers.UpdateImagingReport)
+		v1.DELETE("/imaging-reports/:id", handlers.DeleteImagingReport)
+		v1.GET("/imaging-reports/:id/image", handlers.GetImagingReportImage)
+		v1.GET("/imaging-reports/:id/ocr-blocks", handlers.GetImagingOCRBlocks)
+		v1.POST("/imaging-reports/:id/apply-mapping", handlers.ApplyImagingMapping)
+		v1.POST("/imaging-reports/:id/confirm", handlers.ConfirmImagingReport)
+		v1.POST("/imaging-reports/:id/import", handlers.ImportImagingReport)
+		v1.POST("/imaging-reports/:id/re-ocr", handlers.ReOCRImagingReport)
+		v1.GET("/hospitals/:id/imaging-mapping-template", handlers.GetImagingMappingTemplate)
+		v1.POST("/hospitals/:id/imaging-mapping-template", handlers.SaveImagingMappingTemplate)
+
+		// Batch Import
+		v1.POST("/batch/upload", handlers.UploadBatchFiles)
+		v1.POST("/batch/confirm", handlers.ConfirmBatchImport)
+
+		// Batch Import (Imaging)
+		v1.POST("/batch/imaging/upload", handlers.UploadBatchImagingFiles)
+		v1.POST("/batch/imaging/confirm", handlers.ConfirmBatchImagingImport)
 	}
 
-	// 创建 HTTP 服务器
+	// Graceful shutdown
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
 		Handler: r,
 	}
 
-	// 优雅关闭
 	go func() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		<-sig
 		fmt.Println("\nShutting down...")
 
-		// 给正在处理的请求 5 秒时间完成
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
 			log.Printf("Server shutdown error: %v", err)
 		}
 
-		database.Close()
-		fmt.Println("Server stopped.")
+		// 等待所有后台 OCR goroutine 完成
+		handlers.OCRWaitGroup.Wait()
 	}()
 
-	fmt.Printf("LabTrace listening on :%s\n", cfg.Port)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
 	}

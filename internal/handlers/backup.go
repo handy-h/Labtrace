@@ -19,7 +19,11 @@ func ExportBackup(c *gin.Context) {
 	}
 	c.ShouldBindJSON(&req)
 
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 
 	filename, fileSize, err := services.ExportBackup(cfg.DBKey, cfg.BackupDir, req.Description)
 	if err != nil {
@@ -44,23 +48,26 @@ func ImportBackup(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// 使用唯一临时文件避免并发冲突
-	tmpFile, err := os.CreateTemp("", "labtrace_restore_*.bak")
+	// Save uploaded file temporarily
+	tmpPath := "/tmp/labtrace_restore.bak"
+	tmpFile, err := os.Create(tmpPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error("创建临时文件失败"))
 		return
 	}
-	tmpPath := tmpFile.Name()
+	defer tmpFile.Close()
 	defer os.Remove(tmpPath)
 
 	if _, err = tmpFile.ReadFrom(file); err != nil {
-		tmpFile.Close()
 		c.JSON(http.StatusInternalServerError, models.Error("保存临时文件失败"))
 		return
 	}
-	tmpFile.Close()
 
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 	if err := services.ImportBackup(cfg.DBKey, tmpPath); err != nil {
 		c.JSON(http.StatusBadRequest, models.Error("备份导入失败: "+err.Error()))
 		return
