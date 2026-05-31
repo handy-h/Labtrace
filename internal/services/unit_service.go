@@ -6,11 +6,14 @@ import (
 	"strconv"
 )
 
+var (
+	reUnitExpr1 = regexp.MustCompile(`^x\s*([*/+\-])\s*([0-9.]+)$`)
+	reUnitExpr2 = regexp.MustCompile(`^([0-9.]+)\s*([*/])\s*x$`)
+)
+
 // EvalSimpleExpr evaluates a simple formula like "x*18.0", "x/18.0", "x+5", "x-3"
 func EvalSimpleExpr(formula string, x float64) (float64, error) {
-	// Pattern: x <op> <number> or <number> <op> x
-	re1 := regexp.MustCompile(`^x\s*([*/+\-])\s*([0-9.]+)$`)
-	if m := re1.FindStringSubmatch(formula); m != nil {
+	if m := reUnitExpr1.FindStringSubmatch(formula); m != nil {
 		op := m[1]
 		num, err := strconv.ParseFloat(m[2], 64)
 		if err != nil {
@@ -31,8 +34,7 @@ func EvalSimpleExpr(formula string, x float64) (float64, error) {
 		}
 	}
 
-	re2 := regexp.MustCompile(`^([0-9.]+)\s*([*/])\s*x$`)
-	if m := re2.FindStringSubmatch(formula); m != nil {
+	if m := reUnitExpr2.FindStringSubmatch(formula); m != nil {
 		op := m[2]
 		num, err := strconv.ParseFloat(m[1], 64)
 		if err != nil {

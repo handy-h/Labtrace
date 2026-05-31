@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -41,6 +42,8 @@ func Open(dbPath string) error {
 
 func Close() {
 	if DB != nil {
-		DB.Close()
+		if err := DB.Close(); err != nil {
+			log.Printf("close database: %v", err)
+		}
 	}
 }

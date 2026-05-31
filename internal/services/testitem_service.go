@@ -140,12 +140,14 @@ func BackfillTestItemIDs() int {
 		}
 	}
 
+	idx := LoadTestItemIndex()
 	updated := 0
 	for _, it := range items {
-		matchID := MatchTestItemByName(it.name)
+		matchID := idx.Match(it.name)
 		if matchID > 0 {
-			database.DB.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, matchID, it.id)
-			updated++
+			if _, err := database.DB.Exec(`UPDATE report_items SET test_item_id = ? WHERE id = ?`, matchID, it.id); err == nil {
+				updated++
+			}
 		}
 	}
 	return updated
@@ -173,13 +175,14 @@ func LoadTestItemIndex() *TestItemIndex {
 	if err != nil {
 		return idx
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var c TestItemCandidate
-		rows.Scan(&c.ID, &c.Name, &c.Category)
-		idx.Candidates = append(idx.Candidates, c)
-		idx.categoryByID[c.ID] = c.Category
+		if err := rows.Scan(&c.ID, &c.Name, &c.Category); err == nil {
+			idx.Candidates = append(idx.Candidates, c)
+			idx.categoryByID[c.ID] = c.Category
+		}
 	}
-	rows.Close()
 
 	arows, err := database.DB.Query(`SELECT alias_name, test_item_id FROM test_item_aliases`)
 	if err != nil {

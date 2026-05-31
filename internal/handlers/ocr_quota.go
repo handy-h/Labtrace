@@ -57,9 +57,15 @@ func ReOCR(c *gin.Context) {
 		return
 	}
 
-	// Store raw OCR JSON
-	ocrJSON, _ := json.Marshal(ocrResults)
-	database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), id)
+		// Store raw OCR JSON
+		ocrJSON, err := json.Marshal(ocrResults)
+		if err != nil {
+			log.Printf("[reocr] 序列化OCR结果失败: reportID=%s err=%v", id, err)
+		} else {
+			if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), id); dbErr != nil {
+				log.Printf("[reocr] 存储OCR原始数据失败: reportID=%s err=%v", id, dbErr)
+			}
+		}
 
 	// Check if OCR returned any data
 	if len(ocrResults) == 0 {
@@ -103,7 +109,8 @@ func ReOCR(c *gin.Context) {
 	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id)
 
 	// Audit log
-	services.LogAction("re_ocr", "重新识别", "lab_report", parseInt64(id), nil)
+	reportID, _ := parseInt64(id)
+	services.LogAction("re_ocr", "重新识别", "lab_report", reportID, nil)
 
 	c.JSON(http.StatusOK, models.Success(gin.H{
 		"status": "review",

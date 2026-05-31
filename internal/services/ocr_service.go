@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	ocr_api "github.com/alibabacloud-go/ocr-api-20210707/v3/client"
@@ -12,6 +13,27 @@ import (
 
 	"labtrace/internal/config"
 )
+
+var (
+	ocrClient     *ocr_api.Client
+	ocrClientOnce sync.Once
+	ocrClientErr  error
+)
+
+func getOCRClient(cfg *config.Config) (*ocr_api.Client, error) {
+	ocrClientOnce.Do(func() {
+		ocrClient, ocrClientErr = ocr_api.NewClient(&openapi.Config{
+			AccessKeyId:     tea.String(cfg.AliAccessKeyID),
+			AccessKeySecret: tea.String(cfg.AliAccessSecret),
+			RegionId:        tea.String("cn-hangzhou"),
+			Endpoint:        tea.String("ocr-api.cn-hangzhou.aliyuncs.com"),
+		})
+	})
+	if ocrClientErr != nil {
+		return nil, ocrClientErr
+	}
+	return ocrClient, nil
+}
 
 // OCRResult represents a single recognized text block from OCR.
 // Fields match the legacy interface for backward compatibility with handlers/ocr.go and rule_service.go.
@@ -46,13 +68,7 @@ func Recognize(fileBytes []byte, cfg *config.Config) ([]OCRResult, error) {
 		return nil, fmt.Errorf("Aliyun OCR credentials not configured")
 	}
 
-	// Create SDK client
-	client, err := ocr_api.NewClient(&openapi.Config{
-		AccessKeyId:     tea.String(cfg.AliAccessKeyID),
-		AccessKeySecret: tea.String(cfg.AliAccessSecret),
-		RegionId:        tea.String("cn-hangzhou"),
-		Endpoint:        tea.String("ocr-api.cn-hangzhou.aliyuncs.com"),
-	})
+	client, err := getOCRClient(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create OCR client: %w", err)
 	}
@@ -227,6 +243,10 @@ func assignRowNumbers(blocks []*ocr_api.RecognizeAllTextResponseBodyDataSubImage
 		}
 		return ix < jx
 	})
+
+	if len(blockList) == 0 {
+		return
+	}
 
 	// Assign row numbers based on Y gaps
 	rowNum := 0

@@ -7,21 +7,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"labtrace/internal/database"
 )
 
+// backupMutex 保护 ImportBackup 期间的 Close/Write/Open 序列，防止并发访问。
+var backupMutex sync.Mutex
+
 // ExportBackup creates an encrypted backup of the SQLite database.
-func ExportBackup(dbKey []byte, backupDir, description string) (string, int64, error) {
+func ExportBackup(dbKey []byte, dbPath, backupDir, description string) (string, int64, error) {
 	// Ensure backup directory exists
 	os.MkdirAll(backupDir, 0755)
-
-	// Read the database file
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "data/labtrace.db"
-	}
 
 	plainBytes, err := os.ReadFile(dbPath)
 	if err != nil {
@@ -37,23 +35,25 @@ func ExportBackup(dbKey []byte, backupDir, description string) (string, int64, e
 	// Write backup file
 	filename := fmt.Sprintf("labtrace_%s.bak", time.Now().Format("20060102_150405"))
 	filePath := backupDir + "/" + filename
-	if err := os.WriteFile(filePath, encrypted, 0644); err != nil {
+	if err := os.WriteFile(filePath, encrypted, 0600); err != nil {
 		return "", 0, fmt.Errorf("write backup: %w", err)
 	}
 
 	fileSize := int64(len(encrypted))
 
 	// Record in database
-	database.DB.Exec(
+	if _, err := database.DB.Exec(
 		`INSERT INTO backups (filename, description, file_size) VALUES (?, ?, ?)`,
 		filename, description, fileSize,
-	)
+	); err != nil {
+		return filename, fileSize, fmt.Errorf("record backup: %w", err)
+	}
 
 	return filename, fileSize, nil
 }
 
 // ImportBackup restores the database from an encrypted backup file.
-func ImportBackup(dbKey []byte, filePath string) error {
+func ImportBackup(dbKey []byte, dbPath, filePath string) error {
 	encrypted, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("read backup: %w", err)
@@ -69,19 +69,16 @@ func ImportBackup(dbKey []byte, filePath string) error {
 		return fmt.Errorf("invalid database file after decryption")
 	}
 
-	// Close current database
+	// 全局锁保护 Close → Write → Open 序列，防止其他 goroutine 并发访问 DB
+	backupMutex.Lock()
+	defer backupMutex.Unlock()
+
 	database.Close()
 
-	// Write decrypted database
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "data/labtrace.db"
-	}
 	if err := os.WriteFile(dbPath, plainBytes, 0644); err != nil {
 		return fmt.Errorf("write database: %w", err)
 	}
 
-	// Reopen database
 	if err := database.Open(dbPath); err != nil {
 		return fmt.Errorf("reopen database: %w", err)
 	}

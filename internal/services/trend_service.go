@@ -2,6 +2,8 @@ package services
 
 import (
 	"database/sql"
+	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +86,7 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 			&p.Flag, &p.RefIntervalText,
 			&refMin, &refMax,
 			&birthDate); err != nil {
+			log.Printf("[trend] 扫描趋势数据失败: err=%v", err)
 			continue
 		}
 
@@ -101,7 +104,7 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 		// Trim trailing "/" from unit (OCR often produces "U/L/" instead of "U/L")
 		p.Unit = strings.TrimRight(p.Unit, "/")
 
-		p.AgeAtSample = calcAgeYears(birthDate, p.SampleDate)
+		p.AgeAtSample = CalcAgeYears(birthDate, p.SampleDate)
 
 		if refMin.Valid {
 			p.RefMin = &refMin.Float64
@@ -135,9 +138,10 @@ func GetTrendData(subjectID, testItemID int64, dateFrom, dateTo string) ([]Trend
 	return points, nil
 }
 
-func calcAgeYears(birthDate, sampleDate string) float64 {
-	birth, err1 := time.Parse("2006-01-02", birthDate)
-	sample, err2 := time.Parse("2006-01-02", sampleDate)
+// CalcAgeYears 计算采样时的年龄（岁），支持多种日期格式。
+func CalcAgeYears(birthDate, sampleDate string) float64 {
+	birth, err1 := parseDateStr(birthDate)
+	sample, err2 := parseDateStr(sampleDate)
 	if err1 != nil || err2 != nil {
 		return 0
 	}
@@ -148,22 +152,26 @@ func calcAgeYears(birthDate, sampleDate string) float64 {
 	return years
 }
 
+func parseDateStr(s string) (time.Time, error) {
+	formats := []string{"2006-01-02", "2006/01/02", "2006.01.02"}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, errors.New("invalid date format")
+}
+
 // parseRefRange parses a reference range string like "15-40" into min and max values.
 func parseRefRange(s string) (min, max float64, ok bool) {
 	s = strings.TrimSpace(s)
-	// Try "-" separator
-	if parts := strings.SplitN(s, "-", 2); len(parts) == 2 {
-		if a, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64); err == nil {
-			if b, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64); err == nil {
-				return a, b, true
-			}
-		}
-	}
-	// Try "～" separator (Chinese tilde)
-	if parts := strings.SplitN(s, "～", 2); len(parts) == 2 {
-		if a, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64); err == nil {
-			if b, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64); err == nil {
-				return a, b, true
+	separators := []string{"-", "～", "~", "—"}
+	for _, sep := range separators {
+		if parts := strings.SplitN(s, sep, 2); len(parts) == 2 {
+			if a, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64); err == nil {
+				if b, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64); err == nil {
+					return a, b, true
+				}
 			}
 		}
 	}

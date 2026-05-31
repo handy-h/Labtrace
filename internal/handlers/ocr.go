@@ -107,8 +107,10 @@ func Upload(c *gin.Context) {
 		}
 
 		// Store raw OCR JSON
-		ocrJSON, _ := json.Marshal(ocrResults)
-		if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID); dbErr != nil {
+		ocrJSON, err := json.Marshal(ocrResults)
+		if err != nil {
+			log.Printf("[ocr] 序列化OCR结果失败: reportID=%d err=%v", reportID, err)
+		} else if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID); dbErr != nil {
 			log.Printf("[ocr] 存储OCR原始数据失败: reportID=%d err=%v", reportID, dbErr)
 		}
 
@@ -129,10 +131,12 @@ func Upload(c *gin.Context) {
 			// Create report_items from parsed items
 			for _, item := range parsedItems {
 				normalizedValue := services.NormalizeQualitative(item.Value)
-				database.DB.Exec(
+				if _, dbErr := database.DB.Exec(
 					`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					reportID, item.Name, normalizedValue, item.Unit, item.Confidence, item.BBox, item.Range, item.Range, item.Category,
-				)
+				); dbErr != nil {
+					log.Printf("[ocr] 插入报告项失败: reportID=%d err=%v", reportID, dbErr)
+				}
 			}
 
 			// 收集所有项目的分类，去重后更新 lab_reports.categories
@@ -148,16 +152,20 @@ func Upload(c *gin.Context) {
 					cats = append(cats, c)
 				}
 				sort.Strings(cats)
-				database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID)
+				if _, dbErr := database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), reportID); dbErr != nil {
+					log.Printf("[ocr] 更新分类失败: reportID=%d err=%v", reportID, dbErr)
+				}
 			}
 		} else {
 			// Fallback: insert raw OCR blocks as individual items
 			for _, r := range ocrResults {
 				normalizedValue := services.NormalizeQualitative(r.Text)
-				database.DB.Exec(
+				if _, dbErr := database.DB.Exec(
 					`INSERT INTO report_items (report_id, original_value, confidence, ocr_bbox) VALUES (?, ?, ?, ?)`,
 					reportID, normalizedValue, int(r.Confidence), fmt.Sprintf(`{"x":%d,"y":%d,"w":%d,"h":%d}`, r.Left, r.Top, r.Width, r.Height),
-				)
+				); dbErr != nil {
+					log.Printf("[ocr] 插入原始OCR块失败: reportID=%d err=%v", reportID, dbErr)
+				}
 			}
 		}
 
@@ -185,6 +193,11 @@ func GetReportImage(c *gin.Context) {
 	err := database.DB.QueryRow(`SELECT file_path FROM lab_reports WHERE id = ?`, id).Scan(&filePath)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
+		return
+	}
+
+	if !validateFilePath(filePath) {
+		c.JSON(http.StatusForbidden, models.Error("非法文件路径"))
 		return
 	}
 
@@ -261,23 +274,50 @@ func ApplyColumnMapping(c *gin.Context) {
 
 	parsedItems := services.ParseLabResultsWithMapping(blocks, cfg)
 
-	if cfg.SampleDate != "" && cfg.SampleDate != sampleDate {
-		database.DB.Exec(`UPDATE lab_reports SET sample_date = ? WHERE id = ?`, cfg.SampleDate, id)
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("开启事务失败"))
+		return
 	}
 
-	mappingJSON, _ := services.MarshalColumnMappingConfig(cfg)
-	database.DB.Exec(`UPDATE lab_reports SET column_mapping_json = ? WHERE id = ?`, mappingJSON, id)
+	if cfg.SampleDate != "" && cfg.SampleDate != sampleDate {
+		if _, execErr := tx.Exec(`UPDATE lab_reports SET sample_date = ? WHERE id = ?`, cfg.SampleDate, id); execErr != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, models.Error("更新采样日期失败"))
+			return
+		}
+	}
 
-	database.DB.Exec(`DELETE FROM report_items WHERE report_id = ?`, id)
+	mappingJSON, err := services.MarshalColumnMappingConfig(cfg)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, models.Error("序列化映射配置失败"))
+		return
+	}
+	if _, execErr := tx.Exec(`UPDATE lab_reports SET column_mapping_json = ? WHERE id = ?`, mappingJSON, id); execErr != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, models.Error("更新映射配置失败"))
+		return
+	}
+
+	if _, execErr := tx.Exec(`DELETE FROM report_items WHERE report_id = ?`, id); execErr != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, models.Error("清空旧数据失败"))
+		return
+	}
+
 	for _, item := range parsedItems {
 		rowNotes := item.RowText
-		database.DB.Exec(
+		if _, execErr := tx.Exec(
 			`INSERT INTO report_items (report_id, test_item_name, original_value, original_unit, confidence, ocr_bbox, ref_interval_text, row_notes, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			id, item.Name, item.Value, item.Unit, item.Confidence, item.BBox, item.Range, rowNotes, item.Category,
-		)
+		); execErr != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, models.Error("插入报告项失败"))
+			return
+		}
 	}
 
-	// 收集所有项目的分类，去重后更新 lab_reports.categories
 	categorySet := make(map[string]bool)
 	for _, item := range parsedItems {
 		if item.Category != "" {
@@ -290,10 +330,23 @@ func ApplyColumnMapping(c *gin.Context) {
 			cats = append(cats, c)
 		}
 		sort.Strings(cats)
-		database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), id)
+		if _, execErr := tx.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, strings.Join(cats, ","), id); execErr != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, models.Error("更新分类失败"))
+			return
+		}
 	}
 
-	database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id)
+	if _, execErr := tx.Exec(`UPDATE lab_reports SET ocr_status = 'review' WHERE id = ?`, id); execErr != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, models.Error("更新状态失败"))
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("提交事务失败"))
+		return
+	}
 
 	reportIDInt, _ := strconv.ParseInt(id, 10, 64)
 	services.LogAction("apply_column_mapping", "应用列映射", "lab_report", reportIDInt, gin.H{"item_count": len(parsedItems)})
@@ -312,8 +365,11 @@ func ApplyColumnMapping(c *gin.Context) {
 	for rows.Next() {
 		var it models.ReportItem
 		var testItemID int64
-		rows.Scan(&it.ID, &it.ReportID, &testItemID, &it.TestItemName, &it.OriginalValue,
-			&it.OriginalUnit, &it.Confidence, &it.Flag, &it.RowNotes, &it.OCRBBox, &it.RefIntervalText)
+		if err := rows.Scan(&it.ID, &it.ReportID, &testItemID, &it.TestItemName, &it.OriginalValue,
+			&it.OriginalUnit, &it.Confidence, &it.Flag, &it.RowNotes, &it.OCRBBox, &it.RefIntervalText); err != nil {
+			log.Printf("[ocr] 扫描报告项失败: err=%v", err)
+			continue
+		}
 		if testItemID > 0 {
 			it.TestItemID = &testItemID
 		}

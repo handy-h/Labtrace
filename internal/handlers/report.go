@@ -1,19 +1,18 @@
 package handlers
 
-	import (
-		"database/sql"
-		"log"
-		"net/http"
-		"sort"
-		"strings"
-		"time"
+import (
+	"database/sql"
+	"log"
+	"net/http"
+	"sort"
+	"strings"
 
-		"labtrace/internal/database"
-		"labtrace/internal/models"
-		"labtrace/internal/services"
+	"labtrace/internal/database"
+	"labtrace/internal/models"
+	"labtrace/internal/services"
 
-		"github.com/gin-gonic/gin"
-	)
+	"github.com/gin-gonic/gin"
+)
 
 // --- LabReport CRUD ---
 
@@ -165,6 +164,7 @@ func loadReportItems(reportID string) ([]models.ReportItem, error) {
 		if err := rows.Scan(&item.ID, &item.ReportID, &testItemID, &item.OriginalValue, &normValue, &item.OriginalUnit, &item.NormalizedUnit,
 			&item.Confidence, &refID, &item.Flag, &item.RowNotes, &item.OCRBBox, &item.CreatedAt,
 			&item.TestItemName, &item.RefIntervalText, &item.Category); err != nil {
+			log.Printf("[report] 扫描报告项失败: err=%v", err)
 			continue
 		}
 		if testItemID.Valid {
@@ -276,70 +276,86 @@ func ConfirmReport(c *gin.Context) {
 	c.JSON(http.StatusOK, models.Success(nil))
 }
 
+// itemInfo 用于 matchRefAndCalcFlag 的临时结构。
+type itemInfo struct {
+	ID           int64
+	TestItemID   *int64
+	TestItemName string
+	OrigValue    string
+	OrigUnit     string
+	Category     string
+}
+
 // matchRefAndCalcFlag 自动匹配test_item_id、参考区间并计算提示符flag。
 // 在确认核效和入库时都会调用。
 func matchRefAndCalcFlag(reportID string) {
-	// Get report info
-	var subjectID int64
-	var sampleDate string
-	err := database.DB.QueryRow(
-		`SELECT lr.subject_id, lr.sample_date FROM lab_reports lr WHERE lr.id = ?`, reportID,
-	).Scan(&subjectID, &sampleDate)
+	subjectID, sampleDate, err := fetchReportSubjectInfo(reportID)
 	if err != nil {
 		return
 	}
 
-	// Get subject info
-	var gender, birthDate string
+	gender, birthDate, err := fetchSubjectInfo(subjectID)
+	if err != nil {
+		return
+	}
+
+	ageAtSample := services.CalcAgeYears(birthDate, sampleDate)
+	items, err := fetchReportItemInfos(reportID)
+	if err != nil {
+		return
+	}
+
+	itemIdx := services.LoadTestItemIndex()
+	tx, err := database.DB.Begin()
+	if err != nil {
+		return
+	}
+
+	if err = runMatchRefInTx(tx, items, itemIdx, reportID, gender, ageAtSample); err != nil {
+		tx.Rollback()
+		return
+	}
+
+	err = tx.Commit()
+}
+
+func fetchReportSubjectInfo(reportID string) (subjectID int64, sampleDate string, err error) {
+	err = database.DB.QueryRow(
+		`SELECT lr.subject_id, lr.sample_date FROM lab_reports lr WHERE lr.id = ?`, reportID,
+	).Scan(&subjectID, &sampleDate)
+	return
+}
+
+func fetchSubjectInfo(subjectID int64) (gender, birthDate string, err error) {
 	err = database.DB.QueryRow(
 		`SELECT gender, birth_date FROM subjects WHERE id = ?`, subjectID,
 	).Scan(&gender, &birthDate)
-	if err != nil {
-		return
-	}
+	return
+}
 
-	ageAtSample := calculateAgeYears(birthDate, sampleDate)
-
-	// Get all report items
+func fetchReportItemInfos(reportID string) ([]itemInfo, error) {
 	rows, err := database.DB.Query(
 		`SELECT ri.id, ri.test_item_id, ri.test_item_name, ri.original_value, ri.original_unit, ri.category
 		FROM report_items ri WHERE ri.report_id = ?`, reportID,
 	)
 	if err != nil {
-		return
+		return nil, err
 	}
+	defer rows.Close()
 
-	type itemInfo struct {
-		ID           int64
-		TestItemID   *int64
-		TestItemName string
-		OrigValue    string
-		OrigUnit     string
-		Category     string
-	}
 	var items []itemInfo
 	for rows.Next() {
 		var it itemInfo
 		if err := rows.Scan(&it.ID, &it.TestItemID, &it.TestItemName, &it.OrigValue, &it.OrigUnit, &it.Category); err != nil {
+			log.Printf("[matchRef] 扫描报告项失败: %v", err)
 			continue
 		}
 		items = append(items, it)
 	}
-	rows.Close()
+	return items, nil
+}
 
-	// 一次性加载全部 test_items 供内存匹配，避免循环内重复查库
-	itemIdx := services.LoadTestItemIndex()
-
-	tx, err := database.DB.Begin()
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err != nil {
-			tx.Rollback()
-		}
-	}()
-
+func runMatchRefInTx(tx *sql.Tx, items []itemInfo, itemIdx *services.TestItemIndex, reportID, gender string, ageAtSample float64) error {
 	// Auto-match test_item_name → test_item_id, create if not exists
 	for i := range items {
 		if items[i].TestItemID == nil && items[i].TestItemName != "" {
@@ -354,12 +370,12 @@ func matchRefAndCalcFlag(reportID string) {
 						log.Printf("[matchRef] 更新 category 失败: %v", execErr)
 					}
 				} else if cat := itemIdx.GetCategory(matchID); cat != "" {
-					// 从 test_items 反向回填分类到 report_items
 					items[i].Category = cat
-					tx.Exec(`UPDATE report_items SET category = ? WHERE id = ?`, cat, items[i].ID)
+					if _, execErr := tx.Exec(`UPDATE report_items SET category = ? WHERE id = ?`, cat, items[i].ID); execErr != nil {
+						log.Printf("[matchRef] 回填 category 失败: %v", execErr)
+					}
 				}
 			} else {
-				// Create new test_item
 				name := items[i].TestItemName
 				code := strings.ReplaceAll(strings.ToUpper(name), " ", "_")
 				res, execErr := tx.Exec(
@@ -425,7 +441,7 @@ func matchRefAndCalcFlag(reportID string) {
 		}
 	}
 
-	err = tx.Commit()
+	return nil
 }
 
 // ImportReport imports a report into the database (final step after review).
@@ -436,8 +452,14 @@ func ImportReport(c *gin.Context) {
 	matchRefAndCalcFlag(id)
 
 	// Calculation validation
-	reportItems, _ := loadReportItems(id)
-	warnings, _ := services.ValidateCalculations(reportItems)
+	reportItems, err := loadReportItems(id)
+	if err != nil {
+		log.Printf("[report] 加载报告项失败: id=%s err=%v", id, err)
+	}
+	warnings, err := services.ValidateCalculations(reportItems)
+	if err != nil {
+		log.Printf("[report] 计算规则校验失败: id=%s err=%v", id, err)
+	}
 
 	// Update report status
 	if _, err := database.DB.Exec(`UPDATE lab_reports SET ocr_status = 'imported' WHERE id = ?`, id); err != nil {
@@ -450,32 +472,4 @@ func ImportReport(c *gin.Context) {
 	}))
 }
 
-// calculateAgeYears calculates age in years from birth date to sample date.
-func calculateAgeYears(birthDate, sampleDate string) float64 {
-	birth, err1 := parseDateStr(birthDate)
-	sample, err2 := parseDateStr(sampleDate)
-	if err1 != nil || err2 != nil {
-		return 0
-	}
-	years := sample.Sub(birth).Hours() / (365.25 * 24)
-	if years < 0 {
-		return 0
-	}
-	return years
-}
 
-func parseDateStr(s string) (time.Time, error) {
-	formats := []string{"2006-01-02", "2006/01/02", "2006.01.02"}
-	for _, f := range formats {
-		if t, err := time.Parse(f, s); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, errInvalidDate
-}
-
-var errInvalidDate = errInvalidDateType("invalid date format")
-
-type errInvalidDateType string
-
-func (e errInvalidDateType) Error() string { return string(e) }

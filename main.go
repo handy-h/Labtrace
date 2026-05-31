@@ -19,6 +19,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// 由 Makefile / labtrace.ps1 在编译时注入
+var (
+	version   = "dev"
+	buildTime = "unknown"
+)
+
 func main() {
 	// Load config
 	cfg, err := config.Load()
@@ -32,6 +38,9 @@ func main() {
 	}
 	defer database.Close()
 
+	// Start background audit log worker
+	services.InitAuditWorker()
+
 	// Set OCR monthly quota from config
 	services.SetOCRQuotaMonthly(cfg.OCRQuotaMonthly)
 
@@ -40,10 +49,11 @@ func main() {
 		fmt.Printf("Backfilled test_item_id for %d report items\n", n)
 	}
 
-	fmt.Printf("LabTrace starting on :%s (db: %s)\n", cfg.Port, cfg.DBPath)
+	fmt.Printf("LabTrace %s (built %s) starting on :%s (db: %s)\n", version, buildTime, cfg.Port, cfg.DBPath)
 
 	// Gin router
 	r := gin.Default()
+	r.MaxMultipartMemory = 32 << 20 // 限制上传文件大小为 32MB
 	r.Use(middleware.CORS())
 
 	// Serve web frontend

@@ -4,7 +4,108 @@ import (
 	"log"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+)
+
+// 包级变量：避免每次函数调用时重复分配
+var (
+	englishAbbrevs = map[string]bool{
+		"ALT": true, "AST": true, "GGT": true, "ALP": true, "LDH": true,
+		"CK": true, "CK-MB": true, "LD": true, "HBDH": true,
+		"BUN": true, "CRE": true, "UA": true, "CYS-C": true,
+		"TC": true, "TG": true, "HDL-C": true, "LDL-C": true,
+		"APOA": true, "APOB": true, "LPA": true,
+		"FBG": true, "HbA1c": true, "FPG": true,
+		"TSH": true, "FT3": true, "FT4": true, "T3": true, "T4": true,
+		"CRP": true, "ESR": true, "PCT": true, "IL-6": true,
+		"WBC": true, "RBC": true, "HGB": true, "HCT": true,
+		"MCV": true, "MCH": true, "MCHC": true, "RDW": true,
+		"PLT": true, "MPV": true, "PDW": true,
+		"NEUT": true, "LYMPH": true, "MONO": true, "EO": true, "BASO": true,
+		"CR": true, "GLU": true, "HDL": true, "LDL": true,
+		"DD": true, "D-D": true, "D-Dimer": true, "FEU": true,
+	}
+	qualitativeValues = map[string]bool{
+		"-": true, "+": true, "±": true,
+		"1+": true, "2+": true, "3+": true, "4+": true,
+	}
+	noisePatterns = []string{
+		"检验报告单", "急诊", "病历号", "就诊卡号",
+		"姓名", "年龄", "性别", "样本", "科室", "诊断", "开单", "检验者",
+		"审核者", "采集", "接收", "报告时间", "地址", "电话",
+		"实验项目", "结果", "参考区间", "单位",
+		"NO.", "本报告", "备注", "序号", "编号", "标本",
+		"浙江大学", "附属", "医院", "血浆", "测定",
+		"就诊卡", "报告单", "仅对所检测", "如有疑问", "及时联系",
+		"请结合临床", "并不提示",
+		"概率", "排除", "血栓发", "静脉血栓",
+	}
+	knownUnits = []string{
+		"×10^9/L", "10E9/L", "10^9/L", "x109/L",
+		"×10^12/L", "10E12/L", "10^12/L",
+		"μmol/L", "mmol/L", "mol/L",
+		"mg/dL", "μg/dL",
+		"mg/L", "μg/L", "ng/L", "ng/mL",
+		"mU/L", "IU/L", "kU/L", "U/L",
+		"g/L", "g/dL",
+		"fl", "fL", "pg", "mm/h",
+		"ug/L FEU", "μg/L FEU", "mg/L FEU",
+		"ug/L", "FEU",
+		"umol/L", "nmol/L", "pmol/L",
+		"mg/dl", "ug/dl", "ng/dl",
+		"U/ml", "mU/ml", "IU/ml",
+		"cells/μL", "cells/uL",
+		"s", "sec", "min",
+		"Ratio", "%",
+	}
+	labSuffixes = []string{
+		"计数", "比率", "蛋白", "测定", "定量", "体积", "宽度", "分布",
+		"酶", "激酶", "转氨酶", "脱氢酶", "同工酶", "肌酸", "磷酸",
+		"红细胞", "白细胞", "血小板", "血红蛋白", "红细胞", "血小板",
+		"葡萄糖", "尿酸", "肌酐", "尿素", "胆固醇", "甘油三酯",
+		"高密度", "低密度", "脂蛋白", "载脂蛋白", "纤维蛋白",
+		"凝血", "活化", "部分", "凝血酶", "国际", "标准化",
+		"甲胎", "癌胚", "糖类", "神经元", "特异性", "烯醇化",
+		"细胞", "角蛋白", "片段", "鳞状", "细胞癌", "抗原",
+		"前列腺", "特异性", "抗原", "游离", "总", "直接", "间接",
+		"胆红素", "转肽酶", "碱性磷酸酶", "淀粉酶", "脂肪酶",
+		"胆碱酯酶", "前白蛋白", "视黄醇", "结合蛋白", "铁蛋白",
+		"转铁蛋白", "铜蓝蛋白", "C反应", "降钙素", "原", "免疫",
+		"球蛋白", "补体", "免疫球蛋白", "类风湿", "因子", "抗核",
+		"抗体", "抗双链", "DNA", "抗Smith", "抗SSA", "抗SSB",
+		"抗线粒体", "抗平滑肌", "抗核周", "抗角蛋白", "抗体",
+	}
+	familyNames = "王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗"
+	defaultUnitMap = map[string]string{
+		"平均红细胞体积": "fl", "MCV": "fl",
+		"平均血红蛋白含量": "pg", "MCH": "pg",
+		"平均血红蛋白浓度": "g/L", "MCHC": "g/L",
+		"红细胞分布宽度": "%", "RDW": "%", "RDW-CV": "%", "RDW-SD": "fl",
+		"血小板分布宽度": "fl", "PDW": "fl",
+		"平均血小板体积": "fl", "MPV": "fl",
+		"血小板压积": "%", "PCT": "%",
+	}
+)
+
+// 包级正则：避免每次调用重复编译
+var (
+	reBoundValue        = regexp.MustCompile(`^[<>≤≥]\s*\d+(?:\.\d+)?$`)
+	reRangeStr          = regexp.MustCompile(`^[<>]?\s*\d+(?:\.\d+)?\s*[~\-－—]\s*\d+(?:\.\d+)?$`)
+	rePureNumeric1      = regexp.MustCompile(`^[-+]?\d+\.?\d*$`)
+	rePureNumeric2      = regexp.MustCompile(`^[-+]?\.\d+$`)
+	reExtractNumeric    = regexp.MustCompile(`[-+]?\d*\.?\d+`)
+	reExtractRange1     = regexp.MustCompile(`[<>]?\s*\d+(?:\.\d+)?\s*[~\-－—]\s*\d+(?:\.\d+)?`)
+	reExtractRange2     = regexp.MustCompile(`[<>]\s*\d+(?:\.\d+)?`)
+	reInt               = regexp.MustCompile(`^\d+$`)
+	reIntDot            = regexp.MustCompile(`^\d+\.$`)
+	reDotDec            = regexp.MustCompile(`^\.\d+$`)
+	reDatePattern1      = regexp.MustCompile(`^\d{2,4}[-/年]\d{1,2}[-/月]\d{1,2}`)
+	reDatePattern2      = regexp.MustCompile(`^\d{4}\d{2}\d{2}\d{2}[：:]\d{2}`)
+	reShortNumber       = regexp.MustCompile(`^[1-9]\d{0,2}$`)
+	reItemNumber        = regexp.MustCompile(`^\d{1,2}[.．、,，]$`)
+	re10PowUnit         = regexp.MustCompile(`^10\^\d+/[Ll]$`)
+	reEnglishAbbrevPat  = regexp.MustCompile(`^[A-Za-z]+\d[A-Za-z0-9]*$`)
 )
 
 // ParsedLabItem represents one parsed laboratory test item from OCR results.
@@ -268,13 +369,9 @@ func fieldsToStrings(fields []classifiedField) []string {
 }
 
 func sortByX(blocks []OCRResult) {
-	for i := 0; i < len(blocks); i++ {
-		for j := i + 1; j < len(blocks); j++ {
-			if blocks[i].Left > blocks[j].Left {
-				blocks[i], blocks[j] = blocks[j], blocks[i]
-			}
-		}
-	}
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].Left < blocks[j].Left
+	})
 }
 
 // ----------------------------------------------------------------------------
@@ -331,16 +428,7 @@ func parseLinear(results []OCRResult) []ParsedLabItem {
 	var curBBox string
 	var lastUnit string // for unit inheritance when OCR omits repeated units
 
-	// Known default units for specific test items (when OCR omits the unit)
-	defaultUnitMap := map[string]string{
-		"平均红细胞体积": "fl", "MCV": "fl",
-		"平均血红蛋白含量": "pg", "MCH": "pg",
-		"平均血红蛋白浓度": "g/L", "MCHC": "g/L",
-		"红细胞分布宽度": "%", "RDW": "%", "RDW-CV": "%", "RDW-SD": "fl",
-		"血小板分布宽度": "fl", "PDW": "fl",
-		"平均血小板体积": "fl", "MPV": "fl",
-		"血小板压积": "%", "PCT": "%",
-	}
+
 
 	tryEmit := func() {
 		if curName != "" && curVal != "" {
@@ -665,52 +753,21 @@ func classifyText(s string) string {
 // isBoundValue checks if text is a bound value like <220, >100, ≤500, ≥10.
 func isBoundValue(s string) bool {
 	s = strings.TrimSpace(s)
-	if matched, _ := regexp.MatchString(`^[<>≤≥]\s*\d+(?:\.\d+)?$`, s); matched {
-		return true
-	}
-	return false
+	return reBoundValue.MatchString(s)
 }
 
 // isQualitativeValue checks if text is a qualitative result like -, +, ±, 1+~4+.
 func isQualitativeValue(s string) bool {
-	qualitative := map[string]bool{
-		"-": true, "+": true, "±": true,
-		"1+": true, "2+": true, "3+": true, "4+": true,
-	}
-	return qualitative[s]
+	return qualitativeValues[s]
 }
 
 // isEnglishAbbrev checks if string is an English medical abbreviation.
 func isEnglishAbbrev(s string) bool {
-	// Common lab test abbreviations (uppercased)
-	abbrevs := map[string]bool{
-		"ALT": true, "AST": true, "GGT": true, "ALP": true, "LDH": true,
-		"CK": true, "CK-MB": true, "LD": true, "HBDH": true,
-		"BUN": true, "CRE": true, "UA": true, "CYS-C": true,
-		"TC": true, "TG": true, "HDL-C": true, "LDL-C": true,
-		"APOA": true, "APOB": true, "LPA": true,
-		"FBG": true, "HbA1c": true, "FPG": true,
-		"TSH": true, "FT3": true, "FT4": true, "T3": true, "T4": true,
-		"CRP": true, "ESR": true, "PCT": true, "IL-6": true,
-		"WBC": true, "RBC": true, "HGB": true, "HCT": true,
-		"MCV": true, "MCH": true, "MCHC": true, "RDW": true,
-		"PLT": true, "MPV": true, "PDW": true,
-		"NEUT": true, "LYMPH": true, "MONO": true, "EO": true, "BASO": true,
-		"CR": true, "GLU": true, "HDL": true, "LDL": true,
-		// D-Dimer related
-		"DD": true, "D-D": true, "D-Dimer": true, "FEU": true,
-	}
 	upper := strings.ToUpper(s)
-	if abbrevs[upper] {
+	if englishAbbrevs[upper] {
 		return true
 	}
-
-	// Pattern: letter-digit-letter like "A1c", "C3", "C4"
-	if matched, _ := regexp.MatchString(`^[A-Za-z]+\d[A-Za-z0-9]*$`, s); matched {
-		return true
-	}
-
-	return false
+	return reEnglishAbbrevPat.MatchString(s)
 }
 
 // isAllLetters checks if string contains only letters.
@@ -725,19 +782,6 @@ func isAllLetters(s string) bool {
 
 // isHeaderFooterNoise checks if text is a known header/footer string.
 func isHeaderFooterNoise(s string) bool {
-	noisePatterns := []string{
-		"检验报告单", "急诊", "病历号", "就诊卡号",
-		"姓名", "年龄", "性别", "样本", "科室", "诊断", "开单", "检验者",
-		"审核者", "采集", "接收", "报告时间", "地址", "电话",
-		"实验项目", "结果", "参考区间", "单位",
-		"NO.", "本报告", "备注", "序号", "编号", "标本",
-		// Additional noise patterns for common lab report headers/footers
-		"浙江大学", "附属", "医院", "血浆", "测定",
-		"就诊卡", "报告单", "仅对所检测", "如有疑问", "及时联系",
-		"请结合临床", "并不提示",
-		// Clinical notes/explanations (※-prefixed notes, probability statements)
-		"概率", "排除", "血栓发", "静脉血栓",
-	}
 	lower := strings.ToLower(s)
 	for _, p := range noisePatterns {
 		if strings.Contains(lower, strings.ToLower(p)) {
@@ -745,40 +789,22 @@ func isHeaderFooterNoise(s string) bool {
 		}
 	}
 
-	// Date patterns like "2026-05-06" or "2026年05月06日"
-	if matched, _ := regexp.MatchString(`^\d{2,4}[-/年]\d{1,2}[-/月]\d{1,2}`, s); matched {
+	if reDatePattern1.MatchString(s) || reDatePattern2.MatchString(s) {
 		return true
 	}
 
-	// Date-time patterns like "2026-04-2703：49" (OCR-merged date+time)
-	if matched, _ := regexp.MatchString(`^\d{4}\d{2}\d{2}\d{2}[：:]\d{2}`, s); matched {
+	if reShortNumber.MatchString(s) && len(s) <= 3 && len(s) <= 2 {
 		return true
 	}
 
-	// Short pure numbers (likely sequence/page numbers, not values)
-	// But allow "0" as a valid lab result value
-	if matched, _ := regexp.MatchString(`^[1-9]\d{0,2}$`, s); matched && len(s) <= 3 {
-		// Single/double/triple digit numbers 1-999 without leading zero
-		// Could be sequence numbers, but also valid values.
-		// Only filter very short numbers that look like page/sequence numbers.
-		if len(s) <= 2 {
-			return true
-		}
-	}
-
-	// Pure number with trailing punctuation like "1." "2." (item numbers)
-	if matched, _ := regexp.MatchString(`^\d{1,2}[.．、,，]$`, s); matched {
+	if reItemNumber.MatchString(s) {
 		return true
 	}
 
-	// "项目" is a specific header word (not part of test item names)
 	if s == "项目" || s == "检验项目" {
 		return true
 	}
 
-	// Long Chinese text blocks (likely clinical notes, not test item names)
-	// Test item names are typically short (≤20 chars). Longer Chinese text
-	// is almost always explanatory notes or disclaimers.
 	chineseCount := 0
 	for _, r := range s {
 		if r >= 0x4E00 && r <= 0x9FFF {
@@ -789,13 +815,10 @@ func isHeaderFooterNoise(s string) bool {
 		return true
 	}
 
-	// Text starting with ※ is always a clinical note/disclaimer
 	if strings.HasPrefix(s, "※") || strings.HasPrefix(s, "*") {
 		return true
 	}
 
-	// Person names (2-3 Chinese characters without any lab-related keywords)
-	// This is a heuristic: short Chinese-only strings that don't look like test names
 	if isPersonNameLike(s) {
 		return true
 	}
@@ -825,33 +848,12 @@ func isPersonNameLike(s string) bool {
 		return false
 	}
 
-	// Common Chinese person name characters (family names + given names)
-	// If the string is a known test item name, it's not a person name
-	labSuffixes := []string{
-		"计数", "比率", "蛋白", "测定", "定量", "体积", "宽度", "分布",
-		"酶", "激酶", "转氨酶", "脱氢酶", "同工酶", "肌酸", "磷酸",
-		"红细胞", "白细胞", "血小板", "血红蛋白", "红细胞", "血小板",
-		"葡萄糖", "尿酸", "肌酐", "尿素", "胆固醇", "甘油三酯",
-		"高密度", "低密度", "脂蛋白", "载脂蛋白", "纤维蛋白",
-		"凝血", "活化", "部分", "凝血酶", "国际", "标准化",
-		"甲胎", "癌胚", "糖类", "神经元", "特异性", "烯醇化",
-		"细胞", "角蛋白", "片段", "鳞状", "细胞癌", "抗原",
-		"前列腺", "特异性", "抗原", "游离", "总", "直接", "间接",
-		"胆红素", "转肽酶", "碱性磷酸酶", "淀粉酶", "脂肪酶",
-		"胆碱酯酶", "前白蛋白", "视黄醇", "结合蛋白", "铁蛋白",
-		"转铁蛋白", "铜蓝蛋白", "C反应", "降钙素", "原", "免疫",
-		"球蛋白", "补体", "免疫球蛋白", "类风湿", "因子", "抗核",
-		"抗体", "抗双链", "DNA", "抗Smith", "抗SSA", "抗SSB",
-		"抗线粒体", "抗平滑肌", "抗核周", "抗角蛋白", "抗体",
-	}
 	for _, suffix := range labSuffixes {
 		if strings.Contains(s, suffix) {
 			return false
 		}
 	}
 
-	// Common Chinese family names (top 20)
-	familyNames := "王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗"
 	runes := []rune(s)
 	if len(runes) >= 1 {
 		for _, fn := range familyNames {
@@ -867,26 +869,6 @@ func isPersonNameLike(s string) bool {
 // isKnownUnitStr checks if the entire string is a known lab unit.
 func isKnownUnitStr(s string) bool {
 	s = strings.TrimSpace(s)
-	knownUnits := []string{
-		"×10^9/L", "10E9/L", "10^9/L", "x109/L",
-		"×10^12/L", "10E12/L", "10^12/L",
-		"μmol/L", "mmol/L", "mol/L",
-		"mg/dL", "μg/dL",
-		"mg/L", "μg/L", "ng/L", "ng/mL",
-		"mU/L", "IU/L", "kU/L", "U/L",
-		"g/L", "g/dL",
-		"fl", "fL", "pg", "mm/h",
-		// D-Dimer units
-		"ug/L FEU", "μg/L FEU", "mg/L FEU",
-		"ug/L", "FEU",
-		// Additional common units
-		"umol/L", "nmol/L", "pmol/L",
-		"mg/dl", "ug/dl", "ng/dl",
-		"U/ml", "mU/ml", "IU/ml",
-		"cells/μL", "cells/uL",
-		"s", "sec", "min",
-		"Ratio", "%",
-	}
 	sUpper := strings.ToUpper(s)
 	for _, u := range knownUnits {
 		if sUpper == strings.ToUpper(u) {
@@ -894,17 +876,11 @@ func isKnownUnitStr(s string) bool {
 		}
 	}
 
-	// Single percent sign
 	if s == "%" || s == "％" {
 		return true
 	}
 
-	// Pattern: number + unit like "10^9/L", "10^12/L"
-	if matched, _ := regexp.MatchString(`^10\^\d+/[Ll]$`, s); matched {
-		return true
-	}
-
-	return false
+	return re10PowUnit.MatchString(s)
 }
 
 // isRangeStr checks if text matches a reference range pattern.
@@ -913,25 +889,13 @@ func isKnownUnitStr(s string) bool {
 // than reference bounds, and the parser uses positional context to distinguish.
 func isRangeStr(s string) bool {
 	s = strings.TrimSpace(s)
-	// X-Y or X~Y format (with optional leading < or >)
-	if matched, _ := regexp.MatchString(`^[<>]?\s*\d+(?:\.\d+)?\s*[~\-－—]\s*\d+(?:\.\d+)?$`, s); matched {
-		return true
-	}
-	return false
+	return reRangeStr.MatchString(s)
 }
 
 // isPureNumeric checks if text is a pure number or decimal (possibly with sign).
 func isPureNumeric(s string) bool {
 	s = strings.TrimSpace(s)
-	// Numbers with optional leading +/- and optional decimal point
-	if matched, _ := regexp.MatchString(`^[-+]?\d+\.?\d*$`, s); matched {
-		return true
-	}
-	// Decimal starting with dot: ".7"
-	if matched, _ := regexp.MatchString(`^[-+]?\.\d+$`, s); matched {
-		return true
-	}
-	return false
+	return rePureNumeric1.MatchString(s) || rePureNumeric2.MatchString(s)
 }
 
 // isNameLikeStr checks if text looks like a test item name in Chinese.
@@ -970,8 +934,7 @@ func containsChinese(s string) bool {
 
 // extractNumericValueStr extracts a numeric value from a string.
 func extractNumericValueStr(s string) string {
-	re := regexp.MustCompile(`[-+]?\d*\.?\d+`)
-	matches := re.FindAllString(s, -1)
+	matches := reExtractNumeric.FindAllString(s, -1)
 	if len(matches) > 0 {
 		val := matches[0]
 		if strings.HasPrefix(val, ".") {
@@ -984,12 +947,10 @@ func extractNumericValueStr(s string) string {
 
 // extractNormalRangeStr extracts a reference range pattern from a string.
 func extractNormalRangeStr(s string) string {
-	re := regexp.MustCompile(`[<>]?\s*\d+(?:\.\d+)?\s*[~\-－—]\s*\d+(?:\.\d+)?`)
-	if match := re.FindString(s); match != "" {
+	if match := reExtractRange1.FindString(s); match != "" {
 		return strings.TrimSpace(match)
 	}
-	re2 := regexp.MustCompile(`[<>]\s*\d+(?:\.\d+)?`)
-	if match := re2.FindString(s); match != "" {
+	if match := reExtractRange2.FindString(s); match != "" {
 		return strings.TrimSpace(match)
 	}
 	return ""
@@ -1000,10 +961,6 @@ func mergeSplitDecimals(texts []string) []string {
 	if len(texts) < 2 {
 		return texts
 	}
-
-	reInt := regexp.MustCompile(`^\d+$`)
-	reIntDot := regexp.MustCompile(`^\d+\.$`)
-	reDotDec := regexp.MustCompile(`^\.\d+$`)
 
 	var merged []string
 	i := 0
@@ -1035,29 +992,7 @@ func mergeSplitDecimals(texts []string) []string {
 // ----------------------------------------------------------------------------
 
 func bboxJSON(left, top, width, height, page int) string {
-	return `{"x":` + itoa(left) + `,"y":` + itoa(top) + `,"w":` + itoa(width) + `,"h":` + itoa(height) + `,"page":` + itoa(page) + `}`
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
+	return `{"x":` + strconv.Itoa(left) + `,"y":` + strconv.Itoa(top) + `,"w":` + strconv.Itoa(width) + `,"h":` + strconv.Itoa(height) + `,"page":` + strconv.Itoa(page) + `}`
 }
 
 func maxConf(a, b float64) float64 {

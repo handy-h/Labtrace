@@ -26,27 +26,28 @@ func CalculateFlag(valueStr string, ri *models.ReferenceInterval) string {
 	return "normal"
 }
 
+var (
+	qualitativeNormalValues = map[string]bool{
+		"阴性(-)": true, "阴性": true, "(-)": true, "Neg": true, "neg": true, "Negative": true,
+	}
+	qualitativeAbnormalValues = map[string]bool{
+		"阳性(+)": true, "阳性": true, "(+)": true, "Pos": true, "pos": true, "Positive": true,
+		"1+": true, "2+": true, "3+": true, "4+": true,
+	}
+)
+
 func checkQualitative(value string, ri *models.ReferenceInterval) string {
 	if ri.QualitativeValue == "" {
 		return ""
 	}
-	// Simple qualitative matching
-	normalValues := map[string]bool{
-		"阴性(-)": true, "阴性": true, "(-)": true, "Neg": true, "neg": true, "Negative": true,
-	}
-	abnormalValues := map[string]bool{
-		"阳性(+)": true, "阳性": true, "(+)": true, "Pos": true, "pos": true, "Positive": true,
-		"1+": true, "2+": true, "3+": true, "4+": true,
-	}
-
-	if normalValues[ri.QualitativeValue] {
-		if abnormalValues[value] {
+	if qualitativeNormalValues[ri.QualitativeValue] {
+		if qualitativeAbnormalValues[value] {
 			return "阳性"
 		}
 		return "阴性"
 	}
-	if abnormalValues[ri.QualitativeValue] {
-		if normalValues[value] {
+	if qualitativeAbnormalValues[ri.QualitativeValue] {
+		if qualitativeNormalValues[value] {
 			return "阴性"
 		}
 	}

@@ -122,8 +122,10 @@ func UploadImagingReport(c *gin.Context) {
 			return
 		}
 
-		ocrJSON, _ := json.Marshal(ocrResults)
-		if _, dbErr := database.DB.Exec(`UPDATE imaging_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID); dbErr != nil {
+		ocrJSON, err := json.Marshal(ocrResults)
+		if err != nil {
+			log.Printf("[imaging] 序列化OCR结果失败: reportID=%d err=%v", reportID, err)
+		} else if _, dbErr := database.DB.Exec(`UPDATE imaging_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), reportID); dbErr != nil {
 			log.Printf("[imaging] 存储OCR原始数据失败: reportID=%d err=%v", reportID, dbErr)
 		}
 
@@ -149,10 +151,6 @@ func UploadImagingReport(c *gin.Context) {
 			examItemName, inspectNo, sampleDate, examSite, examDesc, diagnosis, reportID,
 		); dbErr != nil {
 			log.Printf("[imaging] 更新影像报告数据失败: reportID=%d err=%v", reportID, dbErr)
-		}
-
-		if _, dbErr := database.DB.Exec(`UPDATE imaging_reports SET ocr_status = 'review' WHERE id = ?`, reportID); dbErr != nil {
-			log.Printf("[imaging] 更新报告状态失败: reportID=%d err=%v", reportID, dbErr)
 		}
 
 		log.Printf("[imaging] 完成: reportID=%d", reportID)
@@ -280,6 +278,7 @@ func ListImagingReports(c *gin.Context) {
 			&r.DiagnosisResult, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.ThumbnailPath,
 			&r.CreatedAt, &hospName, &r.SubjectName,
 		); err != nil {
+			log.Printf("[imaging] 扫描影像报告列表失败: err=%v", err)
 			continue
 		}
 		if hospID.Valid {
@@ -397,7 +396,11 @@ func ApplyImagingMapping(c *gin.Context) {
 	parsed := services.ParseImagingReportWithMapping(blocks, cfg)
 
 	// 更新报告字段
-	cfgJSON, _ := json.Marshal(cfg)
+	cfgJSON, err := json.Marshal(cfg)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("序列化映射配置失败"))
+		return
+	}
 	_, err = database.DB.Exec(
 		`UPDATE imaging_reports SET 
             exam_item_name = ?, inspect_no = ?, sample_date = COALESCE(NULLIF(?, ''), sample_date),
@@ -539,7 +542,10 @@ func DeleteImagingReport(c *gin.Context) {
 	id := c.Param("id")
 
 	var filePath string
-	database.DB.QueryRow(`SELECT file_path FROM imaging_reports WHERE id = ?`, id).Scan(&filePath)
+	if err := database.DB.QueryRow(`SELECT file_path FROM imaging_reports WHERE id = ?`, id).Scan(&filePath); err != nil && err != sql.ErrNoRows {
+		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		return
+	}
 
 	_, err := database.DB.Exec(`DELETE FROM imaging_reports WHERE id = ?`, id)
 	if err != nil {
@@ -548,7 +554,9 @@ func DeleteImagingReport(c *gin.Context) {
 	}
 
 	if filePath != "" {
-		os.Remove(filePath)
+		if err := os.Remove(filePath); err != nil {
+			log.Printf("[imaging] 删除文件失败: %s err=%v", filePath, err)
+		}
 	}
 
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -561,6 +569,11 @@ func GetImagingReportImage(c *gin.Context) {
 	err := database.DB.QueryRow(`SELECT file_path FROM imaging_reports WHERE id = ?`, id).Scan(&filePath)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.Error("影像报告未找到"))
+		return
+	}
+
+	if !validateFilePath(filePath) {
+		c.JSON(http.StatusForbidden, models.Error("非法文件路径"))
 		return
 	}
 
@@ -648,8 +661,14 @@ func ReOCRImagingReport(c *gin.Context) {
 			return
 		}
 
-		ocrJSON, _ := json.Marshal(ocrResults)
-		database.DB.Exec(`UPDATE imaging_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), id)
+		ocrJSON, err := json.Marshal(ocrResults)
+		if err != nil {
+			log.Printf("[imaging] 序列化OCR结果失败: reportID=%s err=%v", id, err)
+		} else {
+			if _, dbErr := database.DB.Exec(`UPDATE imaging_reports SET ocr_raw_json = ? WHERE id = ?`, string(ocrJSON), id); dbErr != nil {
+				log.Printf("[imaging] 存储OCR原始数据失败: reportID=%s err=%v", id, dbErr)
+			}
+		}
 
 		if len(ocrResults) == 0 {
 			database.DB.Exec(`UPDATE imaging_reports SET ocr_status = 'failed' WHERE id = ?`, id)

@@ -101,16 +101,7 @@ func findItemValue(code string, items []models.ReportItem) (float64, error) {
 		}
 	}
 
-	// Try lookup by code in test_items table
-	var valueStr string
-	err := database.DB.QueryRow(
-		`SELECT ri.original_value FROM report_items ri
-		JOIN test_items ti ON ri.test_item_id = ti.id
-		WHERE ti.code = ? AND ri.report_id = ? LIMIT 1`, code, 0).Scan(&valueStr)
-	if err != nil {
-		return 0, fmt.Errorf("item %s not found", code)
-	}
-	return strconv.ParseFloat(valueStr, 64)
+	return 0, fmt.Errorf("item %s not found", code)
 }
 
 // evalSumExpr evaluates a simple sum expression like "ALB+GLOB" or "ALB+GLOB+XXX"

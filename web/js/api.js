@@ -11,6 +11,10 @@ const api = {
     if (signal) opts.signal = signal;
     try {
       const res = await fetch(API_BASE + path, opts);
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
       const json = await res.json();
       if (json.code !== 0) {
         console.error("API error:", json.message);
@@ -27,6 +31,10 @@ const api = {
       method: "POST",
       body: formData,
     });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}: ${text}`);
+    }
     return res.json();
   },
 

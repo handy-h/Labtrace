@@ -126,6 +126,9 @@ func float64Ptr(v interface{}) *float64 {
 	switch val := v.(type) {
 	case float64:
 		return &val
+	case int64:
+		f := float64(val)
+		return &f
 	default:
 		return nil
 	}

@@ -39,10 +39,15 @@ func DashboardAnomalies(c *gin.Context) {
 	hospital := c.Query("hospital")
 	confidence := c.Query("confidence") // "high"(>=95), "medium"(80-94), "low"(<80)
 	flag := c.Query("flag")             // H, L, 阳性, 阴性
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if page < 1 {
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "20")
+	page, err1 := strconv.Atoi(pageStr)
+	pageSize, err2 := strconv.Atoi(pageSizeStr)
+	if err1 != nil || err2 != nil || page < 1 {
 		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
 	}
 
 	query := `SELECT ri.id, s.name, lr.sample_date, COALESCE(ti.standard_name, ''),

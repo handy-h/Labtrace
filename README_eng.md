@@ -48,10 +48,12 @@ make build     # Build the binary
 make dev       # Development mode (verbose logging, output to dev.log)
 make run       # Production mode
 
-# Option 2: Direct compilation
-go build -o labtrace .
+# Option 2: Direct compilation (CGO is required)
+CGO_ENABLED=1 go build -o labtrace .
 ./labtrace
 ```
+
+> **Note**: The Makefile relies on bash and Linux utilities. On Windows, use the PowerShell script `.\labtrace.ps1` instead.
 
 The service listens on `http://localhost:8080` by default. Open it in your browser to get started.
 
@@ -63,17 +65,15 @@ The service listens on `http://localhost:8080` by default. Open it in your brows
 | `make dev` | Run in development mode (verbose logs, output to dev.log) |
 | `make run` | Run in production mode (minimal logs) |
 | `make stop` | Graceful shutdown |
+| `make test` | Run unit tests |
+| `make lint` | Static code check (go vet) |
 | `make clean` | Clean temporary files, caches, and binary (preserves data/) |
 | `make rebuild` | Clean then build |
 | `make restart` | Stop then start |
 
 ### 5. First Launch
 
-The system auto-initializes:
-- 43 standard test items (19 hematology + 24 biochemistry)
-- 38 biological reference intervals (segmented by gender and age)
-- 8 unit conversion rules
-- 2 calculated cross-check rules
+On the first startup the system automatically creates the database schema and indexes, but does **not** insert any preset data. All test items, reference intervals, unit conversions, and calculation rules must be created or imported manually through the UI.
 
 ## Project Structure
 
@@ -102,6 +102,7 @@ LabTrace/
 │   │   ├── report.go                # Lab report CRUD / verification / ingestion
 │   │   ├── imaging.go               # Imaging report CRUD / OCR / mapping / ingestion
 │   │   ├── rule.go                  # Hospital parsing rules & mapping templates CRUD
+│   │   ├── helpers.go               # Common helper functions (param parsing, etc.)
 │   │   ├── trend.go                 # Trend data queries
 │   │   ├── dashboard.go             # Dashboard statistics & anomaly filtering
 │   │   ├── batch_import.go          # Lab report batch import
@@ -177,7 +178,7 @@ Base path: `/api/v1`. Unified response format: `{"code":0,"message":"ok","data":
 | Calculated Rules | 4 | CRUD |
 | OCR / Lab Reports | 12 | Upload / recognize / verify / ingest / re-OCR / blocks / mapping / image |
 | OCR Quota | 2 | Query / update monthly usage |
-| Imaging Reports | 10 | Upload / recognize / verify / ingest / re-OCR / mapping / templates |
+| Imaging Reports | 15 | Upload / recognize / verify / ingest / re-OCR / mapping / templates |
 | Batch Import (Lab) | 2 | Batch upload / batch confirm ingestion |
 | Batch Import (Imaging) | 2 | Batch upload / batch confirm ingestion |
 | Hospital Rules | 4 | CRUD |

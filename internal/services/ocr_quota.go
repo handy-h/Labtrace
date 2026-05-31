@@ -2,18 +2,19 @@ package services
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"labtrace/internal/database"
 )
 
 // ocrQuotaMonthly is the monthly quota limit, set from config at startup.
-var ocrQuotaMonthly = 200
+var ocrQuotaMonthly int32 = 200
 
 // SetOCRQuotaMonthly sets the monthly OCR quota from config.
 func SetOCRQuotaMonthly(n int) {
 	if n > 0 {
-		ocrQuotaMonthly = n
+		atomic.StoreInt32(&ocrQuotaMonthly, int32(n))
 	}
 }
 
@@ -67,7 +68,7 @@ func GetOCRQuota() (*OCRQuota, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query quota: %w", err)
 	}
-	q.TotalQuota = ocrQuotaMonthly
+	q.TotalQuota = int(atomic.LoadInt32(&ocrQuotaMonthly))
 	return q, nil
 }
 
@@ -96,7 +97,7 @@ func ensureQuotaRow(yearMonth string) error {
 	if count == 0 {
 		_, err = database.DB.Exec(
 			`INSERT INTO ocr_quotas (year_month, total_quota, used_count, success_count, fail_count) VALUES (?, ?, 0, 0, 0)`,
-			yearMonth, ocrQuotaMonthly,
+			yearMonth, int(atomic.LoadInt32(&ocrQuotaMonthly)),
 		)
 	}
 	return err

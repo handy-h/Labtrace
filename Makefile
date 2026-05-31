@@ -12,7 +12,9 @@ PID_FILE    := .labtrace.pid
 
 # Go 编译参数
 GO          := go
-LDFLAGS     := -s -w
+VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+BUILD_TIME  := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)
+LDFLAGS     := -s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)
 
 # 颜色输出
 GREEN       := \033[0;32m
@@ -34,8 +36,9 @@ help: ## 显示帮助信息
 
 build: ## 编译生成可执行二进制文件
 	@printf "$(CYAN)[build]$(RESET) 编译 $(APP_NAME)...\n"
+	@$(GO) vet ./...
 	@CGO_ENABLED=1 $(GO) build -ldflags "$(LDFLAGS)" -o $(APP_NAME) .
-	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME)\n"
+	@printf "$(GREEN)[build]$(RESET) 编译完成: ./$(APP_NAME) (version: $(VERSION))\n"
 
 dev: ## 开发者模式运行（丰富日志）
 	@bash -c ' \

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/joho/godotenv"
 )
@@ -20,7 +21,24 @@ type Config struct {
 	OCRQuotaMonthly  int
 }
 
+var (
+	cachedConfig *Config
+	configOnce   sync.Once
+	configErr    error
+)
+
+// Load 加载配置并缓存，后续调用直接返回缓存结果，避免重复 I/O。
 func Load() (*Config, error) {
+	configOnce.Do(func() {
+		cachedConfig, configErr = loadInternal()
+	})
+	if configErr != nil {
+		return nil, configErr
+	}
+	return cachedConfig, nil
+}
+
+func loadInternal() (*Config, error) {
 	// .env is optional; env vars take precedence
 	_ = godotenv.Load()
 

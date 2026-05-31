@@ -1,6 +1,10 @@
 package database
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+)
 
 func migrate(db *sql.DB) error {
 	ddl := `
@@ -200,7 +204,14 @@ func migrate(db *sql.DB) error {
 		`ALTER TABLE hospital_rules ADD COLUMN rule_type TEXT NOT NULL DEFAULT 'lab_mapping'`,
 	}
 	for _, stmt := range alterStmts {
-		db.Exec(stmt) // Ignore error — column may already exist
+		_, err := db.Exec(stmt)
+		if err != nil {
+			// SQLite "duplicate column name" error messages
+			msg := err.Error()
+			if !strings.Contains(msg, "duplicate column name") {
+				return fmt.Errorf("migration failed: %s: %w", stmt, err)
+			}
+		}
 	}
 
 	return nil

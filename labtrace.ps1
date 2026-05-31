@@ -191,7 +191,7 @@ function Invoke-Dev {
     $errFile = [System.IO.Path]::GetTempFileName()
     $savedEnv = $env:GIN_MODE
     $env:GIN_MODE = "debug"
-    $proc = Start-Process -FilePath ".\$AppName.exe" -WindowStyle Hidden -PassThru -RedirectStandardError $errFile
+    $proc = Start-Process -FilePath ".\$AppName.exe" -WindowStyle Hidden -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $errFile
     $env:GIN_MODE = $savedEnv
     $procId = $proc.Id
 
@@ -202,7 +202,7 @@ function Invoke-Dev {
 
     if (Test-ProcessRunning $procId) {
         Write-Color "GREEN" "dev" "已启动 (PID: $procId, 端口: $port, 日志: $LogFile)"
-        Write-Host "查看输出: Get-Content -Path '$LogFile' -Wait" -ForegroundColor Gray
+        Write-Host "提示: 进程在后台运行，使用 Get-Content -Path '$LogFile' -Wait 查看实时日志" -ForegroundColor Gray
     } else {
         Write-Color "RED" "dev" "启动失败"
         # 读取并输出重定向的错误信息
@@ -246,6 +246,7 @@ function Invoke-Run {
 
     if (Test-ProcessRunning $procId) {
         Write-Color "GREEN" "run" "已启动 (PID: $procId, 端口: $port)"
+        Write-Host "提示: 进程在后台运行，使用 Get-Process $AppName 查看状态" -ForegroundColor Gray
     } else {
         Write-Color "RED" "run" "启动失败"
         # 读取并输出重定向的错误信息
@@ -377,7 +378,7 @@ function Invoke-Restart {
 # =============================================
 
 # .env 预检查（仅对需要 .env 的命令执行）
-$needsDotEnv = @("build", "dev", "run", "stop", "rebuild", "restart")
+$needsDotEnv = @("dev", "run", "stop", "rebuild", "restart")
 if ($Command.ToLower() -in $needsDotEnv) {
     $envPath = Join-Path (Get-Location) ".env"
     if (-not (Test-Path $envPath)) {

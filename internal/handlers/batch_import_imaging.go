@@ -96,9 +96,8 @@ func UploadBatchImagingFiles(c *gin.Context) {
 			uploadErrors = append(uploadErrors, fmt.Sprintf("无法打开 %s.json: %v", baseName, err))
 			continue
 		}
-		defer f.Close()
-
 		data, err := io.ReadAll(f)
+		f.Close()
 		if err != nil {
 			uploadErrors = append(uploadErrors, fmt.Sprintf("读取 %s.json 失败: %v", baseName, err))
 			continue
@@ -154,7 +153,11 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 		return
 	}
 
-	cfg, _ := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
+		return
+	}
 	uploadDir := cfg.UploadDir
 	os.MkdirAll(uploadDir, 0755)
 
@@ -184,7 +187,11 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 		fileMD5 := hex.EncodeToString(hash[:])
 
 		var count int
-		database.DB.QueryRow(`SELECT COUNT(*) FROM imaging_reports WHERE file_md5 = ?`, fileMD5).Scan(&count)
+		if err := database.DB.QueryRow(`SELECT COUNT(*) FROM imaging_reports WHERE file_md5 = ?`, fileMD5).Scan(&count); err != nil {
+			result.FailCount++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: 查询重复文件失败", report.FileName))
+			continue
+		}
 		if count > 0 {
 			result.FailCount++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: 文件已存在", report.FileName))

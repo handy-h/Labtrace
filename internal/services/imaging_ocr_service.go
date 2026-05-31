@@ -8,6 +8,8 @@ import (
 	"labtrace/internal/models"
 )
 
+var reExtractDate = regexp.MustCompile(`(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})`)
+
 func ParseImagingReport(ocrResults []OCRResult) *models.ImagingParsedResult {
 	result := &models.ImagingParsedResult{}
 
@@ -138,15 +140,11 @@ func extractDateOnly(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	// 使用正则匹配 YYYY-MM-DD 或 YYYY/MM/DD 或 YYYY.MM.DD 格式
-	// 支持日期和时间连在一起的情况（如 2025-03-3113:50:57）
-	re := regexp.MustCompile(`(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})`)
-	matches := re.FindStringSubmatch(raw)
+	matches := reExtractDate.FindStringSubmatch(raw)
 	if len(matches) >= 4 {
 		year := matches[1]
 		month := matches[2]
 		day := matches[3]
-		// 补零
 		if len(month) == 1 {
 			month = "0" + month
 		}
