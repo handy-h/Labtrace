@@ -707,9 +707,24 @@ const OCRImportView = Vue.defineComponent({
       });
     }
     function loadQuota() { api.getOCRQuota().then((r) => { if (r.data) quota.value = r.data; }); }
-    const quotaPct = Vue.computed(() => quotaPct(quota.value));
-    const quotaClass = Vue.computed(() => quotaTextClass(quota.value));
-    const quotaBarClass = Vue.computed(() => quotaBarClass(quota.value));
+    const quotaPct = Vue.computed(() => {
+      if (!quota.value || quota.value.total_quota === 0) return 0;
+      return Math.min(100, Math.round((quota.value.used_count / quota.value.total_quota) * 100));
+    });
+    const quotaClass = Vue.computed(() => {
+      if (!quota.value || quota.value.total_quota === 0) return "font-bold text-slate-600";
+      const remain = quota.value.total_quota - quota.value.used_count;
+      if (remain > 50) return "font-bold text-green-600";
+      if (remain > 10) return "font-bold text-orange-500";
+      return "font-bold text-red-600";
+    });
+    const quotaBarClass = Vue.computed(() => {
+      if (!quota.value || quota.value.total_quota === 0) return "bg-green-500";
+      const remain = quota.value.total_quota - quota.value.used_count;
+      if (remain > 50) return "bg-green-500";
+      if (remain > 10) return "bg-orange-500";
+      return "bg-red-500";
+    });
 
     const batchDoneCount = Vue.computed(() => batchQueue.value.filter(item => item.status === 'done' || item.status === 'error').length);
     const batchPct = Vue.computed(() => {
@@ -892,6 +907,10 @@ const OCRImportView = Vue.defineComponent({
     }
     function statusText(s) {
       return { pending: "待识别", processing: "识别中", review: "待核效", imported: "已入库", failed: "失败" }[s] || s;
+    }
+
+    function onImageLoad() {
+      // 报告图片加载完成
     }
 
     function onImagingImageLoad() {
