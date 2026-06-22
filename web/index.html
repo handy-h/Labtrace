@@ -1,9 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <base href="/web/" />
+        <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+        <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
         <title>溯源健康 LabTrace</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
@@ -52,7 +54,7 @@
                     <input
                         type="text"
                         v-model="globalSearchQuery"
-                        placeholder="全局搜索…"
+                        placeholder="全局搜索
                         class="w-full max-w-md px-3 py-1.5 rounded bg-slate-700 text-white placeholder-slate-400 text-sm border border-slate-600 focus:outline-none focus:border-blue-500"
                     />
                     <search-dropdown
@@ -97,7 +99,7 @@
                     </div>
                 </nav>
 
-                <!-- 主内容 -->
+                <!-- 主内�?-->
                 <main class="flex-1 overflow-auto">
                     <component
                         :is="currentComponent"
@@ -124,8 +126,8 @@
         <script src="js/views/trend.js?v=3"></script>
         <script src="js/views/settings.js?v=2"></script>
         <script src="js/views/reports.js?v=1"></script>
-        <script src="js/views/batch_import.js?v=1"></script>
-        <script src="js/views/batch_import_imaging.js?v=1"></script>
+        <script src="js/views/batch_import.js?v=2"></script>
+        <script src="js/views/batch_import_imaging.js?v=2"></script>
         <script src="js/app.js?v=2"></script>
     </body>
 </html>

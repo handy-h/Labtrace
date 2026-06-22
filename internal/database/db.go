@@ -21,7 +21,9 @@ func Open(dbPath string) error {
 	}
 
 	var err error
-	DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
+	// _busy_timeout=15000：SQLite 写锁冲突时最多等 15s，缓解并发上传/批量导入/审计写入之间的互锁。
+	// （SetMaxOpenConns=2 + WAL 已限制并发，但仍可能出现写事务排队，更长 timeout 让上层少撞 "database is locked"）
+	DB, err = sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=15000")
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
@@ -45,5 +47,6 @@ func Close() {
 		if err := DB.Close(); err != nil {
 			log.Printf("close database: %v", err)
 		}
+		DB = nil
 	}
 }

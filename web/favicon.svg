@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <!-- 定义 Favicon 专用的高对比度、纯净颜色 -->
+  <defs>
+    <!-- 深邃的医疗科技蓝，用于安全盾牌轮廓 -->
+    <solidColor id="shieldColor" color="#1E3A8A" />
+    <!-- 充满生命力的健康绿，用于趋势线 -->
+    <solidColor id="traceColor" color="#10B981" />
+  </defs>
+
+  <!-- 1. 简化的“盾牌/报告单”安全轮廓 - 加粗并改为纯蓝 -->
+  <path 
+    d="M160,130 L352,130 Q384,130 384,162 L384,290 C384,370 256,416 256,416 Q256,416 128,370 L128,162 Q128,130 160,130 Z" 
+    fill="none" 
+    stroke="#1E3A8A" 
+    stroke-width="50" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+  />
+
+  <!-- 2. 强化的“纵向健康趋势”折线 - 加粗并改为纯绿 -->
+  <!-- 删除了中间的小点，只保留起始和终点，使动态更清晰 -->
+  <path 
+    d="M150,310 L256,330 L362,210" 
+    fill="none" 
+    stroke="#10B981" 
+    stroke-width="65" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+  />
+  
+  <!-- 只保留一个终点数据点，代表“成功解析/健康” -->
+  <circle cx="362" cy="210" r="45" fill="#10B981" />
+</svg>

@@ -86,6 +86,14 @@ const OCRImportView = Vue.defineComponent({
     <div v-if="labReports.length && form.report_category === 'lab'" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">实验室检查报告列表</h2>
       <data-table :columns="reportListColumns" :data="labReports" empty-text="暂无报告">
+        <template #cell-subject_name="{ row }">
+          <span v-if="row.subject_name">{{ row.subject_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
+        <template #cell-hospital_name="{ row }">
+          <span v-if="row.hospital_name">{{ row.hospital_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
         <template #cell-ocr_status="{ row }">
           <span :class="statusClass(row.ocr_status)">{{statusText(row.ocr_status)}}</span>
         </template>
@@ -106,6 +114,14 @@ const OCRImportView = Vue.defineComponent({
     <div v-if="imagingReports.length && form.report_category === 'imaging'" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">影像检查报告列表</h2>
       <data-table :columns="imagingReportListColumns" :data="imagingReports" empty-text="暂无影像报告">
+        <template #cell-subject_name="{ row }">
+          <span v-if="row.subject_name">{{ row.subject_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
+        <template #cell-hospital_name="{ row }">
+          <span v-if="row.hospital_name">{{ row.hospital_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
         <template #cell-sample_date="{ row }">
           {{ formatDate(row.sample_date) }}
         </template>
@@ -447,6 +463,8 @@ const OCRImportView = Vue.defineComponent({
 
     const reportListColumns = [
       { key: 'id', label: 'ID', align: 'center' },
+      { key: 'subject_name', label: '受检者', align: 'center' },
+      { key: 'hospital_name', label: '医院', align: 'center' },
       { key: 'sample_date', label: '采样日期', align: 'center' },
       { key: 'categories', label: '分类', align: 'center' },
       { key: 'ocr_status', label: '状态', align: 'center' },
@@ -455,6 +473,8 @@ const OCRImportView = Vue.defineComponent({
 
     const imagingReportListColumns = [
       { key: 'id', label: 'ID', align: 'center' },
+      { key: 'subject_name', label: '受检者', align: 'center' },
+      { key: 'hospital_name', label: '医院', align: 'center' },
       { key: 'sample_date', label: '检查日期', align: 'center' },
       { key: 'report_type', label: '影像类型', align: 'center' },
       { key: 'exam_item_name', label: '检查项目', align: 'center' },

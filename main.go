@@ -32,11 +32,10 @@ func main() {
 		log.Fatalf("Config error: %v", err)
 	}
 
-	// Open database
+	// Open database (关闭由下方 graceful shutdown 流程统一执行，避免 OCR/audit 还在写库时被提前关闭)
 	if err := database.Open(cfg.DBPath); err != nil {
 		log.Fatalf("Database error: %v", err)
 	}
-	defer database.Close()
 
 	// Start background audit log worker
 	services.InitAuditWorker()
@@ -181,23 +180,40 @@ func main() {
 		Handler: r,
 	}
 
+	// 在主流程中监听信号，保证 Shutdown → Wait OCR → Stop audit → Close DB 的顺序执行
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// HTTP server 在独立 goroutine 中运行
+	serverErr := make(chan error, 1)
 	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-		<-sig
-		fmt.Println("\nShutting down...")
-
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("Server shutdown error: %v", err)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
 		}
-
-		// 等待所有后台 OCR goroutine 完成
-		handlers.OCRWaitGroup.Wait()
 	}()
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+	// 阻塞等待信号或 server 异常退出
+	select {
+	case sig := <-quit:
+		fmt.Printf("\nReceived signal %v, shutting down...\n", sig)
+	case err := <-serverErr:
+		log.Printf("Server error: %v", err)
+		// 即便 server 异常退出，也要尽力把后台任务与资源收尾
 	}
+
+	// 1) 停止接收新 HTTP 请求，等待在途请求结束
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	// 2) 等待所有后台 OCR goroutine 完成，避免写库被中途打断
+	handlers.OCRWaitGroup.Wait()
+
+	// 3) 关闭审计日志 worker，把缓冲区剩余日志落库
+	services.StopAuditWorker()
+
+	// 4) 关闭数据库连接（defer database.Close() 也会执行，这里显式调用以明确顺序）
+	database.Close()
 }

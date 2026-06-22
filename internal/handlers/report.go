@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -24,9 +25,11 @@ func ListReports(c *gin.Context) {
 	endDate := c.Query("end_date")
 
 	query := `SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
+		s.name as subject_name,
 		h.name as hospital_name,
 		COALESCE(lr.categories, '') as categories
 		FROM lab_reports lr
+		LEFT JOIN subjects s ON s.id = lr.subject_id
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id`
 	args := []interface{}{}
 	conditions := []string{}
@@ -72,7 +75,7 @@ func ListReports(c *gin.Context) {
 		var r models.LabReport
 		var hospID sql.NullInt64
 		var hospName sql.NullString
-		if err := rows.Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &hospName, &r.Categories); err != nil {
+		if err := rows.Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &r.SubjectName, &hospName, &r.Categories); err != nil {
 			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
 			return
 		}
@@ -95,12 +98,14 @@ func GetReport(c *gin.Context) {
 	var hospName sql.NullString
 	err := database.DB.QueryRow(
 		`SELECT lr.id, lr.subject_id, lr.hospital_id, lr.sample_date, lr.file_path, lr.file_md5, lr.ocr_status, lr.ocr_raw_json, lr.whole_report_notes, lr.created_at,
+		s.name as subject_name,
 		h.name as hospital_name,
 		COALESCE(lr.categories, '') as categories
 		FROM lab_reports lr
+		LEFT JOIN subjects s ON s.id = lr.subject_id
 		LEFT JOIN hospitals h ON h.id = lr.hospital_id
 		WHERE lr.id = ?`, id,
-	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &hospName, &r.Categories)
+	).Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &r.SubjectName, &hospName, &r.Categories)
 	if err == sql.ErrNoRows {
 		c.JSON(http.StatusNotFound, models.Error("报告未找到"))
 		return
@@ -116,10 +121,8 @@ func GetReport(c *gin.Context) {
 		r.HospitalName = hospName.String
 	}
 
-	// review状态时自动匹配参考区间和计算提示符，让核效阶段就能看到flag
-	if r.OCRStatus == "review" {
-		matchRefAndCalcFlag(id)
-	}
+	// 注意：GetReport 保持只读语义。自动匹配 test_item_id / 参考区间 / flag 的逻辑
+	// 统一在 Confirm / Import 阶段执行（写入操作），避免 GET 接口产生副作用。
 
 	// Load report items
 	items, err := loadReportItems(id)
@@ -246,11 +249,9 @@ func DeleteReportItem(c *gin.Context) {
 }
 
 // ConfirmReport marks all items in a report as confirmed (reviewed).
+// 匹配参考区间/flag、confidence=100、状态更新放在同一个事务里，避免半成品状态。
 func ConfirmReport(c *gin.Context) {
 	id := c.Param("id")
-
-	// 匹配参考区间、计算提示符（让核效阶段就能看到flag）
-	matchRefAndCalcFlag(id)
 
 	tx, err := database.DB.Begin()
 	if err != nil {
@@ -258,6 +259,17 @@ func ConfirmReport(c *gin.Context) {
 		return
 	}
 
+	// 1) 在事务内匹配 test_item_id / 参考区间 / 计算 flag（不再开新事务，避免互锁）
+	if matchErr := matchRefAndCalcFlagWithTx(tx, id); matchErr != nil {
+		tx.Rollback()
+		log.Printf("[report] confirm matchRef 失败: id=%s err=%v", id, matchErr)
+		// matchRef 失败不阻断 confirm 流程的核心更新，只记录日志后继续提交 confidence/status
+		// —— 但为避免脏数据，这里选择回滚并返回错误，让用户重试
+		c.JSON(http.StatusInternalServerError, models.Error("确认失败：匹配参考区间时出错"))
+		return
+	}
+
+	// 2) confidence 置为 100，状态改为 imported
 	if _, err = tx.Exec(`UPDATE report_items SET confidence = 100 WHERE report_id = ?`, id); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
@@ -286,37 +298,45 @@ type itemInfo struct {
 	Category     string
 }
 
-// matchRefAndCalcFlag 自动匹配test_item_id、参考区间并计算提示符flag。
-// 在确认核效和入库时都会调用。
+// matchRefAndCalcFlag 自动匹配 test_item_id、参考区间并计算提示符 flag。
+// 自开事务版本，供 ReOCR 等不希望复用外部事务的场景使用。
 func matchRefAndCalcFlag(reportID string) {
+	tx, err := database.DB.Begin()
+	if err != nil {
+		log.Printf("[matchRef] 开启事务失败: reportID=%s err=%v", reportID, err)
+		return
+	}
+	if err := matchRefAndCalcFlagWithTx(tx, reportID); err != nil {
+		tx.Rollback()
+		log.Printf("[matchRef] 失败: reportID=%s err=%v", reportID, err)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		log.Printf("[matchRef] 提交事务失败: reportID=%s err=%v", reportID, err)
+	}
+}
+
+// matchRefAndCalcFlagWithTx 在指定事务内执行匹配逻辑，调用方负责 Commit/Rollback。
+// 这样 ConfirmReport / ImportReport 可以把匹配与状态更新放进同一事务。
+func matchRefAndCalcFlagWithTx(tx *sql.Tx, reportID string) error {
 	subjectID, sampleDate, err := fetchReportSubjectInfo(reportID)
 	if err != nil {
-		return
+		return fmt.Errorf("fetch report subject: %w", err)
 	}
 
 	gender, birthDate, err := fetchSubjectInfo(subjectID)
 	if err != nil {
-		return
+		return fmt.Errorf("fetch subject: %w", err)
 	}
 
 	ageAtSample := services.CalcAgeYears(birthDate, sampleDate)
 	items, err := fetchReportItemInfos(reportID)
 	if err != nil {
-		return
+		return fmt.Errorf("fetch items: %w", err)
 	}
 
 	itemIdx := services.LoadTestItemIndex()
-	tx, err := database.DB.Begin()
-	if err != nil {
-		return
-	}
-
-	if err = runMatchRefInTx(tx, items, itemIdx, reportID, gender, ageAtSample); err != nil {
-		tx.Rollback()
-		return
-	}
-
-	err = tx.Commit()
+	return runMatchRefInTx(tx, items, itemIdx, reportID, gender, ageAtSample)
 }
 
 func fetchReportSubjectInfo(reportID string) (subjectID int64, sampleDate string, err error) {

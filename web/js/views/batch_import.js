@@ -29,15 +29,15 @@ const BatchImportView = Vue.defineComponent({
       <!-- Step 2: 上传文件 -->
       <div v-if="step === 2">
         <h3 class="page-subtitle">步骤 2: 上传文件</h3>
-        <p class="text-hint mb-4">请上传JSON和PDF文件，文件名将自动匹配</p>
+        <p class="text-hint mb-4">请上传JSON和报告文件（PDF或图片），文件名将自动匹配</p>
         <div class="form-row mb-4">
           <div class="form-group">
             <label class="form-label">JSON文件</label>
             <input type="file" @change="onJsonFileChange" accept=".json" multiple class="form-input" />
           </div>
           <div class="form-group">
-            <label class="form-label">PDF文件</label>
-            <input type="file" @change="onPdfFileChange" accept=".pdf" multiple class="form-input" />
+            <label class="form-label">报告文件（PDF/图片）</label>
+            <input type="file" @change="onReportFileChange" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.webp" multiple class="form-input" />
           </div>
         </div>
         <div v-if="filePairs.length" class="mb-4">
@@ -173,7 +173,7 @@ const BatchImportView = Vue.defineComponent({
       <div v-if="step === 4">
         <h3 class="page-subtitle">步骤 4: 确认导入</h3>
         <div v-if="hasEmptyDates" class="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-          ⚠️ 有报告未提取到采样日期，请手动填写或查看原始JSON/PDF确认后再提交。
+          ⚠️ 有报告未提取到采样日期，请手动填写或查看原始JSON/报告文件确认后再提交。
         </div>
         <div class="mb-4">
           <h4 class="section-title">待导入报告</h4>
@@ -198,7 +198,7 @@ const BatchImportView = Vue.defineComponent({
                   <td class="px-3 py-2 text-center">
                     <div class="flex gap-1 justify-center">
                       <button @click="showJsonModal(r)" class="btn btn-sm btn-secondary">JSON</button>
-                      <button @click="viewPdf(r)" class="btn btn-sm btn-secondary">PDF</button>
+                      <button @click="viewFile(r)" class="btn btn-sm btn-secondary">查看</button>
                     </div>
                   </td>
                 </tr>
@@ -256,11 +256,11 @@ const BatchImportView = Vue.defineComponent({
     const _ctrl = new AbortController();
 
     const jsonFiles = Vue.ref([]);
-    const pdfFiles = Vue.ref([]);
+    const reportFiles = Vue.ref([]);
     const filePairs = Vue.ref([]);
     const uploadErrors = Vue.ref([]);
     const previewData = Vue.ref([]);
-    const pdfDataMap = Vue.ref({});
+    const fileDataMap = Vue.ref({});
     const uploading = Vue.ref(false);
     const importing = Vue.ref(false);
     const importResult = Vue.ref({ success_count: 0, fail_count: 0 });
@@ -351,27 +351,27 @@ const BatchImportView = Vue.defineComponent({
       matchFiles();
     }
 
-    function onPdfFileChange(e) {
+    function onReportFileChange(e) {
       const files = Array.from(e.target.files);
-      pdfFiles.value = files;
+      reportFiles.value = files;
       matchFiles();
     }
 
     function matchFiles() {
       const jsonMap = {};
-      const pdfMap = {};
+      const fileMap = {};
       for (const f of jsonFiles.value) jsonMap[getBaseName(f.name)] = f;
-      for (const f of pdfFiles.value) pdfMap[getBaseName(f.name)] = f;
+      for (const f of reportFiles.value) fileMap[getBaseName(f.name)] = f;
 
       filePairs.value = [];
       uploadErrors.value = [];
-      const allNames = new Set([...Object.keys(jsonMap), ...Object.keys(pdfMap)]);
+      const allNames = new Set([...Object.keys(jsonMap), ...Object.keys(fileMap)]);
 
       for (const name of allNames) {
-        if (jsonMap[name] && pdfMap[name]) {
-          filePairs.value.push({ name, json: jsonMap[name], pdf: pdfMap[name] });
+        if (jsonMap[name] && fileMap[name]) {
+          filePairs.value.push({ name, json: jsonMap[name], reportFile: fileMap[name] });
         } else if (jsonMap[name]) {
-          uploadErrors.value.push(`${name}: 缺少对应的PDF`);
+          uploadErrors.value.push(`${name}: 缺少对应的报告文件`);
         } else {
           uploadErrors.value.push(`${name}: 缺少对应的JSON`);
         }
@@ -392,13 +392,22 @@ const BatchImportView = Vue.defineComponent({
       return datePart.replace(/[\/.]/g, '-');
     }
 
+    function isImageFile(f) {
+      return /\.(png|jpg|jpeg|gif|bmp|webp)$/i.test(f.name);
+    }
+
     async function uploadFiles() {
       uploading.value = true;
       try {
         const fd = new FormData();
         for (const p of filePairs.value) {
           fd.append('json_files', p.json);
-          fd.append('pdf_files', p.pdf);
+          // 按类型分开发送：PDF → pdf_files，图片 → image_files
+          if (isImageFile(p.reportFile)) {
+            fd.append('image_files', p.reportFile);
+          } else {
+            fd.append('pdf_files', p.reportFile);
+          }
         }
         const r = await api.uploadBatchFiles(fd);
         if (r.code !== 0) { alert(r.message); return; }
@@ -407,7 +416,7 @@ const BatchImportView = Vue.defineComponent({
 
         for (const report of previewData.value) {
           const fp = filePairs.value.find(p => p.name === report.file_name);
-          if (fp) pdfDataMap.value[report.file_name] = await readFileAsBase64(fp.pdf);
+          if (fp) fileDataMap.value[report.file_name] = await readFileAsBase64(fp.reportFile);
           report.sample_date = parseDateForInput(getNestedValue(report.data, mappings.value.sample_date)) || '';
         }
 
@@ -494,7 +503,7 @@ const BatchImportView = Vue.defineComponent({
         const reports = previewData.value.map(r => ({
           file_name: r.file_name,
           data: r.data,
-          pdf_data: pdfDataMap.value[r.file_name],
+          pdf_data: fileDataMap.value[r.file_name],
           sample_date: r.sample_date || ''
         }));
 
@@ -516,11 +525,11 @@ const BatchImportView = Vue.defineComponent({
       step.value = 1;
       form.value = { subject_id: '', hospital_id: '' };
       jsonFiles.value = [];
-      pdfFiles.value = [];
+      reportFiles.value = [];
       filePairs.value = [];
       uploadErrors.value = [];
       previewData.value = [];
-      pdfDataMap.value = {};
+      fileDataMap.value = {};
       importResult.value = { success_count: 0, fail_count: 0 };
     }
 
@@ -533,12 +542,15 @@ const BatchImportView = Vue.defineComponent({
       jsonModalVisible.value = true;
     }
 
-    function viewPdf(report) {
-      const base64 = pdfDataMap.value[report.file_name];
-      if (!base64) { alert('PDF数据未找到'); return; }
-      // 去掉 data:application/pdf;base64, 前缀
-      const raw = base64.includes(',') ? base64.split(',')[1] : base64;
-      const blob = new Blob([Uint8Array.from(atob(raw), c => c.charCodeAt(0))], { type: 'application/pdf' });
+    function viewFile(report) {
+      const dataUrl = fileDataMap.value[report.file_name];
+      if (!dataUrl) { alert('文件数据未找到'); return; }
+      // 从 data URL 中提取 MIME 类型
+      const mime = dataUrl.match(/^data:([^;,]+)/);
+      const mimeType = mime ? mime[1] : 'application/octet-stream';
+      const raw = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: mimeType });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
     }
@@ -550,9 +562,9 @@ const BatchImportView = Vue.defineComponent({
       filePairs, uploadErrors, previewData, previewItems,
       uploading, importing, importResult, mappings,
       selectedFileIndex, jsonModalVisible, jsonModalData, hasEmptyDates,
-      onJsonFileChange, onPdfFileChange, uploadFiles,
+      onJsonFileChange, onReportFileChange, uploadFiles,
       confirmImport, reset, goToReports, formatJSON,
-      showJsonModal, viewPdf
+      showJsonModal, viewFile
     };
   }
 });

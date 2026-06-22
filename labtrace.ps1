@@ -37,6 +37,25 @@ function Write-Color {
     Write-Host $Message
 }
 
+# --- 自动探测 MSYS2，将 mingw64\bin 加入 PATH ---
+function Initialize-MSYS2 {
+    $hasGcc = Get-Command gcc -ErrorAction SilentlyContinue
+    if ($hasGcc) { return }
+
+    $candidates = @()
+    if ($env:MSYS2_ROOT) { $candidates += Join-Path $env:MSYS2_ROOT "mingw64\bin" }
+    $candidates += "C:\msys64\mingw64\bin"
+    $candidates += "C:\msys2\mingw64\bin"
+
+    foreach ($dir in $candidates) {
+        if ($dir -and (Test-Path (Join-Path $dir "gcc.exe"))) {
+            $env:PATH = "$dir;$env:PATH"
+            Write-Color "YELLOW" "build" "已自动添加 MSYS2 到 PATH: $dir"
+            return
+        }
+    }
+}
+
 # --- 从 .env 读取端口（带缓存） ---
 function Get-Port {
     if ($script:CachedPort) { return $script:CachedPort }
@@ -151,10 +170,12 @@ function Invoke-Build {
     $ldflags = "-s -w -X main.version=$version -X main.buildTime=$buildTime"
 
     # 检查 C 编译器（go-sqlite3 需要 cgo）
+    Initialize-MSYS2
     $hasGcc = Get-Command gcc -ErrorAction SilentlyContinue
     if (-not $hasGcc) {
         Write-Color "RED" "build" "未找到 gcc，go-sqlite3 需要 CGO 支持"
-        Write-Host "  请安装 MinGW-w64 (https://www.mingw-w64.org/)" -ForegroundColor Yellow
+        Write-Host "  请安装 MSYS2 并安装 mingw-w64-x86_64-toolchain" -ForegroundColor Yellow
+        Write-Host "  或将 C:\msys64\mingw64\bin 添加到系统 PATH" -ForegroundColor Yellow
         exit 1
     }
 

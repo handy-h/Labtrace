@@ -55,6 +55,14 @@ const ReportsView = Vue.defineComponent({
     <div v-if="reportType === 'lab'" class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">检验报告列表</h2>
       <data-table :columns="labReportColumns" :data="labReports" empty-text="暂无检验报告">
+        <template #cell-subject_name="{ row }">
+          <span v-if="row.subject_name">{{ row.subject_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
+        <template #cell-hospital_name="{ row }">
+          <span v-if="row.hospital_name">{{ row.hospital_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
         <template #cell-categories="{ row }">
           <span v-if="row.categories">{{ row.categories }}</span>
           <span v-else style="color: var(--color-text-muted)">—</span>
@@ -75,6 +83,14 @@ const ReportsView = Vue.defineComponent({
         :sort-field="imagingSort.field" :sort-order="imagingSort.order"
         @update:sort-field="imagingSort.field = $event; loadImagingReports()"
         @update:sort-order="imagingSort.order = $event; loadImagingReports()">
+        <template #cell-subject_name="{ row }">
+          <span v-if="row.subject_name">{{ row.subject_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
+        <template #cell-hospital_name="{ row }">
+          <span v-if="row.hospital_name">{{ row.hospital_name }}</span>
+          <span v-else style="color: var(--color-text-muted)">—</span>
+        </template>
         <template #cell-exam_item_name="{ row }">
           <span v-if="row.exam_item_name" class="px-2 py-0.5 rounded text-xs" style="background: var(--color-primary); color: white">{{ row.exam_item_name }}</span>
           <span v-else style="color: var(--color-text-muted)">—</span>
@@ -247,6 +263,8 @@ const ReportsView = Vue.defineComponent({
 
     const labReportColumns = [
       { key: 'id', label: 'ID', align: 'center' },
+      { key: 'subject_name', label: '受检者', align: 'center' },
+      { key: 'hospital_name', label: '医院', align: 'center' },
       { key: 'sample_date', label: '采样日期', align: 'center' },
       { key: 'categories', label: '分类', align: 'center' },
       { key: 'ocr_status', label: '状态', align: 'center' },
@@ -255,6 +273,8 @@ const ReportsView = Vue.defineComponent({
 
     const imagingReportColumns = [
       { key: 'id', label: 'ID', align: 'center' },
+      { key: 'subject_name', label: '受检者', align: 'center' },
+      { key: 'hospital_name', label: '医院', align: 'center' },
       { key: 'sample_date', label: '检查日期', align: 'center', sortable: true },
       { key: 'exam_item_name', label: '类型', align: 'center', sortable: true },
       { key: 'exam_site', label: '部位', align: 'center', sortable: true },

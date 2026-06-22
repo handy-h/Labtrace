@@ -96,6 +96,7 @@ type LabReport struct {
 	CreatedAt        string `json:"created_at"`
 
 	// Joined fields
+	SubjectName      string       `json:"subject_name,omitempty"`
 	HospitalName     string       `json:"hospital_name,omitempty"`
 	Categories       string       `json:"categories,omitempty"` // 检验项目分类（逗号分隔）
 	Items            []ReportItem `json:"items,omitempty"`

@@ -45,20 +45,20 @@ func UploadBatchImagingFiles(c *gin.Context) {
 	}
 
 	jsonFiles := form.File["json_files"]
-	pdfFiles := form.File["pdf_files"]
+	reportFiles := append(form.File["pdf_files"], form.File["image_files"]...)
 
 	if jsonFiles == nil || len(jsonFiles) == 0 {
 		c.JSON(http.StatusBadRequest, models.Error("请上传JSON文件"))
 		return
 	}
-	if pdfFiles == nil || len(pdfFiles) == 0 {
-		c.JSON(http.StatusBadRequest, models.Error("请上传PDF文件"))
+	if reportFiles == nil || len(reportFiles) == 0 {
+		c.JSON(http.StatusBadRequest, models.Error("请上传报告文件（PDF或图片）"))
 		return
 	}
 
 	type filePair struct {
-		jsonFile *multipart.FileHeader
-		pdfFile  *multipart.FileHeader
+		jsonFile  *multipart.FileHeader
+		imageFile *multipart.FileHeader
 	}
 	pairs := make(map[string]*filePair)
 
@@ -70,12 +70,12 @@ func UploadBatchImagingFiles(c *gin.Context) {
 		pairs[baseName].jsonFile = f
 	}
 
-	for _, f := range pdfFiles {
+	for _, f := range reportFiles {
 		baseName := getBaseName(f.Filename)
 		if pairs[baseName] == nil {
 			pairs[baseName] = &filePair{}
 		}
-		pairs[baseName].pdfFile = f
+		pairs[baseName].imageFile = f
 	}
 
 	results := []ImagingBatchUploadResponse{}
@@ -86,8 +86,8 @@ func UploadBatchImagingFiles(c *gin.Context) {
 			uploadErrors = append(uploadErrors, fmt.Sprintf("文件 %s 缺少对应的JSON文件", baseName))
 			continue
 		}
-		if pair.pdfFile == nil {
-			uploadErrors = append(uploadErrors, fmt.Sprintf("文件 %s 缺少对应的PDF文件", baseName))
+		if pair.imageFile == nil {
+			uploadErrors = append(uploadErrors, fmt.Sprintf("文件 %s 缺少对应的报告文件（PDF或图片）", baseName))
 			continue
 		}
 
@@ -172,18 +172,18 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 	for _, report := range req.Reports {
 		if report.PDFData == "" {
 			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 缺少PDF数据", report.FileName))
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: 缺少报告文件数据", report.FileName))
 			continue
 		}
 
-		decodedPDF, err := base64Decode(report.PDFData)
+		decodedFile, fileExt, err := decodeFileData(report.PDFData)
 		if err != nil {
 			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 解码PDF失败", report.FileName))
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: 解码文件失败", report.FileName))
 			continue
 		}
 
-		hash := md5.Sum(decodedPDF)
+		hash := md5.Sum(decodedFile)
 		fileMD5 := hex.EncodeToString(hash[:])
 
 		var count int
@@ -198,10 +198,10 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 			continue
 		}
 
-		filePath := filepath.Join(uploadDir, fmt.Sprintf("img_%s_%s.pdf", fileMD5[:12], report.FileName))
-		if err := os.WriteFile(filePath, decodedPDF, 0644); err != nil {
+		filePath := filepath.Join(uploadDir, fmt.Sprintf("img_%s_%s%s", fileMD5[:12], report.FileName, fileExt))
+		if err := os.WriteFile(filePath, decodedFile, 0644); err != nil {
 			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 保存PDF失败", report.FileName))
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: 保存文件失败", report.FileName))
 			continue
 		}
 
