@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"net/http"
@@ -42,7 +42,7 @@ func ListAuditLogs(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()

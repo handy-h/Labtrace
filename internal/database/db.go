@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -49,4 +51,46 @@ func Close() {
 		}
 		DB = nil
 	}
+}
+
+// ExecWithRetry executes a SQL statement with retry on "database is locked" errors.
+// Uses exponential backoff: 100ms, 200ms, 400ms (max 3 attempts).
+func ExecWithRetry(query string, args ...interface{}) (sql.Result, error) {
+	backoffs := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond}
+	var lastErr error
+	for attempt := 0; attempt <= len(backoffs); attempt++ {
+		result, err := DB.Exec(query, args...)
+		if err == nil {
+			return result, nil
+		}
+		if !strings.Contains(err.Error(), "database is locked") {
+			return nil, err
+		}
+		lastErr = err
+		if attempt < len(backoffs) {
+			time.Sleep(backoffs[attempt])
+		}
+	}
+	return nil, fmt.Errorf("exec retry exhausted: %w", lastErr)
+}
+
+// ExecTxWithRetry executes a SQL statement within a transaction with retry on "database is locked" errors.
+// Uses exponential backoff: 100ms, 200ms, 400ms (max 3 attempts).
+func ExecTxWithRetry(tx *sql.Tx, query string, args ...interface{}) (sql.Result, error) {
+	backoffs := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond}
+	var lastErr error
+	for attempt := 0; attempt <= len(backoffs); attempt++ {
+		result, err := tx.Exec(query, args...)
+		if err == nil {
+			return result, nil
+		}
+		if !strings.Contains(err.Error(), "database is locked") {
+			return nil, err
+		}
+		lastErr = err
+		if attempt < len(backoffs) {
+			time.Sleep(backoffs[attempt])
+		}
+	}
+	return nil, fmt.Errorf("exec retry exhausted: %w", lastErr)
 }

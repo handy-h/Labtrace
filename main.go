@@ -21,7 +21,7 @@ import (
 
 // 由 Makefile / labtrace.ps1 在编译时注入
 var (
-	version   = "dev"
+	version   = "0.8.0"
 	buildTime = "unknown"
 )
 
@@ -55,12 +55,20 @@ func main() {
 	r.MaxMultipartMemory = 32 << 20 // 限制上传文件大小为 32MB
 	r.Use(middleware.CORS())
 
+	// CSRF token endpoint (expose token to frontend)
+	r.GET("/api/csrf-token", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok", "data": gin.H{"token": middleware.GetCSRFToken()}})
+	})
+
 	// Serve web frontend
 	r.Static("/web", "./web")
 	r.StaticFile("/", "./web/index.html")
+	r.StaticFile("/api.html", "./web/api.html")
 
 	// API v1
 	v1 := r.Group("/api/v1")
+	v1.Use(middleware.RateLimiter())
+	v1.Use(middleware.CSRF())
 	{
 		v1.GET("/ping", handlers.Ping)
 

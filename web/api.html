@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LabTrace API 参考</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-slate-900 mb-2">LabTrace API 参考</h1>
+        <p class="text-slate-500 mb-8">所有接口路径前缀为 <code class="bg-slate-200 px-1 rounded">/api/v1</code></p>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">系统</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/ping</td><td class="px-4 py-2">健康检查 / 版本信息</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/ocr/quota</td><td class="px-4 py-2">查询 OCR 月度额度</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-yellow-600">PUT</td><td class="px-4 py-2 font-mono">/ocr/quota</td><td class="px-4 py-2">手动调整 OCR 额度</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">受检者</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/subjects</td><td class="px-4 py-2">列表 (?search=关键词)</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/subjects</td><td class="px-4 py-2">创建</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/subjects/:id</td><td class="px-4 py-2">详情</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-yellow-600">PUT</td><td class="px-4 py-2 font-mono">/subjects/:id</td><td class="px-4 py-2">更新</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-red-600">DELETE</td><td class="px-4 py-2 font-mono">/subjects/:id</td><td class="px-4 py-2">删除</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">医院</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/hospitals</td><td class="px-4 py-2">列表</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/hospitals</td><td class="px-4 py-2">创建</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-yellow-600">PUT</td><td class="px-4 py-2 font-mono">/hospitals/:id</td><td class="px-4 py-2">更新</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-red-600">DELETE</td><td class="px-4 py-2 font-mono">/hospitals/:id</td><td class="px-4 py-2">删除</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">检验项目</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/test-items</td><td class="px-4 py-2">列表 (?category=分类)</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/test-items</td><td class="px-4 py-2">创建</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-yellow-600">PUT</td><td class="px-4 py-2 font-mono">/test-items/:id</td><td class="px-4 py-2">更新</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-red-600">DELETE</td><td class="px-4 py-2 font-mono">/test-items/:id</td><td class="px-4 py-2">删除</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">检验报告</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/ocr/upload</td><td class="px-4 py-2">上传并 OCR 识别</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/reports</td><td class="px-4 py-2">报告列表 (带筛选)</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/reports/:id</td><td class="px-4 py-2">报告详情 (含项目)</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-yellow-600">PUT</td><td class="px-4 py-2 font-mono">/reports/:id</td><td class="px-4 py-2">更新报告字段</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-yellow-600">PUT</td><td class="px-4 py-2 font-mono">/reports/:id/items/:itemId</td><td class="px-4 py-2">更新单个项目</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-red-600">DELETE</td><td class="px-4 py-2 font-mono">/reports/:id/items/:itemId</td><td class="px-4 py-2">删除单个项目</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/reports/:id/confirm</td><td class="px-4 py-2">确认报告</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/reports/:id/import</td><td class="px-4 py-2">导入报告</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/reports/:id/re-ocr</td><td class="px-4 py-2">重新 OCR</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/reports/:id/image</td><td class="px-4 py-2">查看原始图片/PDF</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/reports/:id/ocr-blocks</td><td class="px-4 py-2">OCR 识别块</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/reports/:id/apply-mapping</td><td class="px-4 py-2">应用列映射</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">影像报告</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/imaging-report-types</td><td class="px-4 py-2">报告类型列表</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/imaging-exam-items</td><td class="px-4 py-2">检查项目列表</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/imaging/upload</td><td class="px-4 py-2">上传影像报告</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/imaging-reports</td><td class="px-4 py-2">影像报告列表</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/imaging-reports/:id</td><td class="px-4 py-2">影像报告详情</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">仪表盘 & 趋势</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/dashboard/summary</td><td class="px-4 py-2">概览统计</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/dashboard/anomalies</td><td class="px-4 py-2">异常项目列表 (带筛选分页)</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/trend/data</td><td class="px-4 py-2">趋势数据 (?subject_id=)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">备份 & 审计</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/backups/export</td><td class="px-4 py-2">导出加密备份</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/backups/import</td><td class="px-4 py-2">导入恢复备份</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/backups</td><td class="px-4 py-2">备份历史</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-green-600">GET</td><td class="px-4 py-2 font-mono">/audit-logs</td><td class="px-4 py-2">审计日志 (带筛选)</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/audit-logs/verify</td><td class="px-4 py-2">验证审计日志完整性</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="mb-8">
+            <h2 class="text-xl font-semibold mb-3 text-blue-600">批量导入</h2>
+            <div class="bg-white rounded-lg shadow overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-100">
+                        <tr><th class="text-left px-4 py-2">方法</th><th class="text-left px-4 py-2">路径</th><th class="text-left px-4 py-2">说明</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/batch/upload</td><td class="px-4 py-2">批量上传检验报告</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/batch/confirm</td><td class="px-4 py-2">确认批量导入</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/batch/imaging/upload</td><td class="px-4 py-2">批量上传影像报告</td></tr>
+                        <tr><td class="px-4 py-2 font-mono text-blue-600">POST</td><td class="px-4 py-2 font-mono">/batch/imaging/confirm</td><td class="px-4 py-2">确认批量导入影像</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="text-xs text-slate-400 mt-12 pt-4 border-t">
+            LabTrace API Reference &mdash; <span id="version">v0.2.0</span>
+        </footer>
+    </div>
+    <script>
+    fetch('/api/v1/ping').then(r => r.json()).then(d => {
+        if (d.data && d.data.version) {
+            document.getElementById('version').textContent = d.data.version;
+        }
+    }).catch(() => {});
+    </script>
+</body>
+</html>

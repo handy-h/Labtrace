@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"net/http"
@@ -25,7 +25,7 @@ func ListHospitalRules(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -34,7 +34,7 @@ func ListHospitalRules(c *gin.Context) {
 	for rows.Next() {
 		var r models.HospitalRule
 		if err := rows.Scan(&r.ID, &r.HospitalID, &r.RuleName, &r.ColumnMappings, &r.CreatedAt, &r.UpdatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		rules = append(rules, r)
@@ -54,7 +54,7 @@ func CreateHospitalRule(c *gin.Context) {
 		r.HospitalID, r.RuleName, r.ColumnMappings,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	id, _ := result.LastInsertId()
@@ -74,7 +74,7 @@ func UpdateHospitalRule(c *gin.Context) {
 		r.HospitalID, r.RuleName, r.ColumnMappings, id,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -84,7 +84,7 @@ func DeleteHospitalRule(c *gin.Context) {
 	id := c.Param("id")
 	_, err := database.DB.Exec(`DELETE FROM hospital_rules WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

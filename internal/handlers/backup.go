@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"net/http"
@@ -85,7 +85,7 @@ func ImportBackup(c *gin.Context) {
 func ListBackups(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT id, filename, description, file_size, created_at FROM backups ORDER BY created_at DESC`)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -106,7 +106,7 @@ func DeleteBackup(c *gin.Context) {
 	id := c.Param("id")
 	_, err := database.DB.Exec(`DELETE FROM backups WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

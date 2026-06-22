@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -65,7 +65,7 @@ func ListReports(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -76,7 +76,7 @@ func ListReports(c *gin.Context) {
 		var hospID sql.NullInt64
 		var hospName sql.NullString
 		if err := rows.Scan(&r.ID, &r.SubjectID, &hospID, &r.SampleDate, &r.FilePath, &r.FileMD5, &r.OCRStatus, &r.OCRRawJSON, &r.WholeReportNotes, &r.CreatedAt, &r.SubjectName, &hospName, &r.Categories); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		if hospID.Valid {
@@ -111,7 +111,7 @@ func GetReport(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if hospID.Valid {
@@ -208,7 +208,7 @@ func UpdateReportItem(c *gin.Context) {
 		item.TestItemName, item.OriginalValue, item.OriginalUnit, item.RefIntervalText, item.Flag, item.Confidence, item.RowNotes, itemID, reportID,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -228,7 +228,7 @@ func UpdateReport(c *gin.Context) {
 
 	_, err := database.DB.Exec(`UPDATE lab_reports SET categories = ? WHERE id = ?`, body.Categories, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -242,7 +242,7 @@ func DeleteReportItem(c *gin.Context) {
 
 	_, err := database.DB.Exec(`DELETE FROM report_items WHERE id=? AND report_id=?`, itemID, reportID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -255,7 +255,7 @@ func ConfirmReport(c *gin.Context) {
 
 	tx, err := database.DB.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -272,16 +272,16 @@ func ConfirmReport(c *gin.Context) {
 	// 2) confidence 置为 100，状态改为 imported
 	if _, err = tx.Exec(`UPDATE report_items SET confidence = 100 WHERE report_id = ?`, id); err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if _, err = tx.Exec(`UPDATE lab_reports SET ocr_status = 'imported' WHERE id = ?`, id); err != nil {
 		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if err = tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 

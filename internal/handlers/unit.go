@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"math"
@@ -28,7 +28,7 @@ func ListUnitConversions(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -37,7 +37,7 @@ func ListUnitConversions(c *gin.Context) {
 	for rows.Next() {
 		var uc models.UnitConversion
 		if err := rows.Scan(&uc.ID, &uc.TestItemID, &uc.SourceUnit, &uc.TargetUnit, &uc.Formula, &uc.ExampleInput, &uc.ExampleOutput, &uc.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		convs = append(convs, uc)
@@ -76,7 +76,7 @@ func CreateUnitConversion(c *gin.Context) {
 		uc.TestItemID, uc.SourceUnit, uc.TargetUnit, uc.Formula, uc.ExampleInput, uc.ExampleOutput,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	id, _ := res.LastInsertId()
@@ -113,7 +113,7 @@ func UpdateUnitConversion(c *gin.Context) {
 		uc.TestItemID, uc.SourceUnit, uc.TargetUnit, uc.Formula, uc.ExampleInput, uc.ExampleOutput, id,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -123,7 +123,7 @@ func DeleteUnitConversion(c *gin.Context) {
 	id := c.Param("id")
 	_, err := database.DB.Exec(`DELETE FROM unit_conversions WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

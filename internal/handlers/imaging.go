@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"crypto/md5"
@@ -24,7 +24,7 @@ import (
 func ListImagingReportTypes(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT id, code, name, name_en, description, sort_order, created_at FROM imaging_report_types ORDER BY sort_order`)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -99,7 +99,7 @@ func UploadImagingReport(c *gin.Context) {
 		subjectID, hospID, reportType, sampleDate, filePath, fileMD5,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	reportID, _ := result.LastInsertId()
@@ -167,7 +167,7 @@ func UploadImagingReport(c *gin.Context) {
 func ListImagingExamItems(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT DISTINCT exam_item_name FROM imaging_reports WHERE exam_item_name != '' ORDER BY exam_item_name`)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -262,7 +262,7 @@ func ListImagingReports(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -322,7 +322,7 @@ func GetImagingReport(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if hospID.Valid {
@@ -477,7 +477,7 @@ func SaveImagingMappingTemplate(c *gin.Context) {
 			hospitalID, ruleName, string(cfgJSON),
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		newID, _ := res.LastInsertId()
@@ -488,7 +488,7 @@ func SaveImagingMappingTemplate(c *gin.Context) {
 			ruleName, string(cfgJSON), existingID,
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		c.JSON(http.StatusOK, models.Success(gin.H{"id": existingID}))
@@ -531,7 +531,7 @@ func UpdateImagingReport(c *gin.Context) {
 		req.ReportType, hospID, req.SampleDate, id,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -543,13 +543,13 @@ func DeleteImagingReport(c *gin.Context) {
 
 	var filePath string
 	if err := database.DB.QueryRow(`SELECT file_path FROM imaging_reports WHERE id = ?`, id).Scan(&filePath); err != nil && err != sql.ErrNoRows {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
 	_, err := database.DB.Exec(`DELETE FROM imaging_reports WHERE id = ?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -593,7 +593,7 @@ func ConfirmImagingReport(c *gin.Context) {
 
 	_, err := database.DB.Exec(`UPDATE imaging_reports SET ocr_status = 'imported', updated_at = datetime('now') WHERE id = ?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -608,7 +608,7 @@ func ImportImagingReport(c *gin.Context) {
 
 	_, err := database.DB.Exec(`UPDATE imaging_reports SET ocr_status = 'imported', updated_at = datetime('now') WHERE id = ?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -629,7 +629,7 @@ func ReOCRImagingReport(c *gin.Context) {
 	}
 
 	if _, err := database.DB.Exec(`UPDATE imaging_reports SET ocr_status = 'processing' WHERE id = ?`, id); err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 

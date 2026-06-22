@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -31,7 +31,7 @@ func ListSubjects(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -42,7 +42,7 @@ func ListSubjects(c *gin.Context) {
 		var lastDate sql.NullString
 		if err := rows.Scan(&s.ID, &s.Name, &s.Gender, &s.BirthDate,
 			&s.CreatedAt, &s.UpdatedAt, &s.ReportCount, &lastDate); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		if lastDate.Valid {
@@ -66,7 +66,7 @@ func CreateSubject(c *gin.Context) {
 		s.Name, s.Gender, s.BirthDate,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -86,7 +86,7 @@ func GetSubject(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(s))
@@ -105,7 +105,7 @@ func UpdateSubject(c *gin.Context) {
 		s.Name, s.Gender, s.BirthDate, id,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
@@ -119,7 +119,7 @@ func DeleteSubject(c *gin.Context) {
 	id := c.Param("id")
 	result, err := database.DB.Exec(`DELETE FROM subjects WHERE id = ?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
@@ -134,7 +134,7 @@ func DeleteSubject(c *gin.Context) {
 func ListHospitals(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT id, name, level, created_at FROM hospitals ORDER BY name`)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -143,7 +143,7 @@ func ListHospitals(c *gin.Context) {
 	for rows.Next() {
 		var h models.Hospital
 		if err := rows.Scan(&h.ID, &h.Name, &h.Level, &h.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		hospitals = append(hospitals, h)
@@ -159,7 +159,7 @@ func CreateHospital(c *gin.Context) {
 	}
 	result, err := database.DB.Exec(`INSERT INTO hospitals (name, level) VALUES (?, ?)`, h.Name, h.Level)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	id, _ := result.LastInsertId()
@@ -176,7 +176,7 @@ func UpdateHospital(c *gin.Context) {
 	}
 	result, err := database.DB.Exec(`UPDATE hospitals SET name=?, level=? WHERE id=?`, h.Name, h.Level, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
@@ -190,7 +190,7 @@ func DeleteHospital(c *gin.Context) {
 	id := c.Param("id")
 	result, err := database.DB.Exec(`DELETE FROM hospitals WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if n, _ := result.RowsAffected(); n == 0 {

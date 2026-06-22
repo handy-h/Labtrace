@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"net/http"
@@ -14,7 +14,7 @@ import (
 func ListCalcRules(c *gin.Context) {
 	rows, err := database.DB.Query(`SELECT id, name, formula, threshold, test_item_ids, created_at FROM calculation_rules ORDER BY id`)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -23,7 +23,7 @@ func ListCalcRules(c *gin.Context) {
 	for rows.Next() {
 		var r models.CalculationRule
 		if err := rows.Scan(&r.ID, &r.Name, &r.Formula, &r.Threshold, &r.TestItemIDs, &r.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		rules = append(rules, r)
@@ -43,7 +43,7 @@ func CreateCalcRule(c *gin.Context) {
 		r.Name, r.Formula, r.Threshold, r.TestItemIDs,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	id, _ := result.LastInsertId()
@@ -63,7 +63,7 @@ func UpdateCalcRule(c *gin.Context) {
 		r.Name, r.Formula, r.Threshold, r.TestItemIDs, id,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -73,7 +73,7 @@ func DeleteCalcRule(c *gin.Context) {
 	id := c.Param("id")
 	_, err := database.DB.Exec(`DELETE FROM calculation_rules WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

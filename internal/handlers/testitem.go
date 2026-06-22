@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"database/sql"
@@ -27,7 +27,7 @@ func ListTestItems(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -36,7 +36,7 @@ func ListTestItems(c *gin.Context) {
 	for rows.Next() {
 		var it models.TestItem
 		if err := rows.Scan(&it.ID, &it.Code, &it.StandardName, &it.Category, &it.DefaultUnit, &it.ValueType, &it.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		items = append(items, it)
@@ -56,7 +56,7 @@ func CreateTestItem(c *gin.Context) {
 		it.Code, it.StandardName, it.Category, it.DefaultUnit, it.ValueType,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	id, _ := result.LastInsertId()
@@ -76,7 +76,7 @@ func UpdateTestItem(c *gin.Context) {
 		it.Code, it.StandardName, it.Category, it.DefaultUnit, it.ValueType, id,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
@@ -90,7 +90,7 @@ func DeleteTestItem(c *gin.Context) {
 	id := c.Param("id")
 	result, err := database.DB.Exec(`DELETE FROM test_items WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	if n, _ := result.RowsAffected(); n == 0 {
@@ -109,7 +109,7 @@ func ListAliases(c *gin.Context) {
 		`SELECT id, test_item_id, hospital_id, alias_name, created_at FROM test_item_aliases WHERE test_item_id = ? ORDER BY alias_name`, itemID,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -119,7 +119,7 @@ func ListAliases(c *gin.Context) {
 		var a models.TestItemAlias
 		var hospID sql.NullInt64
 		if err := rows.Scan(&a.ID, &a.TestItemID, &hospID, &a.AliasName, &a.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		if hospID.Valid {
@@ -143,7 +143,7 @@ func CreateAlias(c *gin.Context) {
 		itemID, a.HospitalID, a.AliasName,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	id, _ := result.LastInsertId()
@@ -156,7 +156,7 @@ func DeleteAlias(c *gin.Context) {
 	id := c.Param("aliasId")
 	_, err := database.DB.Exec(`DELETE FROM test_item_aliases WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -172,7 +172,7 @@ func ListRefIntervals(c *gin.Context) {
 		FROM reference_intervals WHERE test_item_id = ? ORDER BY gender, age_min`, itemID,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -182,7 +182,7 @@ func ListRefIntervals(c *gin.Context) {
 		var ri models.ReferenceInterval
 		var ageMin, ageMax, valMin, valMax sql.NullFloat64
 		if err := rows.Scan(&ri.ID, &ri.TestItemID, &ri.Gender, &ageMin, &ageMax, &ri.AgeUnit, &valMin, &valMax, &ri.ValueType, &ri.QualitativeValue, &ri.CreatedAt); err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		if ageMin.Valid {
@@ -216,7 +216,7 @@ func CreateRefInterval(c *gin.Context) {
 		itemID, ri.Gender, ri.AgeMin, ri.AgeMax, ri.AgeUnit, ri.ValueMin, ri.ValueMax, ri.ValueType, ri.QualitativeValue,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	id, _ := result.LastInsertId()
@@ -236,7 +236,7 @@ func UpdateRefInterval(c *gin.Context) {
 		ri.Gender, ri.AgeMin, ri.AgeMax, ri.AgeUnit, ri.ValueMin, ri.ValueMax, ri.ValueType, ri.QualitativeValue, id,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))
@@ -246,7 +246,7 @@ func DeleteRefInterval(c *gin.Context) {
 	id := c.Param("refId")
 	_, err := database.DB.Exec(`DELETE FROM reference_intervals WHERE id=?`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

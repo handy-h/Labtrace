@@ -202,6 +202,7 @@ func migrate(db *sql.DB) error {
 		`ALTER TABLE lab_reports ADD COLUMN categories TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE imaging_reports ADD COLUMN mapping_config_json TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE hospital_rules ADD COLUMN rule_type TEXT NOT NULL DEFAULT 'lab_mapping'`,
+		`ALTER TABLE audit_logs ADD COLUMN signature TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, stmt := range alterStmts {
 		_, err := db.Exec(stmt)

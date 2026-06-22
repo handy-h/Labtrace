@@ -43,6 +43,18 @@ function exportCsv(filename, headers, rows) {
 }
 
 /**
+ * HTML 转义：将用户输入安全地转义为 HTML 安全文本
+ * @param {string|null|undefined} str - 需要转义的字符串
+ * @returns {string} 转义后的 HTML 安全字符串
+ */
+function escapeHtml(str) {
+  if (str == null) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/**
  * 深拷贝对象（JSON序列化方式，适用于纯数据对象）
  * @param {Object} obj - 源对象
  * @returns {Object} 深拷贝后的新对象
@@ -99,5 +111,5 @@ function flagBadge(f) {
   if (f === 'L' || f === 'l') return '<span style="color: #4A7EBB; font-weight: 600">偏低</span>';
   if (f === '阳性') return '<span style="color: #C25151; font-weight: 600">阳性</span>';
   if (f === '阴性') return '<span style="color: #4A7EBB; font-weight: 600">阴性</span>';
-  return `<span style="font-weight: 600">${f}</span>`;
+  return `<span style="font-weight: 600">${escapeHtml(f)}</span>`;
 }

@@ -51,6 +51,11 @@ func ValidateCalculations(items []models.ReportItem) ([]CalcWarning, error) {
 // checkRule evaluates a single calculation rule against report items.
 // Supported format: "LHS=RHS" where RHS is a sum of item codes (e.g., "TP=ALB+GLOB")
 func checkRule(rule models.CalculationRule, items []models.ReportItem) (*CalcWarning, error) {
+	// Safety: limit formula length
+	if len(rule.Formula) > 500 {
+		return nil, fmt.Errorf("formula too long: %d characters", len(rule.Formula))
+	}
+
 	parts := strings.SplitN(rule.Formula, "=", 2)
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid formula: %s", rule.Formula)
@@ -58,6 +63,23 @@ func checkRule(rule models.CalculationRule, items []models.ReportItem) (*CalcWar
 
 	lhsCode := strings.TrimSpace(parts[0])
 	rhsExpr := strings.TrimSpace(parts[1])
+
+	// Safety: limit LHS and RHS lengths
+	if len(lhsCode) > 100 || len(rhsExpr) > 100 {
+		return nil, fmt.Errorf("formula operand too long")
+	}
+
+	// Reject dangerous patterns
+	for _, ch := range lhsCode {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+			return nil, fmt.Errorf("invalid character in formula LHS: %c", ch)
+		}
+	}
+	for _, ch := range rhsExpr {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '+') {
+			return nil, fmt.Errorf("invalid character in formula RHS: %c", ch)
+		}
+	}
 
 	// Find LHS value
 	lhsValue, err := findItemValue(lhsCode, items)
@@ -107,9 +129,15 @@ func findItemValue(code string, items []models.ReportItem) (float64, error) {
 // evalSumExpr evaluates a simple sum expression like "ALB+GLOB" or "ALB+GLOB+XXX"
 func evalSumExpr(expr string, items []models.ReportItem) (float64, error) {
 	terms := strings.Split(expr, "+")
+	if len(terms) > 10 {
+		return 0, fmt.Errorf("too many terms in sum expression: %d", len(terms))
+	}
 	total := 0.0
 	for _, term := range terms {
 		term = strings.TrimSpace(term)
+		if term == "" {
+			continue
+		}
 		val, err := findItemValue(term, items)
 		if err != nil {
 			return 0, err

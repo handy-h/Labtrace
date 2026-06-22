@@ -19,6 +19,7 @@ type Config struct {
 	BackupDir        string
 	DBPath           string
 	OCRQuotaMonthly  int
+	DevMode          bool   // 开发模式，设为 true 时返回详细错误信息
 }
 
 var (
@@ -77,6 +78,11 @@ func loadInternal() (*Config, error) {
 		cfg.OCRQuotaMonthly = 200
 	}
 
+	// Dev mode
+	if v := os.Getenv("DEV_MODE"); v == "true" {
+		cfg.DevMode = true
+	}
+
 	return cfg, nil
 }
 
@@ -85,4 +91,18 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// SanitizeError returns a safe error message based on DevMode.
+// In production (DevMode=false), internal errors are hidden.
+// Validation errors (prefixed with specific patterns) are always returned.
+func SanitizeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	cfg, cfgErr := Load()
+	if cfgErr != nil || !cfg.DevMode {
+		return "内部服务器错误"
+	}
+	return err.Error()
 }

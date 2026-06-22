@@ -121,6 +121,14 @@ func UploadBatchImagingFiles(c *gin.Context) {
 	}))
 }
 
+// ImportResult summarizes the outcome of a batch import operation.
+type ImportResult struct {
+	SuccessCount int      `json:"success_count"`
+	FailCount    int      `json:"fail_count"`
+	Errors       []string `json:"errors"`
+	ReportIDs    []int64  `json:"report_ids"`
+}
+
 func ConfirmBatchImagingImport(c *gin.Context) {
 	var req struct {
 		SubjectID  int64                     `json:"subject_id"`
@@ -161,25 +169,17 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 	uploadDir := cfg.UploadDir
 	os.MkdirAll(uploadDir, 0755)
 
-	type ImportResult struct {
-		SuccessCount int      `json:"success_count"`
-		FailCount    int      `json:"fail_count"`
-		Errors       []string `json:"errors"`
-		ReportIDs    []int64  `json:"report_ids"`
-	}
 	result := &ImportResult{Errors: []string{}}
 
 	for _, report := range req.Reports {
 		if report.PDFData == "" {
-			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 缺少报告文件数据", report.FileName))
+			addImportError(result, report.FileName, "缺少报告文件数据")
 			continue
 		}
 
 		decodedFile, fileExt, err := decodeFileData(report.PDFData)
 		if err != nil {
-			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 解码文件失败", report.FileName))
+			addImportError(result, report.FileName, "解码文件失败")
 			continue
 		}
 
@@ -188,20 +188,17 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 
 		var count int
 		if err := database.DB.QueryRow(`SELECT COUNT(*) FROM imaging_reports WHERE file_md5 = ?`, fileMD5).Scan(&count); err != nil {
-			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 查询重复文件失败", report.FileName))
+			addImportError(result, report.FileName, "查询重复文件失败")
 			continue
 		}
 		if count > 0 {
-			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 文件已存在", report.FileName))
+			addImportError(result, report.FileName, "文件已存在")
 			continue
 		}
 
 		filePath := filepath.Join(uploadDir, fmt.Sprintf("img_%s_%s%s", fileMD5[:12], report.FileName, fileExt))
 		if err := os.WriteFile(filePath, decodedFile, 0644); err != nil {
-			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 保存文件失败", report.FileName))
+			addImportError(result, report.FileName, "保存文件失败")
 			continue
 		}
 
@@ -211,8 +208,7 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 		}
 		sampleDate = extractDatePart(sampleDate)
 		if sampleDate == "" {
-			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 缺少采样日期", report.FileName))
+			addImportError(result, report.FileName, "缺少采样日期")
 			os.Remove(filePath)
 			continue
 		}
@@ -233,8 +229,7 @@ func ConfirmBatchImagingImport(c *gin.Context) {
 			req.SubjectID, hospID, req.ReportType, examItemName, inspectNo, sampleDate, examSite, examDescription, diagnosisResult, filePath, fileMD5,
 		)
 		if err != nil {
-			result.FailCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: 保存报告失败: %v", report.FileName, err))
+			addImportError(result, report.FileName, fmt.Sprintf("保存报告失败: %v", err))
 			os.Remove(filePath)
 			continue
 		}
@@ -257,4 +252,11 @@ func extractDatePart(s string) string {
 		return m
 	}
 	return s
+}
+
+// addImportError appends a formatted error to the result's error list and increments the failure counter.
+// Used by both batch_import.go and batch_import_imaging.go to reduce repeated error-handling boilerplate.
+func addImportError(result *ImportResult, fileName, msg string) {
+	result.FailCount++
+	result.Errors = append(result.Errors, fmt.Sprintf("%s: %s", fileName, msg))
 }

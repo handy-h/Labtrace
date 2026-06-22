@@ -15,6 +15,7 @@ const {
 const app = createApp({
   data() {
     return {
+      appVersion: "0.0.0",
       currentView: "dashboard",
       navItems: [
         { hash: "dashboard", label: "仪表盘", icon: "📊" },
@@ -65,6 +66,10 @@ const app = createApp({
     api.listSubjects().then((r) => {
       if (r.data) this.allSubjects = r.data;
     });
+    // 动态获取版本号
+    api.ping().then((r) => {
+      if (r.data && r.data.version) this.appVersion = r.data.version;
+    }).catch(() => {});
   },
   methods: {
     onSubjectChange(id, name) {

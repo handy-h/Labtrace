@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"net/http"
@@ -24,7 +24,7 @@ func GetTrendData(c *gin.Context) {
 
 	data, err := services.GetTrendData(subjectID, testItemID, dateFrom, dateTo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 

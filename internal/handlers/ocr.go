@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"crypto/md5"
@@ -81,7 +81,7 @@ func Upload(c *gin.Context) {
 		subjectID, hospID, sampleDate, filePath, fileMD5,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	reportID, _ := result.LastInsertId()
@@ -441,7 +441,7 @@ func SaveHospitalMappingTemplate(c *gin.Context) {
 			hospitalID, ruleName, cfgJSON,
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		newID, _ := res.LastInsertId()
@@ -452,7 +452,7 @@ func SaveHospitalMappingTemplate(c *gin.Context) {
 			ruleName, cfgJSON, existingID,
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+			c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 			return
 		}
 		c.JSON(http.StatusOK, models.Success(gin.H{"id": existingID}))

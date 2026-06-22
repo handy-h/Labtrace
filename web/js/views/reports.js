@@ -317,7 +317,7 @@ const ReportsView = Vue.defineComponent({
       if (flag === 'L' || flag === 'l') return '<span style="color: #2563eb; font-weight: bold">偏低</span>';
       if (flag === '阳性') return '<span style="color: var(--color-danger); font-weight: bold">阳性</span>';
       if (flag === '阴性') return '<span style="color: #2563eb; font-weight: bold">阴性</span>';
-      return `<span style="font-weight: bold">${flag}</span>`;
+      return `<span style="font-weight: bold">${escapeHtml(flag)}</span>`;
     }
 
     function getImagingTypeName(code) {

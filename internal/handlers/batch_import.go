@@ -148,6 +148,14 @@ func extractItemsFromJSON(data map[string]interface{}, itemsPath string) []inter
 	return []interface{}{data}
 }
 
+// BatchImportResult summarizes the outcome of a batch import operation.
+type BatchImportResult struct {
+	SuccessCount int      `json:"success_count"`
+	FailCount    int      `json:"fail_count"`
+	Errors       []string `json:"errors"`
+	ReportIDs    []int64  `json:"report_ids"`
+}
+
 func ConfirmBatchImport(c *gin.Context) {
 	var req struct {
 		SubjectID  int64              `json:"subject_id"`
@@ -184,13 +192,7 @@ func ConfirmBatchImport(c *gin.Context) {
 	uploadDir := cfg.UploadDir
 	os.MkdirAll(uploadDir, 0755)
 
-	type ImportResult struct {
-		SuccessCount int        `json:"success_count"`
-		FailCount    int        `json:"fail_count"`
-		Errors       []string   `json:"errors"`
-		ReportIDs    []int64     `json:"report_ids"`
-	}
-	result := &ImportResult{Errors: []string{}}
+	result := &BatchImportResult{Errors: []string{}}
 
 	// 一次性加载 test_items 索引，避免循环内重复查库
 	itemIdx := services.LoadTestItemIndex()

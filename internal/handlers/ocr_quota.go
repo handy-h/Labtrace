@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 	"encoding/json"
@@ -121,7 +121,7 @@ func ReOCR(c *gin.Context) {
 func GetOCRQuota(c *gin.Context) {
 	quota, err := services.GetOCRQuota()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(quota))
@@ -140,7 +140,7 @@ func UpdateOCRQuota(c *gin.Context) {
 
 	err := services.UpdateOCRQuota(req.YearMonth, req.UsedCount)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	c.JSON(http.StatusOK, models.Success(nil))

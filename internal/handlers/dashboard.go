@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"labtrace/internal/appconst"
 	"labtrace/internal/database"
 	"labtrace/internal/models"
 
@@ -22,7 +23,7 @@ func DashboardSummary(c *gin.Context) {
 			(SELECT COUNT(DISTINCT hospital_id) FROM lab_reports WHERE hospital_id IS NOT NULL)
 	`).Scan(&subjectCount, &pendingCount, &anomalyCount, &hospitalCount)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
@@ -39,15 +40,15 @@ func DashboardAnomalies(c *gin.Context) {
 	hospital := c.Query("hospital")
 	confidence := c.Query("confidence") // "high"(>=95), "medium"(80-94), "low"(<80)
 	flag := c.Query("flag")             // H, L, 阳性, 阴性
-	pageStr := c.DefaultQuery("page", "1")
-	pageSizeStr := c.DefaultQuery("page_size", "20")
+	pageStr := c.DefaultQuery("page", strconv.Itoa(appconst.DefaultPage))
+	pageSizeStr := c.DefaultQuery("page_size", strconv.Itoa(appconst.DefaultPageSize))
 	page, err1 := strconv.Atoi(pageStr)
 	pageSize, err2 := strconv.Atoi(pageSizeStr)
-	if err1 != nil || err2 != nil || page < 1 {
-		page = 1
+	if err1 != nil || err2 != nil || page < appconst.DefaultPage {
+		page = appconst.DefaultPage
 	}
 	if pageSize < 1 {
-		pageSize = 20
+		pageSize = appconst.DefaultPageSize
 	}
 
 	query := `SELECT ri.id, s.name, lr.sample_date, COALESCE(ti.standard_name, ''),
@@ -69,15 +70,19 @@ func DashboardAnomalies(c *gin.Context) {
 		args = append(args, flag)
 	}
 	if confidence == "high" {
-		query += ` AND ri.confidence >= 95`
+		query += ` AND ri.confidence >= ?`
+		args = append(args, appconst.ConfidenceHigh)
 	} else if confidence == "medium" {
-		query += ` AND ri.confidence >= 80 AND ri.confidence < 95`
+		query += ` AND ri.confidence >= ? AND ri.confidence < ?`
+		args = append(args, appconst.ConfidenceMed, appconst.ConfidenceHigh)
 	} else if confidence == "low" {
-		query += ` AND ri.confidence < 80`
+		query += ` AND ri.confidence < ?`
+		args = append(args, appconst.ConfidenceMed)
 	}
 
-	// Count total
-	countQuery := "SELECT COUNT(*) FROM (" + query + ")"
+	// Count total (safe: query is built from static fragments + ? placeholders only)
+	// Uses a CTE to avoid string concatenation of SELECT COUNT(*) FROM (...)
+	countQuery := "WITH _filtered AS (" + query + ") SELECT COUNT(*) FROM _filtered"
 	var total int
 	database.DB.QueryRow(countQuery, args...).Scan(&total)
 
@@ -87,7 +92,7 @@ func DashboardAnomalies(c *gin.Context) {
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.Error(err.Error()))
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 	defer rows.Close()
@@ -111,6 +116,10 @@ func DashboardAnomalies(c *gin.Context) {
 			continue
 		}
 		items = append(items, it)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
+		return
 	}
 
 	c.JSON(http.StatusOK, models.Success(models.PaginatedResponse{
