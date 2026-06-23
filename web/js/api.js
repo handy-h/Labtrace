@@ -2,11 +2,35 @@
 const API_BASE = "/api/v1";
 
 const api = {
+  // CSRF token 缓存
+  _csrfToken: null,
+
+  /**
+   * 获取 CSRF token（从服务端获取并缓存）
+   */
+  async _ensureCSRFToken() {
+    if (this._csrfToken) return this._csrfToken;
+    const res = await fetch("/api/csrf-token");
+    if (!res.ok) throw new Error("Failed to get CSRF token");
+    const json = await res.json();
+    this._csrfToken = json.data.token;
+    return this._csrfToken;
+  },
+
   async request(method, path, body, signal) {
     const opts = {
       method,
       headers: { "Content-Type": "application/json" },
     };
+    // 对写操作注入 CSRF token
+    if (method !== "GET" && method !== "HEAD") {
+      try {
+        const token = await this._ensureCSRFToken();
+        opts.headers["X-CSRF-Token"] = token;
+      } catch (e) {
+        // CSRF token 获取失败则跳过（服务端可能禁用了 CSRF）
+      }
+    }
     if (body) opts.body = JSON.stringify(body);
     if (signal) opts.signal = signal;
     try {
@@ -27,10 +51,14 @@ const api = {
   },
 
   async upload(path, formData) {
-    const res = await fetch(API_BASE + path, {
-      method: "POST",
-      body: formData,
-    });
+    const opts = { method: "POST", body: formData, headers: {} };
+    try {
+      const token = await this._ensureCSRFToken();
+      opts.headers["X-CSRF-Token"] = token;
+    } catch (e) {
+      // CSRF token 获取失败则跳过
+    }
+    const res = await fetch(API_BASE + path, opts);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status}: ${text}`);

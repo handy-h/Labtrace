@@ -4,14 +4,6 @@ const SettingsView = Vue.defineComponent({
   <div class="page">
     <h1 class="page-title">设置</h1>
 
-    <!-- 数据库加密 -->
-    <div class="card">
-      <h2 class="page-subtitle">数据库加密</h2>
-      <p class="text-sm" style="color: var(--color-text-secondary)">
-        加密状态: <span class="badge badge-success">已启用</span> (密钥来自 .env)
-      </p>
-    </div>
-
     <!-- OCR 配额管理 -->
     <div class="card" style="margin-top: var(--card-gap)">
       <h2 class="page-subtitle">OCR 月度配额</h2>
@@ -67,7 +59,7 @@ const SettingsView = Vue.defineComponent({
         <input v-model="backupDesc" placeholder="备份描述" class="form-input" style="max-width: 20rem">
         <button @click="doExport" class="btn btn-primary btn-sm">导出备份</button>
         <label class="btn btn-secondary btn-sm" style="cursor: pointer">
-          导入备份 <input type="file" @change="doImport" accept=".bak" class="hidden">
+          导入备份 <input type="file" @change="doImport" accept=".zip" class="hidden">
         </label>
       </div>
       <data-table v-if="backups.length" :columns="backupColumns" :data="backups" empty-text="">
@@ -225,7 +217,7 @@ const SettingsView = Vue.defineComponent({
         if (r.code === 0) alert('恢复成功'); else alert('恢复失败: ' + r.message);
       });
     }
-    function deleteBackup(id) { if (confirm('确认删除？')) api.deleteBackup(id).then(() => loadBackups()); }
+    function deleteBackup(id) { if (confirm('确认删除？')) api.deleteBackup(id).then(() => loadBackups()).catch(() => {}); }
 
     function openHospModal(h) {
       if (h) {

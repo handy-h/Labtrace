@@ -1,9 +1,8 @@
-﻿package handlers
+package handlers
 
 import (
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"labtrace/internal/config"
 	"labtrace/internal/database"
@@ -29,7 +28,7 @@ func ExportBackup(c *gin.Context) {
 		return
 	}
 
-	filename, fileSize, err := services.ExportBackup(cfg.DBKey, cfg.DBPath, cfg.BackupDir, req.Description)
+	filename, fileSize, err := services.ExportBackup(cfg.DBPath, cfg.UploadDir, cfg.BackupDir, req.Description)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error("备份导出失败: "+err.Error()))
 		return
@@ -52,18 +51,23 @@ func ImportBackup(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Save uploaded file temporarily
-	tmpPath := filepath.Join(os.TempDir(), "labtrace_restore.bak")
-	tmpFile, err := os.Create(tmpPath)
+	// Save uploaded file to a unique temporary file
+	tmpFile, err := os.CreateTemp(os.TempDir(), "labtrace_restore_*.zip")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error("创建临时文件失败"))
 		return
 	}
+	tmpPath := tmpFile.Name()
 	defer tmpFile.Close()
 	defer os.Remove(tmpPath)
 
 	if _, err = tmpFile.ReadFrom(file); err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error("保存临时文件失败"))
+		return
+	}
+	// Ensure all data is flushed to disk before reading
+	if err := tmpFile.Sync(); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("同步临时文件失败"))
 		return
 	}
 
@@ -72,8 +76,8 @@ func ImportBackup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.Error("配置加载失败"))
 		return
 	}
-	if err := services.ImportBackup(cfg.DBKey, cfg.DBPath, tmpPath); err != nil {
-		c.JSON(http.StatusBadRequest, models.Error("备份导入失败: "+err.Error()))
+	if err := services.ImportBackup(cfg.DBPath, cfg.UploadDir, tmpPath); err != nil {
+		c.JSON(http.StatusInternalServerError, models.Error("备份导入失败: "+err.Error()))
 		return
 	}
 

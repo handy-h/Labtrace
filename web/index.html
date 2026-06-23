@@ -31,14 +31,14 @@
           },
         }
         </script>
-        <!-- Vue 3.5.13 - SRI sha384 已配置，请定期验证 -->
-        <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js" integrity="sha384-W/1Fp/LgAYO/oTn9Gs+PbeWuMuq1eQCnUMPCeg8POmMYchhzxctjEqtbiCIxDOON" crossorigin="anonymous"></script>
-        <!-- ECharts 5.6.0 - SRI sha384 已配置，请定期验证 -->
-        <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" integrity="sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss" crossorigin="anonymous"></script>
-        <!-- pdf.js 3.11.174 - SRI sha384 已配置，请定期验证 -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+1UUDCG6e" crossorigin="anonymous"></script>
-        <!-- pdf.worker 通过 URL 赋值加载，无法使用 SRI -->
-        <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+        <!-- Vue 3.5.13 -->
+        <script src="/vendor/vue.global.prod.js"></script>
+        <!-- ECharts 5.6.0 -->
+        <script src="/vendor/echarts.min.js"></script>
+        <!-- pdf.js 3.11.174 -->
+        <script src="/vendor/pdf.min.js"></script>
+        <!-- pdf.worker 通过 URL 赋值加载 -->
+        <script>pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.js';</script>
         <link rel="stylesheet" href="css/app.css" />
     </head>
     <body class="font-sans" style="background: var(--color-bg); color: var(--color-text)">
@@ -114,11 +114,11 @@
             </div>
         </div>
 
-        <!-- CDN 加载失败检测与回退 -->
+        <!-- 前端库加载失败检测 -->
         <script>
         (function() {
           var missing = [];
-          // 等待一小段时间让 CDN 脚本加载
+          // 等待一小段时间让脚本加载
           setTimeout(function() {
             if (typeof Vue === 'undefined') missing.push('Vue 3');
             if (typeof echarts === 'undefined') missing.push('ECharts');
@@ -126,7 +126,7 @@
             if (missing.length) {
               var el = document.createElement('div');
               el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c53030;color:#fff;padding:8px 16px;text-align:center;font-size:14px;z-index:9999';
-              el.textContent = '\u26A0\uFE0F CDN \u52A0\u8F7D\u5931\u8D25: ' + missing.join(', ') + '\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5';
+              el.textContent = '\u26A0\uFE0F \u524D\u7AEF\u5E93\u52A0\u8F7D\u5931\u8D25: ' + missing.join(', ') + '\uFF0C\u8BF7\u91CD\u542F\u670D\u52A1';
               document.body.insertBefore(el, document.body.firstChild);
             }
           }, 2000);

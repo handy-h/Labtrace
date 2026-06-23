@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 
 // 由 Makefile / labtrace.ps1 在编译时注入
 var (
-	version   = "0.8.0"
+	version   = "0.9.0"
 	buildTime = "unknown"
 )
 
@@ -50,6 +51,14 @@ func main() {
 
 	fmt.Printf("LabTrace %s (built %s) starting on :%s (db: %s)\n", version, buildTime, cfg.Port, cfg.DBPath)
 
+	// Ensure vendor libraries are available locally (with fallback to cached versions)
+	vendorDir := filepath.Join("web", "vendor")
+	if downloaded, err := services.EnsureVendorLibraries(vendorDir, services.DefaultVendorLibraries, 30*time.Second); err != nil {
+		log.Printf("Vendor library warning: %v", err)
+	} else if len(downloaded) > 0 {
+		log.Printf("Downloaded vendor libraries: %v", downloaded)
+	}
+
 	// Gin router
 	r := gin.Default()
 	r.MaxMultipartMemory = 32 << 20 // 限制上传文件大小为 32MB
@@ -62,6 +71,7 @@ func main() {
 
 	// Serve web frontend
 	r.Static("/web", "./web")
+	r.Static("/vendor", "./web/vendor")
 	r.StaticFile("/", "./web/index.html")
 	r.StaticFile("/api.html", "./web/api.html")
 
