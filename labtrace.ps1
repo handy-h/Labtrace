@@ -257,6 +257,19 @@ function Invoke-Run {
     $errFile = [System.IO.Path]::GetTempFileName()
     $savedEnv = $env:GIN_MODE
     $env:GIN_MODE = "release"
+
+    # PS 5.1 的 Start-Process 在环境变量块含大小写重复项（如 Path/PATH）时会抛
+    # "已添加项...Path...PATH" 异常。先在当前会话内去重（仅保留先出现的项）。
+    $seenEnv = @{}
+    foreach ($k in @([System.Environment]::GetEnvironmentVariables().Keys)) {
+        $lk = ([string]$k).ToLower()
+        if ($seenEnv.ContainsKey($lk)) {
+            [System.Environment]::SetEnvironmentVariable($k, $null)
+        } else {
+            $seenEnv[$lk] = $true
+        }
+    }
+
     $proc = Start-Process -FilePath ".\$AppName.exe" -WindowStyle Hidden -PassThru -RedirectStandardError $errFile
     $env:GIN_MODE = $savedEnv
     $procId = $proc.Id

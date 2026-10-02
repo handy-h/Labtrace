@@ -17,6 +17,7 @@ make stop                     # graceful shutdown via PID file
 make clean                    # remove binary + caches, preserves data/
 make test                     # run `go test -v ./...`
 make lint                     # run `go vet ./...` (no external linter config)
+make audit                    # read-only mapping consistency audit (cmd/audit); run after changing matching rules or remapping data
 make rebuild                  # clean + build
 make restart                  # stop + run
 make help                     # list all targets

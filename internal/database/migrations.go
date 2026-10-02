@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -213,6 +214,16 @@ func migrate(db *sql.DB) error {
 				return fmt.Errorf("migration failed: %s: %w", stmt, err)
 			}
 		}
+	}
+
+	// ── 数据约束加固 ────────────────────────────────────────────────────────
+	// test_items.standard_name 唯一索引（2026-10-02）。
+	// 背景：匹配算法的「标准名精确匹配」是取首行命中，若存在重名标准项，
+	// 匹配结果将不确定；且包含匹配的最短名/最长名规则也会被污染。
+	// 这里用容错方式创建：老库若已有重名（历史脏数据），唯一索引会创建失败，
+	// 此时只记录告警、不阻断启动——启动后用 `make audit` 定位并人工合并重名项。
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_test_items_std_name_uniq ON test_items(standard_name)`); err != nil {
+		log.Printf("[migrate] 警告：test_items.standard_name 唯一索引创建失败（可能存在重名标准项目，请先合并）：%v", err)
 	}
 
 	return nil

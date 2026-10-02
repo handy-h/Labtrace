@@ -1,6 +1,7 @@
 package services
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -44,8 +45,26 @@ func MatchReference(testItemID int64, gender string, ageAtSample float64) (*mode
 	return best, nil
 }
 
+// rowQueryer 让同一段只读查询逻辑同时适配 *sql.DB 与 *sql.Tx。
+// 【2026-10-02 修复】背景：MaxOpenConns=2，若在持有写事务时再用全局 *sql.DB 查询，
+// 两个并发请求会各占一个连接后互相等待空闲连接，而 database/sql 取连接无超时 → 永久阻塞。
+// 因此凡是「已在事务中」的调用方都必须走 Tx 版本查询。
+type rowQueryer interface {
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+}
+
 // LoadReferenceIntervals 批量加载多个 test_item 的参考区间，返回按 test_item_id 分组的 map。
 func LoadReferenceIntervals(testItemIDs []int64) (map[int64][]models.ReferenceInterval, error) {
+	return loadReferenceIntervals(database.DB, testItemIDs)
+}
+
+// LoadReferenceIntervalsTx 与 LoadReferenceIntervals 等价，但在指定事务内执行查询。
+// 供已经在写事务中的调用方使用（如 report.go 的 runMatchRefInTx）。
+func LoadReferenceIntervalsTx(tx *sql.Tx, testItemIDs []int64) (map[int64][]models.ReferenceInterval, error) {
+	return loadReferenceIntervals(tx, testItemIDs)
+}
+
+func loadReferenceIntervals(q rowQueryer, testItemIDs []int64) (map[int64][]models.ReferenceInterval, error) {
 	result := make(map[int64][]models.ReferenceInterval, len(testItemIDs))
 	if len(testItemIDs) == 0 {
 		return result, nil
@@ -58,7 +77,7 @@ func LoadReferenceIntervals(testItemIDs []int64) (map[int64][]models.ReferenceIn
 		args[i] = id
 	}
 
-	rows, err := database.DB.Query(
+	rows, err := q.Query(
 		fmt.Sprintf(
 			`SELECT id, test_item_id, gender, age_min, age_max, age_unit, value_min, value_max, value_type, qualitative_value, created_at
 			FROM reference_intervals WHERE test_item_id IN (%s)`, placeholders,

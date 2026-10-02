@@ -23,7 +23,7 @@ RED         := \033[0;31m
 CYAN        := \033[0;36m
 RESET       := \033[0m
 
-.PHONY: build dev run stop clean help rebuild restart test lint
+.PHONY: build dev run stop clean help rebuild restart test lint audit
 
 # ---- 默认目标 ----
 help: ## 显示帮助信息
@@ -138,6 +138,10 @@ lint: ## 代码静态检查
 	@printf "$(CYAN)[lint]$(RESET) 运行 go vet...\n"
 	@$(GO) vet ./...
 	@printf "$(GREEN)[lint]$(RESET) 检查完成\n"
+
+audit: ## 映射一致性审计（只读回放全库，改动匹配规则或重映射后必跑）
+	@printf "$(CYAN)[audit]$(RESET) 审计 report_items 与匹配规则的一致性...\n"
+	@CGO_ENABLED=1 $(GO) run ./cmd/audit -db data/labtrace.db
 
 clean: ## 清理临时文件、缓存及二进制文件（保留 ./data 目录）
 	@printf "$(CYAN)[clean]$(RESET) 清理编译产物...\n"

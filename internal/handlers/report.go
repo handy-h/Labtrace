@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	"labtrace/internal/database"
@@ -250,26 +251,57 @@ func DeleteReportItem(c *gin.Context) {
 
 // ConfirmReport marks all items in a report as confirmed (reviewed).
 // 匹配参考区间/flag、confidence=100、状态更新放在同一个事务里，避免半成品状态。
+//
+// 【2026-10-02 修复】执行顺序调整为「事务外只读 → 事务内只写」：
+// 原实现先 Begin() 再在事务内用全局 *sql.DB 读受检者信息、报告条目、项目索引、
+// 并做内容去重查询。SQLite 连接池 SetMaxOpenConns(2)，两个并发 confirm 会各自占住
+// 一个写事务连接后再申请第二条连接，而 database/sql 获取连接没有超时 → 永久阻塞、
+// 连接泄漏、接口挂死。现在所有读操作都在开事务之前完成，事务内不再触碰全局连接。
 func ConfirmReport(c *gin.Context) {
 	id := c.Param("id")
 
+	// 0) 事务外只读准备：受检者信息、报告条目、项目字典索引、年龄
+	items, itemIdx, gender, ageAtSample, err := loadMatchContext(id)
+	if err != nil {
+		log.Printf("[report] confirm 准备匹配上下文失败: id=%s err=%v", id, err)
+		c.JSON(http.StatusInternalServerError, models.Error("确认失败：读取报告信息出错"))
+		return
+	}
+
+	// 1) 内容级去重（只读，事务外）：文件 MD5 只能拦截字节级重复，无法拦截
+	// 「同一内容、不同字节」的报告（如不同渠道导出的同一张检验单）。
+	// 这里按 受检者 + 采样日期 + 条目内容指纹 拦截。
+	// 注意：拦截刻意返回 HTTP 200 + code=1（而非 4xx）——前端 api.js 对 !res.ok
+	// 会直接 throw 且调用方 doConfirmApi 无 catch，只有 code!=0 才会走到 alert(r.message)。
+	if reportID, parseErr := strconv.ParseInt(id, 10, 64); parseErr == nil {
+		if subjectID, sampleDate, infoErr := fetchReportSubjectInfo(id); infoErr == nil {
+			if sigs, sigErr := services.LoadItemSignatures(reportID); sigErr == nil && len(sigs) > 0 {
+				dupID, dupErr := services.FindIdenticalReport(subjectID, sampleDate, reportID, services.ContentSignature(sigs), "imported")
+				if dupErr == nil && dupID > 0 {
+					log.Printf("[report] 内容重复拦截: 报告#%s 与已入库报告#%d 条目完全一致", id, dupID)
+					c.JSON(http.StatusOK, models.Error(fmt.Sprintf("入库被拦截：该受检者在本采样日期已有内容完全一致的报告（#%d），本次属于重复导入。请直接删除当前这份重复报告。", dupID)))
+					return
+				}
+			}
+		}
+	}
+
+	// 2) 开事务：只做写操作（匹配落库 + 参考区间 + confidence + 状态）
 	tx, err := database.DB.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
 		return
 	}
 
-	// 1) 在事务内匹配 test_item_id / 参考区间 / 计算 flag（不再开新事务，避免互锁）
-	if matchErr := matchRefAndCalcFlagWithTx(tx, id); matchErr != nil {
+	// 2.1) 完成 test_item_id / 参考区间 / flag 匹配，并把结果写回
+	if matchErr := runMatchRefInTx(tx, items, itemIdx, id, gender, ageAtSample); matchErr != nil {
 		tx.Rollback()
 		log.Printf("[report] confirm matchRef 失败: id=%s err=%v", id, matchErr)
-		// matchRef 失败不阻断 confirm 流程的核心更新，只记录日志后继续提交 confidence/status
-		// —— 但为避免脏数据，这里选择回滚并返回错误，让用户重试
 		c.JSON(http.StatusInternalServerError, models.Error("确认失败：匹配参考区间时出错"))
 		return
 	}
 
-	// 2) confidence 置为 100，状态改为 imported
+	// 2.2) confidence 置为 100，状态改为 imported
 	if _, err = tx.Exec(`UPDATE report_items SET confidence = 100 WHERE report_id = ?`, id); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, models.Error(sanitizeError(err)))
@@ -299,14 +331,22 @@ type itemInfo struct {
 }
 
 // matchRefAndCalcFlag 自动匹配 test_item_id、参考区间并计算提示符 flag。
-// 自开事务版本，供 ReOCR 等不希望复用外部事务的场景使用。
+// 自开事务版本，供 ImportReport / 批量导入等不希望复用外部事务的场景使用。
+// 【2026-10-02 修复】只读准备（loadMatchContext）移到事务之外：
+// 原实现在事务内查 *sql.DB，MaxOpenConns=2 下并发调用会互等空闲连接并被永久阻塞。
 func matchRefAndCalcFlag(reportID string) {
+	items, itemIdx, gender, ageAtSample, err := loadMatchContext(reportID)
+	if err != nil {
+		log.Printf("[matchRef] 准备匹配上下文失败: reportID=%s err=%v", reportID, err)
+		return
+	}
+
 	tx, err := database.DB.Begin()
 	if err != nil {
 		log.Printf("[matchRef] 开启事务失败: reportID=%s err=%v", reportID, err)
 		return
 	}
-	if err := matchRefAndCalcFlagWithTx(tx, reportID); err != nil {
+	if err := runMatchRefInTx(tx, items, itemIdx, reportID, gender, ageAtSample); err != nil {
 		tx.Rollback()
 		log.Printf("[matchRef] 失败: reportID=%s err=%v", reportID, err)
 		return
@@ -316,27 +356,27 @@ func matchRefAndCalcFlag(reportID string) {
 	}
 }
 
-// matchRefAndCalcFlagWithTx 在指定事务内执行匹配逻辑，调用方负责 Commit/Rollback。
-// 这样 ConfirmReport / ImportReport 可以把匹配与状态更新放进同一事务。
-func matchRefAndCalcFlagWithTx(tx *sql.Tx, reportID string) error {
+// loadMatchContext 在事务之外完成匹配所需的全部只读准备。
+// 返回的 items 会被 runMatchRefInTx 就地补齐 TestItemID，因此必须在事务内使用。
+// 【重要】凡是「匹配 + 其他写入需要原子提交」的调用方（如 ConfirmReport），
+// 都应当先用本函数取上下文，再自己开事务调 runMatchRefInTx —— 不要反过来先开事务再读库。
+func loadMatchContext(reportID string) (items []itemInfo, itemIdx *services.TestItemIndex, gender string, ageAtSample float64, err error) {
 	subjectID, sampleDate, err := fetchReportSubjectInfo(reportID)
 	if err != nil {
-		return fmt.Errorf("fetch report subject: %w", err)
+		return nil, nil, "", 0, fmt.Errorf("fetch report subject: %w", err)
 	}
 
 	gender, birthDate, err := fetchSubjectInfo(subjectID)
 	if err != nil {
-		return fmt.Errorf("fetch subject: %w", err)
+		return nil, nil, "", 0, fmt.Errorf("fetch subject: %w", err)
 	}
 
-	ageAtSample := services.CalcAgeYears(birthDate, sampleDate)
-	items, err := fetchReportItemInfos(reportID)
+	items, err = fetchReportItemInfos(reportID)
 	if err != nil {
-		return fmt.Errorf("fetch items: %w", err)
+		return nil, nil, "", 0, fmt.Errorf("fetch items: %w", err)
 	}
 
-	itemIdx := services.LoadTestItemIndex()
-	return runMatchRefInTx(tx, items, itemIdx, reportID, gender, ageAtSample)
+	return items, services.LoadTestItemIndex(), gender, services.CalcAgeYears(birthDate, sampleDate), nil
 }
 
 func fetchReportSubjectInfo(reportID string) (subjectID int64, sampleDate string, err error) {
@@ -415,6 +455,8 @@ func runMatchRefInTx(tx *sql.Tx, items []itemInfo, itemIdx *services.TestItemInd
 	}
 
 	// 批量加载所有相关参考区间（一次 IN 查询）
+	// 【2026-10-02 修复】必须走 Tx 版本：此处已持有写事务，若用全局 *sql.DB 查询，
+	// 在 MaxOpenConns=2 下两个并发请求会互相等待空闲连接并被永久阻塞。
 	var testItemIDs []int64
 	seen := make(map[int64]bool)
 	for _, it := range items {
@@ -423,7 +465,7 @@ func runMatchRefInTx(tx *sql.Tx, items []itemInfo, itemIdx *services.TestItemInd
 			seen[*it.TestItemID] = true
 		}
 	}
-	refMap, _ := services.LoadReferenceIntervals(testItemIDs)
+	refMap, _ := services.LoadReferenceIntervalsTx(tx, testItemIDs)
 
 	// Match reference interval and calculate flag — all in memory, then batch UPDATE
 	catSet := make(map[string]bool)

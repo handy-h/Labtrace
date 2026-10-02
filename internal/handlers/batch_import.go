@@ -226,6 +226,33 @@ func ConfirmBatchImport(c *gin.Context) {
 			continue
 		}
 
+		// 内容级去重：文件 MD5 只能拦截字节级重复，无法拦截「同一内容、不同字节」
+		// 的报告（如不同渠道导出的同一张检验单）。按 受检者+采样日期+条目内容指纹 拦截。
+		parsedItems := extractItemsFromJSON(report.Data, req.Mappings.ItemsPath)
+		var sigs []services.ItemSignature
+		for _, itemData := range parsedItems {
+			itemMap, ok := itemData.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			sigs = append(sigs, services.ItemSignature{
+				Name:  getNestedValue(itemMap, req.Mappings.ItemName),
+				Value: getNestedValue(itemMap, req.Mappings.ItemValue),
+				Unit:  getNestedValue(itemMap, req.Mappings.ItemUnit),
+			})
+		}
+		sampleDate := report.SampleDate
+		if sampleDate == "" {
+			sampleDate = getNestedValue(report.Data, req.Mappings.SampleDate)
+		}
+		if len(sigs) > 0 && sampleDate != "" {
+			if dupID, dupErr := services.FindIdenticalReport(req.SubjectID, sampleDate, 0, services.ContentSignature(sigs), "imported", "review"); dupErr == nil && dupID > 0 {
+				result.FailCount++
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: 内容与已入库报告 #%d 完全一致，判定为重复导入，已跳过", report.FileName, dupID))
+				continue
+			}
+		}
+
 		filePath := filepath.Join(uploadDir, fmt.Sprintf("%s_%s%s", fileMD5[:12], report.FileName, fileExt))
 		if err := os.WriteFile(filePath, decodedFile, 0644); err != nil {
 			result.FailCount++
@@ -233,10 +260,6 @@ func ConfirmBatchImport(c *gin.Context) {
 			continue
 		}
 
-		sampleDate := report.SampleDate
-		if sampleDate == "" {
-			sampleDate = getNestedValue(report.Data, req.Mappings.SampleDate)
-		}
 		var hospID interface{}
 		if req.HospitalID != nil && *req.HospitalID > 0 {
 			hospID = *req.HospitalID
@@ -254,7 +277,7 @@ func ConfirmBatchImport(c *gin.Context) {
 		}
 
 		reportID, _ := res.LastInsertId()
-		items := extractItemsFromJSON(report.Data, req.Mappings.ItemsPath)
+		items := parsedItems
 
 		// 开启事务：包含所有 report_items INSERT
 		tx, txErr := database.DB.Begin()
